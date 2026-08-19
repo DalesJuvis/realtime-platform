@@ -1,33 +1,36 @@
-//! `protocol.rs` — Parser/encodeur binaire zero-copy pour le frame fixe de 256 octets.
+//! # Frame
 //!
-//! Layout du frame (256 octets, big-endian) :
+//! **Action:** Zero-copy parser/encoder for the fixed 256-byte binary wire frame.
+//! **Input:** Raw `&[u8; 256]` buffers read from a WebSocket or TCP socket.
+//! **Output:** Parsed `Frame<'a>` views, or owned buffers built by `FrameBuilder`.
+//! **Side effects:** None — pure encoding/decoding.
+//! **Dependencies:** `uuid`.
+//!
+//! Frame layout (256 bytes, big-endian):
 //! ```text
-//! Offset    Taille   Champ
+//! Offset    Size     Field
 //! ------    ------   -----------------------------------------
 //! 0..2      2        Magic + Version   (0xAA01)
 //! 2..3      1        Opcode
-//! 3..19     16       Tenant ID (UUID brut, 16 octets)
-//! 19..43    24       Channel ID (UTF-8, paddé à zéro)
-//! 43..254   211      Payload (UTF-8, paddé à zéro)
-//! 254..256  2        CRC16/CCITT-FALSE sur les octets [0..254)
+//! 3..19     16       Tenant ID (raw UUID, 16 bytes)
+//! 19..43    24       Channel ID (UTF-8, zero-padded)
+//! 43..254   211      Payload (UTF-8, zero-padded)
+//! 254..256  2        CRC16/CCITT-FALSE over bytes [0..254)
 //! ```
 //!
-//! Le parsing s'effectue directement sur des `&[u8; 256]` : aucune
-//! allocation heap pendant la lecture. Les accesseurs `channel_id()` et
-//! `payload()` renvoient des `&str` empruntés (zero-copy) ; seul
-//! `tenant_id()` copie 16 octets pour construire un `Uuid` (type `Copy`
-//! bon marché).
+//! Parsing operates directly on `&[u8; 256]`: no heap allocation while
+//! reading. `channel_id()`/`payload()` return borrowed `&str` (zero-copy);
+//! only `tenant_id()` copies 16 bytes to build a `Uuid` (cheap `Copy` type).
 
 use std::convert::TryFrom;
 use std::fmt;
 use uuid::Uuid;
 
-/// Taille fixe d'un frame sur le fil. Imposée par la contrainte #1.
+/// Fixed on-wire frame size.
 pub const FRAME_SIZE: usize = 256;
 
-/// Identifiant magique + version de protocole. Le fait de le vérifier en
-/// premier permet de rejeter très vite un flux qui n'est pas de ce
-/// protocole, avant de payer le coût du calcul CRC.
+/// Protocol magic + version identifier. Checking it first lets a stream
+/// that isn't this protocol be rejected cheaply, before paying the CRC cost.
 pub const MAGIC: u16 = 0xAA01;
 
 const OFF_MAGIC: usize = 0;
@@ -41,10 +44,9 @@ const LEN_PAYLOAD: usize = 211;
 const OFF_CRC: usize = OFF_PAYLOAD + LEN_PAYLOAD; // 254
 const LEN_CRC: usize = 2;
 
-// Vérification statique que le layout tombe exactement sur FRAME_SIZE.
 const _: () = assert!(OFF_CRC + LEN_CRC == FRAME_SIZE);
 
-/// Opcodes portés par l'octet 2 du frame.
+/// Opcodes carried in byte 2 of the frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Opcode {
@@ -54,31 +56,42 @@ pub enum Opcode {
     Auth = 0x04,
     Ping = 0x05,
     Presence = 0x06,
-    /// Demande de rattrapage : le client envoie un timestamp Unix (en
-    /// texte ASCII décimal) dans le payload, le serveur répond en
-    /// retransmettant les frames publiés sur ce canal depuis ce moment
-    /// (roadmap "Historique et Rétention / Catch-up").
+    /// Catch-up request: client sends a Unix timestamp (decimal ASCII) in
+    /// the payload; server replays frames published on that channel since.
     Replay = 0x07,
-    /// Envoi direct à un utilisateur précis, sans passer par un nom de
-    /// canal explicite (roadmap "Mode Direct User-to-User / Unicast").
-    /// Le champ `channel_id` est **repurposé** : il porte l'identifiant
-    /// de l'utilisateur destinataire (le `sub` du jeton AUTH émis pour
-    /// ce tenant), pas un nom de canal. Le serveur résout en interne vers
-    /// la boîte privée de cet utilisateur (canal `user:{user_id}`), à
-    /// laquelle chaque session est automatiquement abonnée dès un AUTH
-    /// réussi. Conséquence directe du format 256 octets fixe : l'ID
-    /// utilisateur choisi côté application doit tenir dans les 24 octets
-    /// du champ `channel_id` (un UUID v4 en texte, 36 caractères, ne
-    /// rentre pas — préférer un identifiant court ou un hash tronqué pour
-    /// l'adressage socket).
+    /// Direct send to a specific user, bypassing an explicit channel name.
+    /// `channel_id` is **repurposed**: it carries the recipient's user
+    /// identifier (the `sub` of the AUTH token issued for this tenant), not
+    /// a channel name. The server resolves it internally to that user's
+    /// private inbox (channel `user:{user_id}`), which every session
+    /// auto-subscribes to on successful AUTH. Direct consequence of the
+    /// fixed 256-byte frame: the application-chosen user ID must fit in the
+    /// 24-byte `channel_id` field (a textual UUID v4, 36 chars, does not
+    /// fit — prefer a short identifier or truncated hash for socket
+    /// addressing).
     Unicast = 0x08,
-    /// Désabonnement explicite d'un canal ou motif déjà souscrit.
-    /// `channel_id` porte le canal/motif exact tel qu'utilisé au SUB
-    /// d'origine. Corrige la limitation historique du protocole (v1..v8)
-    /// où aucun mécanisme ne permettait de se désabonner sans fermer la
-    /// connexion — cf. `main.rs::process_frame_inner`, bras
-    /// `Opcode::Unsub`, qui `abort()` la tâche de relais correspondante.
+    /// Explicit unsubscription from an already-subscribed channel/pattern.
+    /// `channel_id` carries the exact channel/pattern used at the original
+    /// SUB.
     Unsub = 0x09,
+}
+
+impl Opcode {
+    /// Short, stable label used as a Prometheus metric label value — more
+    /// readable in Grafana than the raw opcode byte.
+    pub fn label(self) -> &'static str {
+        match self {
+            Opcode::Subscribe => "SUB",
+            Opcode::Publish => "PUB",
+            Opcode::Message => "MSG",
+            Opcode::Auth => "AUTH",
+            Opcode::Ping => "PING",
+            Opcode::Presence => "PRESENCE",
+            Opcode::Replay => "REPLAY",
+            Opcode::Unicast => "UNICAST",
+            Opcode::Unsub => "UNSUB",
+        }
+    }
 }
 
 impl TryFrom<u8> for Opcode {
@@ -100,18 +113,13 @@ impl TryFrom<u8> for Opcode {
     }
 }
 
-/// Erreurs possibles lors du décodage d'un buffer brut en `Frame`.
+/// Errors raised while decoding a raw buffer into a `Frame`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtocolError {
-    /// Le buffer passé à `Frame::parse_slice` ne fait pas 256 octets.
     InvalidLength(usize),
-    /// Le préfixe magic/version ne correspond pas à `MAGIC`.
     BadMagic(u16),
-    /// L'octet 2 ne correspond à aucun `Opcode` connu.
     UnknownOpcode(u8),
-    /// Le CRC16 calculé ne correspond pas au checksum embarqué.
     ChecksumMismatch { expected: u16, actual: u16 },
-    /// La section channel ou payload contient des octets UTF-8 invalides.
     InvalidUtf8,
 }
 
@@ -119,36 +127,34 @@ impl fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProtocolError::InvalidLength(n) => {
-                write!(f, "longueur de frame invalide : {FRAME_SIZE} attendus, {n} reçus")
+                write!(f, "invalid frame length: expected {FRAME_SIZE}, got {n}")
             }
-            ProtocolError::BadMagic(m) => write!(f, "magic/version invalide : 0x{m:04X}"),
-            ProtocolError::UnknownOpcode(o) => write!(f, "opcode inconnu : 0x{o:02X}"),
+            ProtocolError::BadMagic(m) => write!(f, "invalid magic/version: 0x{m:04X}"),
+            ProtocolError::UnknownOpcode(o) => write!(f, "unknown opcode: 0x{o:02X}"),
             ProtocolError::ChecksumMismatch { expected, actual } => write!(
                 f,
-                "CRC16 invalide : frame annonce 0x{expected:04X}, calculé 0x{actual:04X}"
+                "invalid CRC16: frame announces 0x{expected:04X}, computed 0x{actual:04X}"
             ),
-            ProtocolError::InvalidUtf8 => write!(f, "section channel/payload non UTF-8"),
+            ProtocolError::InvalidUtf8 => write!(f, "non-UTF-8 channel/payload section"),
         }
     }
 }
 
 impl std::error::Error for ProtocolError {}
 
-/// Vue parsée sur un frame brut de 256 octets.
-///
-/// `Frame` emprunte le buffer sous-jacent (`&'a [u8; FRAME_SIZE]`) : aucune
-/// allocation n'a lieu pendant le parsing.
+/// Parsed view over a raw 256-byte frame. Borrows the underlying buffer
+/// (`&'a [u8; FRAME_SIZE]`): no allocation happens while parsing.
+#[derive(Debug)]
 pub struct Frame<'a> {
     raw: &'a [u8; FRAME_SIZE],
     opcode: Opcode,
 }
 
 impl<'a> Frame<'a> {
-    /// Parse et valide intégralement un buffer de 256 octets.
+    /// Fully parses and validates a 256-byte buffer.
     ///
-    /// Ordre de validation : magic → opcode → CRC16 → UTF-8. Cet ordre
-    /// permet de rejeter le plus tôt possible un flux corrompu ou hors
-    /// protocole sans payer le coût du CRC dans ce cas.
+    /// Validation order: magic → opcode → CRC16 → UTF-8, so a corrupted or
+    /// off-protocol stream is rejected as cheaply as possible.
     pub fn parse(buf: &'a [u8; FRAME_SIZE]) -> Result<Self, ProtocolError> {
         let magic = u16::from_be_bytes([buf[OFF_MAGIC], buf[OFF_MAGIC + 1]]);
         if magic != MAGIC {
@@ -166,7 +172,6 @@ impl<'a> Frame<'a> {
             });
         }
 
-        // Validation UTF-8 en amont pour que les accesseurs soient infaillibles.
         std::str::from_utf8(&buf[OFF_CHANNEL..OFF_CHANNEL + LEN_CHANNEL])
             .map_err(|_| ProtocolError::InvalidUtf8)?;
         std::str::from_utf8(&buf[OFF_PAYLOAD..OFF_PAYLOAD + LEN_PAYLOAD])
@@ -175,8 +180,8 @@ impl<'a> Frame<'a> {
         Ok(Frame { raw: buf, opcode })
     }
 
-    /// Parse depuis un slice de taille arbitraire (ex: `BytesMut` lu sur
-    /// un socket), en vérifiant d'abord la longueur.
+    /// Parses from an arbitrary-length slice (e.g. bytes read off a
+    /// socket), checking length first.
     pub fn parse_slice(buf: &'a [u8]) -> Result<Self, ProtocolError> {
         let arr: &[u8; FRAME_SIZE] = buf
             .try_into()
@@ -189,7 +194,6 @@ impl<'a> Frame<'a> {
         self.opcode
     }
 
-    /// Tenant ID sous forme de `Uuid`. Copie 16 octets (pas d'alloc heap).
     #[inline]
     pub fn tenant_id(&self) -> Uuid {
         let mut bytes = [0u8; LEN_TENANT];
@@ -197,27 +201,24 @@ impl<'a> Frame<'a> {
         Uuid::from_bytes(bytes)
     }
 
-    /// Octets bruts du tenant ID — utile comme clé de map sans construire
-    /// un `Uuid` quand seule l'égalité/le hash comptent.
     #[inline]
     pub fn tenant_id_bytes(&self) -> [u8; LEN_TENANT] {
         self.raw[OFF_TENANT..OFF_TENANT + LEN_TENANT]
             .try_into()
-            .expect("la longueur du slice est statiquement LEN_TENANT")
+            .expect("slice length is statically LEN_TENANT")
     }
 
-    /// Channel ID, débarrassé du padding NUL final. Emprunté, zero-copy.
+    /// Channel ID, stripped of trailing NUL padding. Borrowed, zero-copy.
     #[inline]
     pub fn channel_id(&self) -> &str {
         let slice = &self.raw[OFF_CHANNEL..OFF_CHANNEL + LEN_CHANNEL];
-        // Sûr : la validité UTF-8 de cette section a déjà été vérifiée
-        // dans `parse`, et tronquer des octets NUL finaux d'un UTF-8
-        // valide produit toujours un UTF-8 valide.
+        // Safe: UTF-8 validity of this section was already checked in `parse`,
+        // and trimming trailing NUL bytes off valid UTF-8 stays valid UTF-8.
         let s = unsafe { std::str::from_utf8_unchecked(slice) };
         s.trim_end_matches('\0')
     }
 
-    /// Payload texte, débarrassé du padding NUL final. Emprunté, zero-copy.
+    /// Text payload, stripped of trailing NUL padding. Borrowed, zero-copy.
     #[inline]
     pub fn payload(&self) -> &str {
         let slice = &self.raw[OFF_PAYLOAD..OFF_PAYLOAD + LEN_PAYLOAD];
@@ -225,24 +226,22 @@ impl<'a> Frame<'a> {
         s.trim_end_matches('\0')
     }
 
-    /// Nom du méta-canal de présence associé à ce channel :
-    /// `"{channel_id}-presence"`.
+    /// Name of the presence meta-channel for this channel: `"{channel_id}-presence"`.
     pub fn presence_channel(&self) -> String {
         format!("{}-presence", self.channel_id())
     }
 
-    /// Accès au buffer brut complet — utile pour retransmettre un frame
-    /// tel quel à des abonnés sans le ré-encoder.
+    /// Full raw buffer — useful to retransmit a frame as-is to subscribers
+    /// without re-encoding it.
     #[inline]
     pub fn as_bytes(&self) -> &[u8; FRAME_SIZE] {
         self.raw
     }
 }
 
-/// Builder pour encoder un nouveau frame sortant dans un buffer possédé
-/// `[u8; 256]`. Centralise le padding, la troncature et le calcul du CRC
-/// afin que `protocol.rs` reste l'unique source de vérité du format fil
-/// dans les deux sens (lecture/écriture).
+/// Builder to encode a new outbound frame into an owned `[u8; 256]` buffer.
+/// Centralizes padding, truncation, and CRC computation so this file stays
+/// the single source of truth for the wire format in both directions.
 pub struct FrameBuilder {
     opcode: Opcode,
     tenant_id: Uuid,
@@ -270,12 +269,11 @@ impl FrameBuilder {
         self
     }
 
-    /// Encode en un frame possédé, checksummé et paddé à 256 octets.
+    /// Encodes into an owned, checksummed, 256-byte-padded frame.
     ///
-    /// `channel_id` et `payload` sont tronqués (sur une frontière de
-    /// caractère UTF-8 valide) s'ils dépassent la largeur de leur champ,
-    /// plutôt que de paniquer : ce service ne doit jamais crasher sur une
-    /// entrée applicative surdimensionnée.
+    /// `channel_id`/`payload` are truncated (at a valid UTF-8 character
+    /// boundary) rather than panicking if they exceed their field width:
+    /// this must never crash on an oversized application input.
     pub fn build(self) -> [u8; FRAME_SIZE] {
         let mut buf = [0u8; FRAME_SIZE];
 
@@ -299,9 +297,8 @@ impl FrameBuilder {
     }
 }
 
-/// Copie `s` dans `dst`, tronqué à la dernière frontière de caractère
-/// UTF-8 qui tient, et paddé à zéro pour le reste. `dst.len()` est la
-/// largeur du champ.
+/// Copies `s` into `dst`, truncated at the last UTF-8 character boundary
+/// that fits, zero-padded for the remainder. `dst.len()` is the field width.
 fn write_padded(dst: &mut [u8], s: &str) {
     let bytes = s.as_bytes();
     let take = if bytes.len() > dst.len() {
@@ -314,14 +311,14 @@ fn write_padded(dst: &mut [u8], s: &str) {
         bytes.len()
     };
     dst[..take].copy_from_slice(&bytes[..take]);
-    // Le reste de `dst` est déjà à zéro (buffer [u8; FRAME_SIZE] initialisé à 0).
+    // Rest of `dst` is already zero ([u8; FRAME_SIZE] is zero-initialized).
 }
 
-/// CRC16/CCITT-FALSE (poly 0x1021, init 0xFFFF, pas de reflet, pas de xorout).
+/// CRC16/CCITT-FALSE (poly 0x1021, init 0xFFFF, no reflection, no xorout).
 ///
-/// Implémenté en boucle bit-à-bit plutôt qu'avec une table de lookup :
-/// à 254 octets/frame c'est largement assez rapide, et ça évite de gonfler
-/// le binaire — ce qui compte pour la cible Docker `scratch` < 20 Mo.
+/// Implemented bit-by-bit rather than with a lookup table: at 254
+/// bytes/frame this is plenty fast, and it avoids growing the binary —
+/// which matters for the `scratch` Docker target (< 20 MB).
 pub fn crc16_ccitt_false(data: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;
     for &byte in data {
@@ -353,7 +350,7 @@ mod tests {
             .payload("hello world")
             .build();
 
-        let frame = Frame::parse(&raw).expect("le frame doit se parser");
+        let frame = Frame::parse(&raw).expect("frame must parse");
         assert_eq!(frame.opcode(), Opcode::Publish);
         assert_eq!(frame.tenant_id(), tenant);
         assert_eq!(frame.channel_id(), "room-42");
@@ -371,7 +368,7 @@ mod tests {
     #[test]
     fn rejects_bad_magic() {
         let mut raw = FrameBuilder::new(Opcode::Ping, sample_tenant()).build();
-        raw[0] = 0x00; // magic corrompu
+        raw[0] = 0x00;
         let err = Frame::parse(&raw).unwrap_err();
         assert!(matches!(err, ProtocolError::BadMagic(_)));
     }
@@ -379,8 +376,7 @@ mod tests {
     #[test]
     fn rejects_unknown_opcode() {
         let mut raw = FrameBuilder::new(Opcode::Ping, sample_tenant()).build();
-        raw[2] = 0xFF; // opcode invalide
-        // On recalcule le CRC pour isoler la vérification de l'opcode.
+        raw[2] = 0xFF;
         let crc = crc16_ccitt_false(&raw[0..OFF_CRC]);
         raw[OFF_CRC..OFF_CRC + LEN_CRC].copy_from_slice(&crc.to_be_bytes());
         let err = Frame::parse(&raw).unwrap_err();
@@ -392,14 +388,14 @@ mod tests {
         let mut raw = FrameBuilder::new(Opcode::Message, sample_tenant())
             .payload("data")
             .build();
-        raw[50] ^= 0xFF; // altère un octet du payload sans mettre à jour le CRC
+        raw[50] ^= 0xFF;
         let err = Frame::parse(&raw).unwrap_err();
         assert!(matches!(err, ProtocolError::ChecksumMismatch { .. }));
     }
 
     #[test]
     fn truncates_oversized_fields_at_char_boundary() {
-        let long_channel = "x".repeat(100); // dépasse le champ de 24 octets
+        let long_channel = "x".repeat(100);
         let raw = FrameBuilder::new(Opcode::Subscribe, sample_tenant())
             .channel_id(long_channel)
             .build();
@@ -410,7 +406,7 @@ mod tests {
     #[test]
     fn unicast_opcode_roundtrip() {
         let raw = FrameBuilder::new(Opcode::Unicast, sample_tenant())
-            .channel_id("user-42") // repurposé : identifiant du destinataire
+            .channel_id("user-42")
             .payload("hey there")
             .build();
         let frame = Frame::parse(&raw).unwrap();

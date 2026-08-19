@@ -1,94 +1,78 @@
-//! `auth.rs` — Authentification multi-tenant par jeton signé HMAC-SHA256.
+//! # TokenService
 //!
-//! Format du jeton (compact, volontairement plus simple qu'une lib JWT
-//! complète pour éviter sa surface d'attaque classique, ex: confusion
-//! d'algorithme `"alg": "none"`) :
+//! **Action:** Multi-tenant HMAC-SHA256 signed-token authentication.
+//! **Input:** Tenant secrets (via the repository), tokens to validate, claims to issue.
+//! **Output:** `Claims` on success, typed `AuthError` on failure.
+//! **Side effects:** None beyond delegating storage to `TenantSecretRepository`.
+//! **Dependencies:** `hmac`, `sha2`, `base64`, `serde_json`, `repositories::TenantSecretRepository`, `entities::Claims`.
+//!
+//! Token format (compact, deliberately simpler than a full JWT library to
+//! avoid its classic attack surface, e.g. `"alg": "none"` confusion):
 //!
 //! ```text
 //! base64url(payload_json) "." base64url(HMAC-SHA256(payload_json, tenant_secret))
 //! ```
 //!
-//! `payload_json = {"tenant_id": "<uuid>", "sub": "<id session/utilisateur>", "exp": <unix_ts>}`
+//! `payload_json = {"tenant_id": "<uuid>", "sub": "<session/user id>", "exp": <unix_ts>}`
 //!
-//! Le secret du tenant est retrouvé en **O(1)** via une `DashMap<TenantId,
-//! Secret>` peuplée au démarrage (ou dynamiquement via `register_tenant`) :
-//! la validation complète — lookup + vérification HMAC — ne dépend donc
-//! jamais du nombre de tenants enregistrés (contrainte #2).
+//! The tenant secret is looked up in **O(1)** via `TenantSecretRepository`:
+//! full validation (lookup + HMAC check) never depends on the number of
+//! registered tenants (constraint #2).
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use dashmap::DashMap;
 use hmac::{Hmac, Mac};
-use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::state::TenantId;
+use crate::entities::Claims::Claims;
+use crate::entities::ChannelKey::TenantId;
+use crate::modules::auth::repositories::TenantSecretRepository::TenantSecretRepository;
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// Erreurs de validation/émission de jeton.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
-    #[error("format de jeton invalide")]
+    #[error("malformed token")]
     Malformed,
-    #[error("tenant inconnu : {0}")]
+    #[error("unknown tenant: {0}")]
     UnknownTenant(TenantId),
-    #[error("signature invalide")]
+    #[error("invalid signature")]
     BadSignature,
-    #[error("jeton expiré")]
+    #[error("expired token")]
     Expired,
-    #[error("le tenant du jeton ({token}) ne correspond pas au tenant demandé ({requested})")]
+    #[error("token tenant ({token}) does not match the requested tenant ({requested})")]
     TenantMismatch { token: TenantId, requested: TenantId },
 }
 
-/// Claims décodées d'un jeton valide.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Claims {
-    pub tenant_id: TenantId,
-    pub sub: String,
-    pub exp: u64,
+/// Tenant HMAC secret registry and associated validation logic.
+pub struct TokenService {
+    repo: TenantSecretRepository,
 }
 
-/// Registre des secrets HMAC par tenant et logique de validation associée.
-///
-/// `DashMap` autorise l'ajout/retrait de tenants à chaud (ex: via une API
-/// d'admin interne) sans redémarrer le service ni bloquer les validations
-/// en cours pour les autres tenants.
-pub struct AuthManager {
-    secrets: DashMap<TenantId, Vec<u8>>,
-}
-
-impl AuthManager {
+impl TokenService {
     pub fn new() -> Self {
         Self {
-            secrets: DashMap::new(),
+            repo: TenantSecretRepository::new(),
         }
     }
 
-    /// Enregistre (ou remplace) le secret HMAC d'un tenant.
     pub fn register_tenant(&self, tenant_id: TenantId, secret: impl Into<Vec<u8>>) {
-        self.secrets.insert(tenant_id, secret.into());
+        self.repo.register(tenant_id, secret);
     }
 
-    /// Révoque un tenant : toute validation ultérieure pour ce tenant
-    /// échouera immédiatement avec `UnknownTenant`.
+    /// Revokes a tenant: any subsequent validation for it immediately
+    /// fails with `UnknownTenant`.
     pub fn revoke_tenant(&self, tenant_id: TenantId) {
-        self.secrets.remove(&tenant_id);
+        self.repo.revoke(tenant_id);
     }
 
-    /// Émet un jeton pour un tenant/sujet donné, valable `ttl_secs`
-    /// secondes. Utilitaire côté serveur/CLI pour distribuer des jetons
-    /// aux applications clientes — ne fait pas partie du chemin chaud
-    /// runtime (celui-ci n'appelle que `validate`).
-    pub fn issue_token(
-        &self,
-        tenant_id: TenantId,
-        sub: &str,
-        ttl_secs: u64,
-    ) -> Result<String, AuthError> {
+    /// Issues a token for a given tenant/subject, valid for `ttl_secs`
+    /// seconds. Server/CLI utility to distribute tokens to client
+    /// applications — not part of the runtime hot path (which only calls `validate`).
+    pub fn issue_token(&self, tenant_id: TenantId, sub: &str, ttl_secs: u64) -> Result<String, AuthError> {
         let secret = self
-            .secrets
+            .repo
             .get(&tenant_id)
             .ok_or(AuthError::UnknownTenant(tenant_id))?;
 
@@ -107,17 +91,17 @@ impl AuthManager {
         Ok(format!("{payload_b64}.{sig_b64}"))
     }
 
-    /// Valide un jeton pour un tenant *attendu* (celui annoncé dans
-    /// l'enveloppe du frame AUTH par le client).
+    /// Validates a token against an *expected* tenant (the one announced
+    /// in the AUTH frame envelope by the client).
     ///
-    /// Ordre de vérification : format → lookup secret (O(1)) → signature
-    /// HMAC (comparaison en temps constant via `Mac::verify_slice`,
-    /// résistante au timing attack) → expiration → cohérence entre le
-    /// tenant encodé dans le jeton et le tenant annoncé par le client.
+    /// Verification order: format → secret lookup (O(1)) → HMAC signature
+    /// (constant-time comparison via `Mac::verify_slice`, timing-attack
+    /// resistant) → expiry → consistency between the tenant encoded in the
+    /// token and the tenant announced by the client.
     ///
-    /// Cette dernière vérification empêche un client de rejouer un jeton
-    /// valide émis pour le tenant A en prétendant, dans l'enveloppe du
-    /// frame, appartenir au tenant B.
+    /// This last check prevents a client from replaying a valid token
+    /// issued for tenant A while claiming, in the frame envelope, to
+    /// belong to tenant B.
     pub fn validate(&self, expected_tenant: TenantId, token: &str) -> Result<Claims, AuthError> {
         let (payload_b64, sig_b64) = token.split_once('.').ok_or(AuthError::Malformed)?;
 
@@ -127,7 +111,7 @@ impl AuthManager {
         let claims: Claims = serde_json::from_slice(&payload).map_err(|_| AuthError::Malformed)?;
 
         let secret = self
-            .secrets
+            .repo
             .get(&claims.tenant_id)
             .ok_or(AuthError::UnknownTenant(claims.tenant_id))?;
 
@@ -154,7 +138,7 @@ impl AuthManager {
     }
 }
 
-impl Default for AuthManager {
+impl Default for TokenService {
     fn default() -> Self {
         Self::new()
     }
@@ -163,7 +147,7 @@ impl Default for AuthManager {
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("horloge système antérieure à UNIX_EPOCH")
+        .expect("system clock predates UNIX_EPOCH")
         .as_secs()
 }
 
@@ -174,7 +158,7 @@ mod tests {
 
     #[test]
     fn issue_then_validate_roundtrip() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant = Uuid::from_u128(1);
         auth.register_tenant(tenant, b"super-secret-key".to_vec());
 
@@ -186,17 +170,17 @@ mod tests {
 
     #[test]
     fn rejects_tampered_signature() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant = Uuid::from_u128(1);
         auth.register_tenant(tenant, b"secret".to_vec());
         let mut token = auth.issue_token(tenant, "user-1", 3600).unwrap();
-        token.push('x'); // corrompt la signature
+        token.push('x');
         assert_eq!(auth.validate(tenant, &token), Err(AuthError::BadSignature));
     }
 
     #[test]
     fn rejects_expired_token() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant = Uuid::from_u128(1);
         auth.register_tenant(tenant, b"secret".to_vec());
         let token = auth.issue_token(tenant, "user-1", 0).unwrap();
@@ -206,7 +190,7 @@ mod tests {
 
     #[test]
     fn rejects_cross_tenant_replay() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant_a = Uuid::from_u128(1);
         let tenant_b = Uuid::from_u128(2);
         auth.register_tenant(tenant_a, b"secret-a".to_vec());
@@ -225,7 +209,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_tenant() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant = Uuid::from_u128(99);
         let err = auth.issue_token(tenant, "user-1", 3600).unwrap_err();
         assert_eq!(err, AuthError::UnknownTenant(tenant));
@@ -233,14 +217,11 @@ mod tests {
 
     #[test]
     fn revoked_tenant_fails_validation() {
-        let auth = AuthManager::new();
+        let auth = TokenService::new();
         let tenant = Uuid::from_u128(1);
         auth.register_tenant(tenant, b"secret".to_vec());
         let token = auth.issue_token(tenant, "user-1", 3600).unwrap();
         auth.revoke_tenant(tenant);
-        assert_eq!(
-            auth.validate(tenant, &token),
-            Err(AuthError::UnknownTenant(tenant))
-        );
+        assert_eq!(auth.validate(tenant, &token), Err(AuthError::UnknownTenant(tenant)));
     }
 }

@@ -1,18 +1,22 @@
-//! `metrics.rs` — Métriques Prometheus (roadmap "Dashboard de Monitoring
-//! & Métriques").
+//! # MetricsService
 //!
-//! Expose `/metrics` au format d'exposition Prometheus texte, servi sur
-//! le port Admin (interne) plutôt que sur le port WebSocket/TCP public :
-//! c'est une donnée opérationnelle destinée au système de scraping, pas
-//! au trafic applicatif, et elle ne doit pas être atteignable depuis
-//! l'extérieur au même titre que le reste de l'Admin API.
+//! **Action:** Prometheus metrics registry for the realtime engine.
+//! **Input:** Connection/frame/push/rate-limit events recorded by other modules.
+//! **Output:** Prometheus text exposition format via `render()`.
+//! **Side effects:** In-memory counter/gauge/histogram mutation only.
+//! **Dependencies:** `prometheus`, `entities::ChannelKey`.
 //!
-//! Métriques exposées (préfixe `realtime_engine_`) :
+//! Exposed on `/api/v1/system/metrics`, served from the Admin port rather
+//! than the public WebSocket/TCP port: this is operational data for the
+//! scraping system, not application traffic, and must not be reachable
+//! from outside like the rest of the Admin API.
+//!
+//! Metrics (prefix `realtime_engine_`):
 //! - `ws_connections_active` / `tcp_connections_active` (gauges)
-//! - `messages_total{tenant_id,opcode}` (compteur, tout frame traité avec succès)
-//! - `frame_processing_seconds{opcode}` (histogramme de latence de traitement)
-//! - `push_fallback_total{tenant_id}` (notifications FCM déclenchées en fallback)
-//! - `rate_limited_total{tenant_id}` (frames rejetés par le rate limiter)
+//! - `messages_total{tenant_id,opcode}` (counter, every successfully processed frame)
+//! - `frame_processing_seconds{opcode}` (processing latency histogram)
+//! - `push_fallback_total{tenant_id}` (FCM notifications triggered as fallback)
+//! - `rate_limited_total{tenant_id}` (frames rejected by the rate limiter)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,20 +25,20 @@ use prometheus::{
     Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, Registry, TextEncoder,
 };
 
-use crate::state::TenantId;
+use crate::entities::ChannelKey::TenantId;
 
-/// Transport réseau d'une connexion, pour distinguer les gauges WS/TCP.
+/// Network transport of a connection, to distinguish WS/TCP gauges.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
     WebSocket,
     Tcp,
 }
 
-/// Registre de métriques applicatif. Détenu une seule fois dans
-/// `ServerContext` (via `Arc`) et partagé par tous les handlers réseau et
-/// l'Admin API — les types Prometheus (`IntGauge`, `*Vec`) sont déjà
-/// thread-safe (`Sync`) en interne, pas besoin de verrou supplémentaire.
-pub struct Metrics {
+/// Application metrics registry. Held once in the DI context (via `Arc`)
+/// and shared by every network handler and the Admin API — Prometheus
+/// types (`IntGauge`, `*Vec`) are already thread-safe (`Sync`) internally,
+/// no extra lock needed.
+pub struct MetricsService {
     registry: Registry,
     ws_connections_active: IntGauge,
     tcp_connections_active: IntGauge,
@@ -44,66 +48,61 @@ pub struct Metrics {
     rate_limited_total: IntCounterVec,
 }
 
-impl Metrics {
+impl MetricsService {
     pub fn new() -> Arc<Self> {
         let registry = Registry::new();
 
         let ws_connections_active = IntGauge::new(
             "realtime_engine_ws_connections_active",
-            "Nombre de connexions WebSocket actuellement ouvertes",
+            "Number of currently open WebSocket connections",
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
         let tcp_connections_active = IntGauge::new(
             "realtime_engine_tcp_connections_active",
-            "Nombre de connexions TCP brutes actuellement ouvertes",
+            "Number of currently open raw TCP connections",
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
         let messages_total = IntCounterVec::new(
             Opts::new(
                 "realtime_engine_messages_total",
-                "Nombre total de frames traités avec succès",
+                "Total number of successfully processed frames",
             ),
             &["tenant_id", "opcode"],
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
         let frame_processing_seconds = HistogramVec::new(
             HistogramOpts::new(
                 "realtime_engine_frame_processing_seconds",
-                "Latence de traitement d'un frame côté serveur (parsing + logique métier, hors I/O réseau)",
+                "Server-side frame processing latency (parsing + business logic, excluding network I/O)",
             )
-            // Bornes adaptées à un traitement en mémoire attendu en
-            // microsecondes/millisecondes, pas en secondes.
             .buckets(vec![
                 0.00005, 0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1,
             ]),
             &["opcode"],
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
         let push_fallback_total = IntCounterVec::new(
             Opts::new(
                 "realtime_engine_push_fallback_total",
-                "Nombre de notifications basculées vers le fallback push FCM (aucun abonné socket actif)",
+                "Number of notifications switched to the FCM push fallback (no active socket subscriber)",
             ),
             &["tenant_id"],
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
         let rate_limited_total = IntCounterVec::new(
             Opts::new(
                 "realtime_engine_rate_limited_total",
-                "Nombre de frames rejetés par le rate limiter (Token Bucket)",
+                "Number of frames rejected by the rate limiter (Token Bucket)",
             ),
             &["tenant_id"],
         )
-        .expect("définition de métrique invalide");
+        .expect("invalid metric definition");
 
-        // `register` échoue seulement en cas de collision de nom de
-        // métrique — impossible ici puisque tous les noms sont distincts
-        // et définis localement dans cette seule fonction.
         registry.register(Box::new(ws_connections_active.clone())).unwrap();
         registry.register(Box::new(tcp_connections_active.clone())).unwrap();
         registry.register(Box::new(messages_total.clone())).unwrap();
@@ -136,9 +135,9 @@ impl Metrics {
         }
     }
 
-    /// Enregistre un frame traité avec succès, avec sa latence de
-    /// traitement. `opcode` est une chaîne statique (`"PUB"`, `"SUB"`,
-    /// ...) plutôt que le byte brut, plus lisible dans Grafana.
+    /// Records a successfully processed frame with its processing latency.
+    /// `opcode` is a static label string (`"PUB"`, `"SUB"`, ...) rather
+    /// than the raw byte, more readable in Grafana.
     pub fn record_frame(&self, tenant_id: TenantId, opcode: &str, duration: Duration) {
         self.messages_total
             .with_label_values(&[&tenant_id.to_string(), opcode])
@@ -160,15 +159,15 @@ impl Metrics {
             .inc();
     }
 
-    /// Rend l'état courant du registre au format d'exposition Prometheus
-    /// texte, prêt à être renvoyé tel quel comme corps de réponse HTTP.
+    /// Renders the current registry state in Prometheus text exposition
+    /// format, ready to return as-is as an HTTP response body.
     pub fn render(&self) -> String {
         let families = self.registry.gather();
         let mut buffer = Vec::new();
         TextEncoder::new()
             .encode(&families, &mut buffer)
-            .expect("encodage Prometheus infaillible pour des métriques bien formées");
-        String::from_utf8(buffer).expect("la sortie de TextEncoder est toujours de l'UTF-8 valide")
+            .expect("Prometheus encoding is infallible for well-formed metrics");
+        String::from_utf8(buffer).expect("TextEncoder output is always valid UTF-8")
     }
 }
 
@@ -179,7 +178,7 @@ mod tests {
 
     #[test]
     fn render_includes_registered_metric_names() {
-        let metrics = Metrics::new();
+        let metrics = MetricsService::new();
         metrics.connection_opened(Transport::WebSocket);
         metrics.record_frame(Uuid::from_u128(1), "PUB", Duration::from_micros(120));
         metrics.record_push_fallback(Uuid::from_u128(1));
@@ -195,7 +194,7 @@ mod tests {
 
     #[test]
     fn connection_gauges_track_open_close() {
-        let metrics = Metrics::new();
+        let metrics = MetricsService::new();
         metrics.connection_opened(Transport::Tcp);
         metrics.connection_opened(Transport::Tcp);
         metrics.connection_closed(Transport::Tcp);
