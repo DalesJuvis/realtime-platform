@@ -1,2 +1,0 @@
-fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>) -> impl futures_util::Future<Output = impl IntoResponse> {revoke_tenant}
-fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>) -> impl futures_util::Future<Output = impl IntoResponse> {revoke_tenant}: Handler<_, _>

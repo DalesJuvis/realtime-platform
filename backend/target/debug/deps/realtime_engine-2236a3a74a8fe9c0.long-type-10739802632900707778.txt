@@ -1,2 +1,0 @@
-fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>, axum::Json<RotateSecretRequest>) -> impl futures_util::Future<Output = impl IntoResponse> {rotate_secret}
-fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>, axum::Json<RotateSecretRequest>) -> impl futures_util::Future<Output = impl IntoResponse> {rotate_secret}: Handler<_, _>
