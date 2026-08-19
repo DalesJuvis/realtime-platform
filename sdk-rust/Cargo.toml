@@ -1,0 +1,26 @@
+[package]
+name = "realtime-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "SDK client Rust pour le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets)."
+license = "UNLICENSED"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+# NOTE : le nom exact de la feature TLS de `tokio-tungstenite` a changé
+# entre versions majeures ("rustls-tls-webpki-roots" ici, vs "native-tls"
+# ou "rustls-tls-native-roots" selon les releases). À vérifier contre la
+# version résolue par `cargo add` chez vous — non validable ici faute
+# d'accès réseau/registre de crates dans cet environnement.
+tokio-tungstenite = { version = "0.24", features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+dashmap = "6"
+uuid = { version = "1", features = ["v4"] }
+thiserror = "1"
+tracing = "0.1"
+rand = "0.8"
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "signal"] }

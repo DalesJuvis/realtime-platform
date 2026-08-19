@@ -1,0 +1,46 @@
+{
+  "name": "@yourorg/realtime-sdk",
+  "version": "0.1.0",
+  "description": "SDK client TypeScript/JS pour le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets), avec reconnexion automatique et pattern Adapter pour permuter vers Firebase/PubNub.",
+  "type": "module",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test --loader ts-node/esm src/**/*.test.ts",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "realtime",
+    "websocket",
+    "pubsub",
+    "notifications",
+    "multi-tenant"
+  ],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "ws": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.0",
+    "ts-node": "^10.9.0"
+  }
+}

@@ -1,0 +1,48 @@
+# docker-compose.yml — exemple pour valider le broadcast multi-instances
+# en local : 2 instances du moteur + 1 Redis, derrière un point d'entrée
+# unique par instance (pas de load balancer ici, volontairement, pour
+# pouvoir se connecter explicitement à l'instance A ou B pendant les tests
+# et vérifier qu'un message publié sur A atteint bien un abonné sur B).
+#
+# Usage : docker compose up --build
+#   Instance A : ws://localhost:8080/ws  (TCP: 7878, Admin: 9090)
+#   Instance B : ws://localhost:8081/ws  (TCP: 7879, Admin: 9091)
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
+  engine-a:
+    build: .
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      DEMO_TENANT_SECRET: dev-secret-change-me
+      ADMIN_API_TOKEN: dev-admin-token-change-me
+    ports:
+      - "8080:8080"
+      - "7878:7878"
+      - "9090:9090" # dev uniquement : ne jamais publier ce port en production
+
+  engine-b:
+    build: .
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      DEMO_TENANT_SECRET: dev-secret-change-me
+      ADMIN_API_TOKEN: dev-admin-token-change-me
+    ports:
+      - "8081:8080"
+      - "7879:7878"
+      - "9091:9090" # dev uniquement : ne jamais publier ce port en production

@@ -1,0 +1,2 @@
+fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>, axum::Json<rate_limit::RateLimitConfig>) -> impl futures_util::Future<Output = impl IntoResponse> {update_limits}
+fn(State<admin::AdminContext>, HeaderMap, axum::extract::Path<uuid::Uuid>, axum::Json<rate_limit::RateLimitConfig>) -> impl futures_util::Future<Output = impl IntoResponse> {update_limits}: Handler<_, _>
