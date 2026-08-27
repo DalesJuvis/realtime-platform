@@ -22,7 +22,6 @@ export function SignupForm() {
   const setSession = usePortalAuthStore((s) => s.setSession)
   const navigate = useNavigate()
 
-  const [apiUrl, setApiUrl] = useState(env.defaultApiUrl)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setSubmitting] = useState(false)
@@ -32,13 +31,12 @@ export function SignupForm() {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
-    const normalizedApiUrl = apiUrl.trim().replace(/\/$/, '')
     try {
       // `signupAction` reads `apiUrl` from this store via the `http`
       // interceptor, so it has to land there before the call, not after.
-      usePortalAuthStore.setState({ apiUrl: normalizedApiUrl })
+      usePortalAuthStore.setState({ apiUrl: env.defaultApiUrl })
       const { accessToken } = await signupAction({ email: email.trim(), password })
-      setSession(normalizedApiUrl, accessToken)
+      setSession(env.defaultApiUrl, accessToken)
       navigate('/overview', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Could not create your account.'))
@@ -68,10 +66,6 @@ export function SignupForm() {
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="apiUrl">Portal API URL</Label>
-          <Input id="apiUrl" value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} required />
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input

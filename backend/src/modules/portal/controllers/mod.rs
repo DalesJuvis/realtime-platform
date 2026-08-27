@@ -12,3 +12,7 @@ pub mod ListTemplatesController;
 pub mod CreateTemplateController;
 pub mod UpdateTemplateController;
 pub mod DeleteTemplateController;
+pub mod GetProfileController;
+pub mod UpdateProfileController;
+pub mod UploadLogoController;
+pub mod ChangePasswordController;

@@ -4,9 +4,22 @@
 # pouvoir se connecter explicitement à l'instance A ou B pendant les tests
 # et vérifier qu'un message publié sur A atteint bien un abonné sur B).
 #
+# Nommage : chaque instance reste un seul processus/binaire qui sert à la
+# fois la messagerie temps réel ET l'admin/auth (voir BACKEND.md — pas de
+# découpage en microservices ici) ; le nom `service-messengio-*` reflète
+# son rôle principal. Dans chacune, deux surfaces logiques distinctes
+# cohabitent sur des ports différents :
+#   - "messengio"  : WS (8080/8081), TCP (7878/7879), publication HTTP
+#                    (même port que Portal, voir modules::realtime::routes)
+#   - "guard"      : Admin API (9090/9091) et Portal/Auth API (8090/8091)
+#                    — gestion des tenants, comptes, clés
+# Un vrai découpage en deux services déployables séparés (un binaire
+# "messengio" qui ne sert que WS/TCP, un binaire "guard" qui ne sert que
+# admin/auth) est un changement d'architecture à part entière, pas fait ici.
+#
 # Usage : docker compose up --build
-#   Instance A : ws://localhost:8080/ws  (TCP: 7878, Admin: 9090, Portal: 8090)
-#   Instance B : ws://localhost:8081/ws  (TCP: 7879, Admin: 9091, Portal: 8091)
+#   Instance A (service-messengio-a) : ws://localhost:8080/ws  (TCP: 7878, Admin/guard: 9090, Portal/guard: 8090)
+#   Instance B (service-messengio-b) : ws://localhost:8081/ws  (TCP: 7879, Admin/guard: 9091, Portal/guard: 8091)
 #
 # Le Portal API (voir modules::portal) est la seule surface avec un état
 # durable : chaque instance a son propre fichier SQLite (volume nommé
@@ -15,8 +28,9 @@
 # propres à chaque instance (pas de coordination inter-instances).
 
 services:
-  redis:
+  service-cache:
     image: redis:7-alpine
+    container_name: service-cache
     ports:
       - "6379:6379"
     healthcheck:
@@ -25,13 +39,14 @@ services:
       timeout: 2s
       retries: 10
 
-  engine-a:
+  service-messengio-a:
     build: .
+    container_name: service-messengio-a
     depends_on:
-      redis:
+      service-cache:
         condition: service_healthy
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://service-cache:6379
       DEMO_TENANT_SECRET: dev-secret-change-me
       ADMIN_API_TOKEN: dev-admin-token-change-me
       PORTAL_SESSION_SECRET: dev-portal-secret-change-me
@@ -44,13 +59,14 @@ services:
       - "9090:9090" # dev uniquement : ne jamais publier ce port en production
       - "8090:8090"
 
-  engine-b:
+  service-messengio-b:
     build: .
+    container_name: service-messengio-b
     depends_on:
-      redis:
+      service-cache:
         condition: service_healthy
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://service-cache:6379
       DEMO_TENANT_SECRET: dev-secret-change-me
       ADMIN_API_TOKEN: dev-admin-token-change-me
       PORTAL_SESSION_SECRET: dev-portal-secret-change-me

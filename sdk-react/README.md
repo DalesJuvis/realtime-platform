@@ -1,0 +1,110 @@
+# @yourorg/realtime-sdk-react
+
+Bindings React (contexte, hooks, composants) pour
+[`@yourorg/realtime-sdk`](../sdk-typescript) — le moteur de notification et
+messagerie temps réel multi-tenant (protocole binaire fixe 256 octets).
+N'ajoute aucune logique protocolaire : c'est une couche fine au-dessus de
+`RealtimeClient`, pensée pour éviter le boilerplate `useEffect` +
+`subscribe`/`unsubscribe` répété dans chaque composant.
+
+> **Statut de validation :** compilé avec succès (`npm run build`, `tsc`
+> strict) dans l'environnement où ce package a été écrit. **Non testé au
+> runtime** contre un vrai serveur ni dans une vraie app React — la
+> logique des hooks est directe (souscription en effet, désinscription au
+> nettoyage) mais un premier essai réel dans `tenant-portal` ou `admin`
+> reste recommandé avant usage en production.
+
+## Installation
+
+```bash
+npm install @yourorg/realtime-sdk-react @yourorg/realtime-sdk
+```
+
+## Démarrage rapide
+
+```tsx
+import { RealtimeProvider, useChannel } from "@yourorg/realtime-sdk-react";
+
+function App() {
+  return (
+    <RealtimeProvider
+      config={{
+        host: "realtime.example.com",
+        tenantId: "12345678-9abc-def0-1122-334455667788",
+        token: monJetonEmisParLeServeur, // voir README de sdk-typescript
+      }}
+    >
+      <OrdersFeed />
+    </RealtimeProvider>
+  );
+}
+
+function OrdersFeed() {
+  const { messages, publish } = useChannel("orders:42", { limit: 100 });
+
+  return (
+    <>
+      <ul>
+        {messages.map((m, i) => (
+          <li key={i}>{m.payload}</li>
+        ))}
+      </ul>
+      <button onClick={() => publish("commande créée")}>Publier</button>
+    </>
+  );
+}
+```
+
+## API
+
+| Export | Rôle |
+|---|---|
+| `<RealtimeProvider client\|config>` | Fournit un `RealtimeClient` (et son état de connexion) à tout le sous-arbre — `connect()`/`disconnect()` gérés autour du cycle de vie. |
+| `useRealtimeClient()` | Le `RealtimeClient` du Provider englobant, pour un usage direct (`client.replay(...)`, etc.). |
+| `useConnectionState()` | `{ connectionState, lastError }` — `connectionState` : `"idle" \| "connecting" \| "open" \| "closed" \| "error"`. |
+| `useSubscription(channelId, handler)` | Souscription à effet seul, sans re-render — pour piloter autre chose que du state React. |
+| `useChannel(channelId, { limit?, replaySince? })` | Souscription à état : `{ messages, publish, clear }`, re-render à chaque message. |
+| `usePublish(channelId)` | Publication seule, sans souscription. |
+| `<ChannelSubscriber channelId>{state => ...}</ChannelSubscriber>` | Équivalent render-prop de `useChannel`, pour composition JSX ou composants classe. |
+| `<ConnectionIndicator labels?>` | Texte d'état de connexion minimal, non stylé — un point de départ, pas un composant themé. |
+
+`channelId` accepte `null`/`undefined` partout (`useSubscription`,
+`useChannel`) : la souscription reste simplement inactive tant qu'il n'est
+pas résolu — pratique quand il dépend d'un état asynchrone (session,
+paramètre de route) pas encore disponible.
+
+## Un seul canal actif, deux façons de le consommer
+
+`useSubscription` ne fait **jamais** re-render son propre composant — le
+handler est un effet de bord pur. `useChannel` accumule les messages en
+state React borné (`limit`, défaut 50) et re-render à chaque message.
+Utilisez `useSubscription` pour piloter un `ref`, un graphique impératif,
+ou tout ce qui n'a pas besoin d'un re-render React par message ;
+`useChannel` pour l'affichage direct (chat, flux, journal).
+
+## `client` vs `config`
+
+`<RealtimeProvider client={monClient}>` accepte un `RealtimeClient` déjà
+construit — vous en gardez la propriété, ce Provider ne le détruit jamais
+au démontage (utile en React Strict Mode, ou entre écrans en React
+Native). `<RealtimeProvider config={{ ... }}>` construit et **possède**
+le client : celui-ci est déconnecté au démontage. Exactement l'un des
+deux doit être fourni.
+
+## Ce que ce package ne fait pas
+
+Pas de génération de jeton (toujours côté serveur — voir le README de
+[`sdk-typescript`](../sdk-typescript)), pas de UI stylée au-delà de
+`<ConnectionIndicator>` (volontairement minimal, sans dépendance à un
+design system), pas de persistance des messages au-delà du buffer en
+mémoire de `useChannel`. Pour React Native spécifiquement (reconnexion
+`AppState`/réseau), voir
+[`@yourorg/realtime-sdk-react-native`](../sdk-react-native), qui réexporte
+tout ce package.
+
+## Développement
+
+```bash
+npm install
+npm run build   # compile src/ -> dist/
+```

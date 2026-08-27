@@ -20,6 +20,7 @@ use crate::modules::metrics::services::MetricsService::MetricsService;
 use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
 use crate::modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository;
 use crate::modules::portal::repositories::TenantUserRepository::TenantUserRepository;
+use crate::modules::portal::repositories::WorkspaceProfileRepository::WorkspaceProfileRepository;
 use crate::modules::portal::services::PortalAuthService::PortalAuthService;
 use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
 use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
@@ -35,6 +36,7 @@ pub struct PortalContext {
     pub tenant_users: Arc<TenantUserRepository>,
     pub tenant_secrets: Arc<TenantSecretStoreRepository>,
     pub templates: Arc<MessageTemplateRepository>,
+    pub workspace_profile: Arc<WorkspaceProfileRepository>,
     pub channel_router: Arc<ChannelRouterService>,
     pub push_fallback: Arc<PushFallbackService>,
     pub rate_limiter: Arc<RateLimitService>,

@@ -72,7 +72,7 @@ COPY --from=builder --chown=65532:65532 /data /data
 #   DEMO_TENANT_SECRET  secret du tenant de démonstration (optionnel)
 #   ADMIN_API_TOKEN     jeton Bearer requis par l'Admin API (fortement recommandé en prod)
 #   FCM_PROJECT_ID / FCM_BEARER_TOKEN   config du fallback push FCM
-#   REDIS_URL            ex: redis://redis:6379 — active le broadcast
+#   REDIS_URL            ex: redis://service-cache:6379 — active le broadcast
 #                         multi-instances (roadmap "Horizontal Scaling") ;
 #                         absent = mode single-instance, sans dépendance Redis
 #

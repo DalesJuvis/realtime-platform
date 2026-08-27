@@ -13,7 +13,6 @@ export function LoginForm() {
   const setSession = usePortalAuthStore((s) => s.setSession)
   const navigate = useNavigate()
 
-  const [apiUrl, setApiUrl] = useState(env.defaultApiUrl)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setSubmitting] = useState(false)
@@ -23,11 +22,10 @@ export function LoginForm() {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
-    const normalizedApiUrl = apiUrl.trim().replace(/\/$/, '')
     try {
-      usePortalAuthStore.setState({ apiUrl: normalizedApiUrl })
+      usePortalAuthStore.setState({ apiUrl: env.defaultApiUrl })
       const accessToken = await loginAction({ email: email.trim(), password })
-      setSession(normalizedApiUrl, accessToken)
+      setSession(env.defaultApiUrl, accessToken)
       navigate('/overview', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Sign in failed.'))
@@ -55,10 +53,6 @@ export function LoginForm() {
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="apiUrl">Portal API URL</Label>
-          <Input id="apiUrl" value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} required />
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
           <Input

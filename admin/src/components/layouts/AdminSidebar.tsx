@@ -7,7 +7,7 @@
  */
 
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Building2, Settings, LogOut, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { LayoutDashboard, Building2, FlaskConical, Settings, LogOut, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { cn } from '@lib/utils'
 import { useAdminAuthStore } from '@store/adminAuth.store'
 import { useUiStore } from '@store/ui.store'
@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/tenants', label: 'Tenants', icon: Building2, end: false },
+  { to: '/admin/sandbox', label: 'Sandbox', icon: FlaskConical, end: false },
   { to: '/admin/settings', label: 'Settings', icon: Settings, end: false },
 ]
 

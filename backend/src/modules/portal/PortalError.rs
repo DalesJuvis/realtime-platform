@@ -24,6 +24,10 @@ pub enum PortalError {
     PayloadTooLarge,
     #[error("rate limit exceeded for this tenant")]
     RateLimited,
+    #[error("{0}")]
+    InvalidLogo(String),
+    #[error("new password must be at least 8 characters")]
+    WeakPassword,
     #[error("storage error: {0}")]
     Storage(#[from] sqlx::Error),
 }
@@ -38,6 +42,7 @@ impl PortalError {
             PortalError::TemplateNotFound => StatusCode::NOT_FOUND,
             PortalError::ChannelIdTooLong | PortalError::PayloadTooLarge => StatusCode::BAD_REQUEST,
             PortalError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            PortalError::InvalidLogo(_) | PortalError::WeakPassword => StatusCode::BAD_REQUEST,
             PortalError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -52,6 +57,8 @@ impl PortalError {
             PortalError::ChannelIdTooLong => "CHANNEL_ID_TOO_LONG",
             PortalError::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             PortalError::RateLimited => "RATE_LIMITED",
+            PortalError::InvalidLogo(_) => "INVALID_LOGO",
+            PortalError::WeakPassword => "WEAK_PASSWORD",
             PortalError::Storage(_) => "STORAGE_ERROR",
         }
     }

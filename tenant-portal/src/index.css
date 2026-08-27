@@ -2,51 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens: same near-white/deep-navy surface structure as saas-admin
+ * (`saas-admin/src/index.css`), but with saas-admin's indigo/blurple
+ * primary swapped for a Firebase-flame orangered — amber (#FFCA28) at the
+ * top of the mark shading down to deep orange-red (#DD2C00) at the base.
+ * `--primary` sits mid-gradient as a flat, legible orangered; the actual
+ * two-stop gradient is applied directly as a Tailwind utility
+ * (`from-amber-400 to-red-600`) on the sidebar logo mark, since a CSS
+ * custom property can't itself encode two colors. Consumed via
+ * tailwind.config.ts's `colors` block — never reference these hex/hsl
+ * values directly in components.
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 243 75% 59%;
-    --radius: 0.75rem;
     --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 16 90% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 350 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 16 90% 45%;
+
+    --radius: 0.625rem;
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 6%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 6%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 243 75% 65%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 243 75% 65%;
+    --background: 222 47% 6%;
+    --foreground: 210 20% 98%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 20 95% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 222 30% 14%;
+    --muted-foreground: 220 9% 65%;
+
+    --accent: 222 30% 16%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 350 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 20 95% 58%;
   }
 }
 
@@ -55,10 +86,35 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground overscroll-none;
-    font-family: var(--font-sans);
+    @apply bg-background text-foreground font-sans antialiased overscroll-none;
   }
   #root {
     height: 100dvh;
   }
+}
+
+/*
+ * Thin scrollbar, invisible until hovered — used on the sidebar nav and the
+ * main scroll region, matching saas-admin's `.scrollbar-thin`.
+ */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scrollbar-thin:hover {
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
 }

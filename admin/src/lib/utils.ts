@@ -54,6 +54,21 @@ export function statusFilterOptions<S extends string>(statuses: readonly S[]): {
   return statuses.map((s) => ({ value: s, label: humanizeStatus(s) }))
 }
 
+/**
+ * Derives the WS host from the connected Admin API URL for the Sandbox
+ * page — same host, different port: this project always runs WS on 8080
+ * alongside Admin on 9090 for a given engine instance (see
+ * `docker-compose.yml`'s per-instance port block), there's no separate
+ * "WS URL" setting to ask the operator for.
+ */
+export function deriveWsHost(adminApiUrl: string): string {
+  try {
+    return new URL(adminApiUrl).hostname
+  } catch {
+    return 'localhost'
+  }
+}
+
 /** Masks a secret/public API key for display, keeping the prefix + last 4 chars. */
 export function maskKey(key: string): string {
   if (key.length <= 16) return key

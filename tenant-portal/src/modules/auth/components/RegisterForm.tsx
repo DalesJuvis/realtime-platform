@@ -19,7 +19,6 @@ export function RegisterForm() {
   const setSession = usePortalAuthStore((s) => s.setSession)
   const navigate = useNavigate()
 
-  const [apiUrl, setApiUrl] = useState(env.defaultApiUrl)
   const [tenantId, setTenantId] = useState('')
   const [secret, setSecret] = useState('')
   const [email, setEmail] = useState('')
@@ -31,13 +30,12 @@ export function RegisterForm() {
     event.preventDefault()
     setSubmitting(true)
     setError(null)
-    const normalizedApiUrl = apiUrl.trim().replace(/\/$/, '')
     try {
       // `registerAction` reads `apiUrl` from this store via the `http`
       // interceptor, so it has to land there before the call, not after.
-      usePortalAuthStore.setState({ apiUrl: normalizedApiUrl })
+      usePortalAuthStore.setState({ apiUrl: env.defaultApiUrl })
       const accessToken = await registerAction({ tenantId: tenantId.trim(), secret, email: email.trim(), password })
-      setSession(normalizedApiUrl, accessToken)
+      setSession(env.defaultApiUrl, accessToken)
       navigate('/overview', { replace: true })
     } catch (err) {
       setError(errorMessage(err, 'Registration failed.'))
@@ -54,10 +52,6 @@ export function RegisterForm() {
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="apiUrl">Portal API URL</Label>
-          <Input id="apiUrl" value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} required />
-        </div>
         <div className="space-y-1.5">
           <Label htmlFor="tenantId">Tenant ID</Label>
           <Input

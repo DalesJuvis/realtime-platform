@@ -16,7 +16,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::entities::ChannelKey::TenantId;
-use crate::entities::TenantUser::TenantUser;
+use crate::entities::TenantUser::{TenantUser, TenantUserId};
 
 pub struct TenantUserRepository {
     pool: SqlitePool,
@@ -69,6 +69,26 @@ impl TenantUserRepository {
 
     pub async fn email_exists(&self, email: &str) -> Result<bool, sqlx::Error> {
         Ok(self.find_by_email(email).await?.is_some())
+    }
+
+    pub async fn find_by_id(&self, id: TenantUserId) -> Result<Option<TenantUser>, sqlx::Error> {
+        let row = sqlx::query_as::<_, TenantUserRow>(
+            "SELECT id, tenant_id, email, password_hash, created_at FROM tenant_users WHERE id = ?",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(TenantUserRow::into_entity))
+    }
+
+    pub async fn update_password_hash(&self, id: TenantUserId, password_hash: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("UPDATE tenant_users SET password_hash = ? WHERE id = ?")
+            .bind(password_hash)
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }
 

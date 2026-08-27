@@ -8,12 +8,15 @@
 
 import { type FormEvent, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { FileText, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { FileText, MoreHorizontal, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import { Textarea } from '@components/ui/textarea'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@components/ui/dropdown-menu'
+import { ConfirmDialog } from '@components/shared/ConfirmDialog'
+import { useDialog } from '@providers/DialogProvider'
 import { getTemplatesAction } from '@actions/templates/getTemplates.action'
 import { createTemplateAction } from '@actions/templates/createTemplate.action'
 import { updateTemplateAction } from '@actions/templates/updateTemplate.action'
@@ -23,6 +26,7 @@ import { formatDateTime } from '@lib/utils'
 import type { Template } from '@entities/Template.entity'
 
 export default function TemplatesPage() {
+  const dialog = useDialog()
   const [templates, setTemplates] = useState<Template[] | null>(null)
   const [editing, setEditing] = useState<Template | null>(null)
   const [name, setName] = useState('')
@@ -77,15 +81,23 @@ export default function TemplatesPage() {
     }
   }
 
-  async function handleDelete(template: Template) {
-    if (!confirm(`Delete "${template.name}"? This can't be undone.`)) return
-    try {
-      await deleteTemplateAction(template.id)
-      toast.success('Template deleted.')
-      load()
-    } catch (err) {
-      toast.error(errorMessage(err, 'Failed to delete template.'))
-    }
+  function confirmDelete(template: Template) {
+    dialog.openDialog(
+      <ConfirmDialog
+        message={`Delete "${template.name}"? This can't be undone.`}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          try {
+            await deleteTemplateAction(template.id)
+            toast.success('Template deleted.')
+            load()
+          } catch (err) {
+            toast.error(errorMessage(err, 'Failed to delete template.'))
+          }
+        }}
+      />,
+      { title: 'Delete template' },
+    )
   }
 
   return (
@@ -156,14 +168,23 @@ export default function TemplatesPage() {
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   {template.name}
                 </CardTitle>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(template)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDelete(template)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Template actions">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => openEdit(template)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => confirmDelete(template)} className="text-destructive focus:text-destructive">
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardHeader>
               <CardContent>
                 <p className="line-clamp-3 text-sm text-muted-foreground">{template.body}</p>

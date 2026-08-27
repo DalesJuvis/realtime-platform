@@ -117,6 +117,7 @@ async fn main() {
         rate_limiter,
         admin_token: Arc::new(admin_token),
         metrics: metrics.clone(),
+        presence: presence.clone(),
     };
     let admin_listener = TcpListener::bind(settings.admin_bind_addr)
         .await
@@ -175,6 +176,9 @@ async fn main() {
     let templates = Arc::new(
         modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository::new(portal_pool.clone()),
     );
+    let workspace_profile = Arc::new(
+        modules::portal::repositories::WorkspaceProfileRepository::WorkspaceProfileRepository::new(portal_pool.clone()),
+    );
 
     // Same dev-convenience/production-warning pattern as `admin_token`
     // above — but unlike that one, losing this secret on restart also
@@ -200,6 +204,7 @@ async fn main() {
         )),
         tenant_secrets,
         templates,
+        workspace_profile,
         channel_router: channel_router.clone(),
         push_fallback: realtime_ctx.push_fallback.clone(),
         rate_limiter: realtime_ctx.rate_limiter.clone(),

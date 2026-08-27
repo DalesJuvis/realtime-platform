@@ -1,0 +1,41 @@
+{
+  "name": "@yourorg/realtime-sdk-react",
+  "version": "0.1.0",
+  "description": "Bindings React (contexte, hooks, composants) pour @yourorg/realtime-sdk — le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets).",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "realtime",
+    "websocket",
+    "pubsub",
+    "react",
+    "hooks",
+    "multi-tenant"
+  ],
+  "license": "UNLICENSED",
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "@yourorg/realtime-sdk": "file:../sdk-typescript"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "typescript": "^5.5.0"
+  }
+}

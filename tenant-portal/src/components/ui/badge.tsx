@@ -14,6 +14,11 @@ const badgeVariants = cva(
         outline: 'text-foreground',
         success:
           'border-transparent bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20 dark:bg-emerald-900/20 dark:text-emerald-400',
+        warning:
+          'border-transparent bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-900/20 dark:text-amber-400',
+        info: 'border-transparent bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/20 dark:text-sky-400',
+        neutral:
+          'border-transparent bg-zinc-100 text-zinc-700 ring-1 ring-inset ring-zinc-600/10 dark:bg-zinc-800 dark:text-zinc-400',
       },
     },
     defaultVariants: { variant: 'default' },

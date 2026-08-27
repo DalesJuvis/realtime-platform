@@ -9,6 +9,8 @@ langages/plateformes.
 ```
 backend/            Serveur Rust (Axum + Tokio) — cf. backend/Cargo.toml
 sdk-typescript/      SDK JS/TS — navigateur, Node.js, React Native
+sdk-react/           Bindings React (contexte, hooks, composants) sur sdk-typescript
+sdk-react-native/    Bindings React Native (+ reconnexion AppState/réseau) sur sdk-react
 sdk-rust/            SDK Rust (Tokio)
 sdk-python/          SDK Python (asyncio)
 sdk-android/         SDK Kotlin/Java — Android + JVM
@@ -31,6 +33,8 @@ toolchains. Résultat, par composant :
 |---|---|
 | `backend/` (Rust) | Écrit, **jamais compilé** — `cargo build` à faire en premier |
 | `sdk-typescript/` | **Compilé et testé** (`tsc` + `node --test`, 10/10) |
+| `sdk-react/` | **Compilé** (`npm install` + `tsc` strict, sans erreur) ; hooks non testés au runtime contre un vrai serveur/une vraie app React |
+| `sdk-react-native/` | **Compilé** (`npm install` + `tsc` strict, avec `react-native` comme devDependency de typage) ; reconnexion `AppState` non testée sur appareil/simulateur réel |
 | `sdk-rust/` | Écrit, **jamais compilé** |
 | `sdk-python/` | Codec (`protocol.py`) **testé** (13/13, stdlib pur) ; client réseau (`client.py`, dépend de `websockets`) non testé faute d'installation possible |
 | `sdk-android/` | Écrit, **jamais compilé** (ni `kotlinc` ni JDK complet disponibles) |

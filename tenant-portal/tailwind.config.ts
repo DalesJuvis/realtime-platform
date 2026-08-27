@@ -27,6 +27,19 @@ export default {
       fontFamily: {
         sans: ['var(--font-sans)', ...fontFamily.sans],
       },
+      keyframes: {
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 1.6s infinite',
+        'fade-in': 'fade-in 0.2s ease-out',
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

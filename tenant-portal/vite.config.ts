@@ -17,6 +17,7 @@ export default defineConfig({
       '@lib': path.resolve(root, './src/lib'),
       '@components': path.resolve(root, './src/components'),
       '@router': path.resolve(root, './src/router'),
+      '@providers': path.resolve(root, './src/providers'),
     },
   },
   server: {

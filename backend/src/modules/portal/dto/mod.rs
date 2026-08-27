@@ -11,3 +11,5 @@ pub mod KeyPairDto;
 pub mod ChannelSummaryDto;
 pub mod BroadcastDto;
 pub mod TemplateDto;
+pub mod WorkspaceProfileDto;
+pub mod ChangePasswordDto;

@@ -9,6 +9,11 @@ import OverviewPage from '@modules/overview/pages/OverviewPage'
 import ChannelsPage from '@modules/channels/pages/ChannelsPage'
 import BroadcastingPage from '@modules/broadcasting/pages/BroadcastingPage'
 import TemplatesPage from '@modules/templates/pages/TemplatesPage'
+import ApiKeysPage from '@modules/keys/pages/ApiKeysPage'
+import BillingPage from '@modules/billing/pages/BillingPage'
+import SubscriptionsPage from '@modules/subscriptions/pages/SubscriptionsPage'
+import CheckoutPage from '@modules/checkout/pages/CheckoutPage'
+import ReportsPage from '@modules/reports/pages/ReportsPage'
 import SettingsPage from '@modules/settings/pages/SettingsPage'
 
 export const router = createBrowserRouter([
@@ -31,6 +36,11 @@ export const router = createBrowserRouter([
           { path: 'channels', element: <ChannelsPage /> },
           { path: 'broadcasting', element: <BroadcastingPage /> },
           { path: 'templates', element: <TemplatesPage /> },
+          { path: 'keys', element: <ApiKeysPage /> },
+          { path: 'billing', element: <BillingPage /> },
+          { path: 'subscriptions', element: <SubscriptionsPage /> },
+          { path: 'checkout', element: <CheckoutPage /> },
+          { path: 'reports', element: <ReportsPage /> },
           { path: 'settings', element: <SettingsPage /> },
         ],
       },

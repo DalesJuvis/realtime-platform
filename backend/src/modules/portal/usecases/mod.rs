@@ -12,3 +12,7 @@ pub mod ListTemplatesUseCase;
 pub mod CreateTemplateUseCase;
 pub mod UpdateTemplateUseCase;
 pub mod DeleteTemplateUseCase;
+pub mod GetWorkspaceProfileUseCase;
+pub mod UpdateWorkspaceProfileUseCase;
+pub mod UploadLogoUseCase;
+pub mod ChangePasswordUseCase;

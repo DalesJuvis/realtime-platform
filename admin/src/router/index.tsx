@@ -17,6 +17,8 @@ const LoginPage = lazy(() => import('@modules/auth/pages/LoginPage'))
 const DashboardPage = lazy(() => import('@modules/dashboard/pages/DashboardPage'))
 const TenantsPage = lazy(() => import('@modules/tenants/pages/TenantsPage'))
 const AdminSettingsPage = lazy(() => import('@modules/settings/pages/AdminSettingsPage'))
+const SandboxPage = lazy(() => import('@modules/sandbox/pages/SandboxPage'))
+const SandboxSessionPage = lazy(() => import('@modules/sandbox/pages/SandboxSessionPage'))
 const NotFoundPage = lazy(() => import('@modules/common/pages/NotFoundPage'))
 const RouteErrorPage = lazy(() => import('@modules/common/pages/RouteErrorPage'))
 
@@ -46,10 +48,19 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: withSuspense(DashboardPage) },
           { path: 'tenants', element: withSuspense(TenantsPage) },
+          { path: 'sandbox', element: withSuspense(SandboxPage) },
           { path: 'settings', element: withSuspense(AdminSettingsPage) },
         ],
       },
     ],
+  },
+  {
+    // No AdminLayout chrome (no sidebar) — this is a focused single-purpose
+    // view meant to be opened in its own tab from `SandboxPage`.
+    path: '/sandbox/session',
+    element: <ProtectedRoute />,
+    errorElement: withSuspense(RouteErrorPage),
+    children: [{ index: true, element: withSuspense(SandboxSessionPage) }],
   },
   { path: '*', element: withSuspense(NotFoundPage) },
 ])

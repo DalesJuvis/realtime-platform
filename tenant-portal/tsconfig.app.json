@@ -36,7 +36,8 @@
       "@actions/*": ["./src/actions/*"],
       "@lib/*": ["./src/lib/*"],
       "@components/*": ["./src/components/*"],
-      "@router/*": ["./src/router/*"]
+      "@router/*": ["./src/router/*"],
+      "@providers/*": ["./src/providers/*"]
     }
   },
   "include": ["src"]

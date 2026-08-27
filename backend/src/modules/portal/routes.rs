@@ -19,6 +19,7 @@
 //! comment), but the actual data boundary is per-token `tenant_id`
 //! scoping, enforced in every usecase, not network placement.
 
+use axum::extract::DefaultBodyLimit;
 use axum::http::Method;
 use axum::middleware;
 use axum::routing::{get, post, put};
@@ -26,9 +27,10 @@ use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::modules::portal::controllers::{
-    BroadcastController, CreateTemplateController, DeleteTemplateController, GetKeysController,
-    GetOverviewController, ListChannelsController, ListSessionsController, ListTemplatesController, LoginController,
-    MintTokenController, RegisterController, RotateSecretController, SignupController, UpdateTemplateController,
+    BroadcastController, ChangePasswordController, CreateTemplateController, DeleteTemplateController,
+    GetKeysController, GetOverviewController, GetProfileController, ListChannelsController, ListSessionsController,
+    ListTemplatesController, LoginController, MintTokenController, RegisterController, RotateSecretController,
+    SignupController, UpdateProfileController, UpdateTemplateController, UploadLogoController,
 };
 use crate::modules::portal::middleware::PortalSessionGuard;
 use crate::modules::portal::PortalContext::PortalContext;
@@ -55,6 +57,18 @@ fn protected_segment_routes(ctx: PortalContext) -> Router {
             "/templates/:id",
             put(UpdateTemplateController::handle).delete(DeleteTemplateController::handle),
         )
+        .route("/profile", get(GetProfileController::handle).put(UpdateProfileController::handle))
+        .route(
+            "/profile/logo",
+            // axum's own default body-size limit (2 MB) is stricter, in
+            // decoded-byte terms, than `UploadLogoUseCase`'s 2 MB check —
+            // base64 inflates size by ~33%, so a base64-encoded image at
+            // the intended 2 MB limit needs a ~2.7 MB raw request body.
+            // Raised here so that check (not axum's incidental default) is
+            // what actually enforces the limit.
+            put(UploadLogoController::handle).layer(DefaultBodyLimit::max(4 * 1024 * 1024)),
+        )
+        .route("/account/password", put(ChangePasswordController::handle))
         .route_layer(middleware::from_fn_with_state(ctx.clone(), PortalSessionGuard::require_portal_session))
         .with_state(ctx)
 }
@@ -88,6 +102,7 @@ mod tests {
     use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
     use crate::modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository;
     use crate::modules::portal::repositories::TenantUserRepository::TenantUserRepository;
+    use crate::modules::portal::repositories::WorkspaceProfileRepository::WorkspaceProfileRepository;
     use crate::modules::portal::services::PortalAuthService::PortalAuthService;
     use crate::modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
     use crate::modules::push::ports::PushPort::PushPort;
@@ -124,7 +139,8 @@ mod tests {
             portal_auth: Arc::new(PortalAuthService::new(b"test-session-secret".to_vec())),
             tenant_users: Arc::new(TenantUserRepository::new(pool.clone())),
             tenant_secrets: Arc::new(TenantSecretStoreRepository::new(pool.clone())),
-            templates: Arc::new(MessageTemplateRepository::new(pool)),
+            templates: Arc::new(MessageTemplateRepository::new(pool.clone())),
+            workspace_profile: Arc::new(WorkspaceProfileRepository::new(pool)),
             channel_router: channel_router.clone(),
             push_fallback,
             rate_limiter: Arc::new(RateLimitService::new(Default::default())),
@@ -358,5 +374,166 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn profile_update_roundtrip() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "profile@example.com").await;
+
+        #[derive(Deserialize, Default)]
+        struct Profile {
+            name: Option<String>,
+            website_url: Option<String>,
+        }
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/profile", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let empty: Profile = body_json(resp).await;
+        assert!(empty.name.is_none());
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/profile",
+                &signup_data.access_token,
+                json!({ "name": "Acme Workspace", "website_url": null }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let updated: Profile = body_json(resp).await;
+        assert_eq!(updated.name.as_deref(), Some("Acme Workspace"));
+
+        // Omitting website_url must leave the name untouched (partial update).
+        let resp = app
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/profile",
+                &signup_data.access_token,
+                json!({ "name": null, "website_url": "https://acme.example" }),
+            ))
+            .await
+            .unwrap();
+        let updated: Profile = body_json(resp).await;
+        assert_eq!(updated.name.as_deref(), Some("Acme Workspace"));
+        assert_eq!(updated.website_url.as_deref(), Some("https://acme.example"));
+    }
+
+    #[tokio::test]
+    async fn logo_upload_rejects_bad_mime_and_oversize_then_accepts_valid() {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "logo@example.com").await;
+
+        // Disallowed MIME type.
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/profile/logo",
+                &signup_data.access_token,
+                json!({ "data_uri": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // Oversized payload (> 2 MB decoded, but comfortably under the
+        // route's raised raw body-size limit — this must be rejected by
+        // `UploadLogoUseCase`'s own check, not axum's incidental one).
+        let oversized = STANDARD.encode(vec![0u8; (2.5 * 1024.0 * 1024.0) as usize]);
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/profile/logo",
+                &signup_data.access_token,
+                json!({ "data_uri": format!("data:image/png;base64,{oversized}") }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // A tiny valid 1x1 PNG must be accepted.
+        let tiny_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+        let resp = app
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/profile/logo",
+                &signup_data.access_token,
+                json!({ "data_uri": tiny_png }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        #[derive(Deserialize, Default)]
+        struct Profile {
+            #[allow(dead_code)]
+            name: Option<String>,
+            logo_data_uri: Option<String>,
+        }
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let parsed: Envelope<Profile> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed.data.unwrap_or_default().logo_data_uri.as_deref(), Some(tiny_png));
+    }
+
+    #[tokio::test]
+    async fn change_password_then_old_password_no_longer_logs_in() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        signup(&app, "pwchange@example.com").await;
+
+        let login = |password: &'static str| {
+            let app = app.clone();
+            async move {
+                app.oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/portal/auth/login")
+                        .header("content-type", "application/json")
+                        .body(Body::from(json!({ "email": "pwchange@example.com", "password": password }).to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+            }
+        };
+
+        #[derive(Deserialize, Default)]
+        struct LoginData {
+            access_token: String,
+        }
+
+        let resp = login("correct horse battery staple").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let session: LoginData = body_json(resp).await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                "/api/v1/portal/account/password",
+                &session.access_token,
+                json!({ "current_password": "correct horse battery staple", "new_password": "new-strong-password" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = login("correct horse battery staple").await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = login("new-strong-password").await;
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }
