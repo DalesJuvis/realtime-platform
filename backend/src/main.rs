@@ -24,6 +24,7 @@ mod entities;
 mod modules;
 mod settings;
 
+use std::str::FromStr;
 use std::sync::Arc;
 
 use axum::routing::get;
@@ -112,10 +113,10 @@ async fn main() {
         generated
     });
     let admin_ctx = AdminContext {
-        auth,
+        auth: auth.clone(),
         rate_limiter,
         admin_token: Arc::new(admin_token),
-        metrics,
+        metrics: metrics.clone(),
     };
     let admin_listener = TcpListener::bind(settings.admin_bind_addr)
         .await
@@ -129,6 +130,97 @@ async fn main() {
             .with_graceful_shutdown(shutdown_signal())
             .await
             .expect("fatal Admin API error");
+    });
+
+    // --- Portal API ----------------------------------------------------------
+    // Tenant-facing self-service SaaS: self-serve signup (email/password,
+    // auto-provisions a tenant + key pair), key-pair management, channel
+    // management, broadcasting, message templates, and a live "devices"
+    // (connected sessions) view — see `modules::portal`'s doc comment.
+    // Durable state: `tenant_users`, `tenant_secrets`, `message_templates`.
+    let portal_connect_options = sqlx::sqlite::SqliteConnectOptions::from_str(&format!(
+        "sqlite://{}",
+        settings.portal_db_path
+    ))
+    .unwrap_or_else(|e| panic!("invalid PORTAL_DB_PATH {}: {e}", settings.portal_db_path))
+    .create_if_missing(true);
+    let portal_pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(portal_connect_options)
+        .await
+        .unwrap_or_else(|e| panic!("cannot open portal DB at {}: {e}", settings.portal_db_path));
+    sqlx::migrate!("./migrations")
+        .run(&portal_pool)
+        .await
+        .unwrap_or_else(|e| panic!("portal DB migration failed: {e}"));
+
+    // `TokenService`'s in-memory secret store forgets every self-serve
+    // tenant on restart (only the env-var-provisioned demo tenant survives
+    // it, above) — reload every durably-stored key pair before serving
+    // any request, so a tenant's SDK keys keep working across restarts.
+    let tenant_secrets = Arc::new(
+        modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository::new(
+            portal_pool.clone(),
+        ),
+    );
+    match tenant_secrets.list_all().await {
+        Ok(secrets) => {
+            let count = secrets.len();
+            for (tenant_id, secret) in secrets {
+                auth.register_tenant(tenant_id, secret.into_bytes());
+            }
+            tracing::info!(count, "reloaded self-serve tenant secrets from storage");
+        }
+        Err(err) => tracing::error!(error = %err, "failed to reload tenant secrets from storage"),
+    }
+    let templates = Arc::new(
+        modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository::new(portal_pool.clone()),
+    );
+
+    // Same dev-convenience/production-warning pattern as `admin_token`
+    // above — but unlike that one, losing this secret on restart also
+    // invalidates every currently-signed-in tenant's session (their
+    // account row survives; only the session token does not).
+    let portal_session_secret = settings.portal_session_secret.clone().unwrap_or_else(|| {
+        let generated = Uuid::new_v4().to_string();
+        tracing::warn!(
+            "PORTAL_SESSION_SECRET not set: temporary secret generated (existing portal sessions won't survive a restart; fix before production)"
+        );
+        generated
+    });
+
+    let portal_ctx = modules::portal::PortalContext::PortalContext {
+        token_service: auth.clone(),
+        presence: presence.clone(),
+        metrics: metrics.clone(),
+        portal_auth: Arc::new(modules::portal::services::PortalAuthService::PortalAuthService::new(
+            portal_session_secret.into_bytes(),
+        )),
+        tenant_users: Arc::new(modules::portal::repositories::TenantUserRepository::TenantUserRepository::new(
+            portal_pool,
+        )),
+        tenant_secrets,
+        templates,
+        channel_router: channel_router.clone(),
+        push_fallback: realtime_ctx.push_fallback.clone(),
+        rate_limiter: realtime_ctx.rate_limiter.clone(),
+    };
+    // Public HTTP token-issuance ("auth before connect") — merged onto the
+    // same listener as the Portal API: both are meant to be reachable by a
+    // tenant's own backend, unlike the internal-only Admin API.
+    let auth_api_ctx = modules::auth::AuthApiContext::AuthApiContext { token_service: auth.clone() };
+
+    let portal_listener = TcpListener::bind(settings.portal_bind_addr)
+        .await
+        .unwrap_or_else(|e| panic!("cannot bind Portal API on {}: {e}", settings.portal_bind_addr));
+    tracing::info!("Portal API listening on {}", settings.portal_bind_addr);
+    let portal_router = modules::portal::routes::router(portal_ctx)
+        .merge(modules::auth::routes::router(auth_api_ctx))
+        .merge(modules::realtime::routes::router(realtime_ctx.clone()));
+    let portal_server = tokio::spawn(async move {
+        axum::serve(portal_listener, portal_router)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .expect("fatal Portal API error");
     });
 
     // Background heartbeat/presence sweep loop (constraint #3).
@@ -176,7 +268,7 @@ async fn main() {
         }
     });
 
-    let _ = tokio::join!(ws_server, tcp_server, admin_server);
+    let _ = tokio::join!(ws_server, tcp_server, admin_server, portal_server);
     sweeper.abort();
     tracing::info!("shutdown complete");
 }

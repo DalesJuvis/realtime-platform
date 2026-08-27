@@ -22,7 +22,7 @@ pub fn execute(ctx: &RealtimeContext, session_id: SessionId, frame: &Frame<'_>) 
     match ctx.auth.validate(frame.tenant_id(), frame.payload()) {
         Ok(claims) => {
             let tenant_id = frame.tenant_id();
-            ctx.presence.handle_join(tenant_id, session_id);
+            ctx.presence.handle_join(tenant_id, session_id, claims.sub.clone());
 
             // Auto-subscribe to the user's private inbox: from AUTH
             // onward, the session can receive UNICAST without an explicit

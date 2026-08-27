@@ -28,12 +28,19 @@ RUN mkdir -p src \
 
 # --- Étape de build réel ---
 COPY src ./src
+# Requis par la macro `sqlx::migrate!("./migrations")` dans main.rs, qui lit
+# ce dossier au moment de la compilation (pas à l'exécution).
+COPY migrations ./migrations
 
 # On force la reconstruction du binaire du projet (les dépendances déjà
 # compilées ci-dessus restent en cache) en invalidant son timestamp.
 RUN touch src/main.rs \
     && cargo build --release --target x86_64-unknown-linux-musl \
     && strip target/x86_64-unknown-linux-musl/release/realtime-engine
+
+# Empty directory, correctly owned at copy time — see its `COPY --chown`
+# use in the runtime stage below.
+RUN mkdir -p /data
 
 # =============================================================================
 # STAGE 2 — image finale : `scratch` (0 octet de base), binaire statique
@@ -47,6 +54,15 @@ FROM scratch AS runtime
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/realtime-engine /realtime-engine
+
+# Pre-created, correctly-owned mount point for `PORTAL_DB_PATH`'s SQLite
+# file. `scratch` has no shell to `chown` at runtime, and a fresh named
+# volume mounted over `/data` is normally created root-owned — Docker
+# initializes a brand-new volume from whatever already exists in the image
+# at that path, ownership included, so creating it here (in the builder
+# stage, which has a shell) and copying it in with `--chown` is what makes
+# `/data` actually writable by the non-root user below.
+COPY --from=builder --chown=65532:65532 /data /data
 
 # Ports exposés : socket temps réel (TCP/WebSocket) et Admin API interne.
 # Le port 9090 (Admin API) ne doit être publié (`-p`/`ports:`) que sur un
@@ -63,7 +79,7 @@ COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/realtime-eng
 # Endpoint de scraping Prometheus : GET http://<host>:9090/metrics
 # (même restriction d'exposition que le reste de l'Admin API : réseau
 # interne uniquement).
-EXPOSE 7878 8080 9090
+EXPOSE 7878 8080 9090 8090
 
 # `scratch` n'a pas d'utilitaire pour créer un utilisateur non-root ; on
 # fixe donc un UID numérique arbitraire non privilégié directement — aucun

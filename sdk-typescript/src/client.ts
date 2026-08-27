@@ -12,6 +12,7 @@
  */
 
 import { Opcode, decodeFrame, encodeFrame, globMatch, type DecodedFrame } from "./protocol.js";
+import { ChunkReassembler, DEFAULT_MAX_MESSAGE_BYTES, encodeChunks, parseChunk } from "./chunking.js";
 import { TypedEmitter } from "./event-emitter.js";
 import type {
   MessageHandler,
@@ -25,9 +26,35 @@ import type {
  * pour cette seule constante quand une implémentation custom est injectée. */
 const WS_OPEN = 1;
 
-export interface RealtimeClientConfig {
-  /** URL du endpoint WebSocket, ex: `wss://realtime.example.com/ws`. */
-  url: string;
+/**
+ * Où joindre le serveur — jamais une chaîne `"ws://"`/`"wss://"` à
+ * construire à la main côté appelant : `host` (+ `port`/`secure`/`path`
+ * optionnels) suffit dans l'immense majorité des cas. `url` reste une
+ * échappatoire pour un besoin avancé (proxy, chemin non standard, etc.),
+ * mais les deux formes sont mutuellement exclusives — pas de mélange.
+ */
+export type RealtimeEndpoint =
+  | {
+      /** Nom d'hôte ou IP, sans schéma ni port — ex: `"realtime.example.com"`. */
+      host: string;
+      /** Défaut : 8080 (`ws_bind_addr` du serveur). */
+      port?: number;
+      /** `wss://` au lieu de `ws://`. Défaut : false. */
+      secure?: boolean;
+      /** Défaut : `"/ws"`. */
+      path?: string;
+      url?: undefined;
+    }
+  | {
+      /** Échappatoire : URL complète déjà construite, ex. `"wss://realtime.example.com/ws"`. */
+      url: string;
+      host?: undefined;
+      port?: undefined;
+      secure?: undefined;
+      path?: undefined;
+    };
+
+export type RealtimeClientConfig = RealtimeEndpoint & {
   /** Tenant ID (UUID) — doit correspondre au tenant du jeton `token`. */
   tenantId: string;
   /**
@@ -47,14 +74,57 @@ export interface RealtimeClientConfig {
   reconnectBaseDelayMs?: number;
   /** Plafond du backoff, en ms. Défaut : 15000. */
   reconnectMaxDelayMs?: number;
+  /** Garde-fou de taille pour `publish()`/`unicast()` (voir `chunking.ts`)
+   * — pas une limite protocolaire, juste un plafond raisonnable contre un
+   * appel malencontreux avec un payload énorme. Défaut : 65536 (64 Kio). */
+  maxMessageBytes?: number;
   /**
-   * Implémentation `WebSocket` à utiliser. Défaut : `globalThis.WebSocket`
-   * (disponible nativement dans les navigateurs et React Native). En
-   * Node.js (hors v22+ expérimental), fournissez la classe du paquet
-   * `ws` : `new RealtimeClient({ ..., webSocketImpl: WebSocket })` après
-   * `import WebSocket from "ws"`.
+   * Implémentation `WebSocket` à utiliser. Défaut : détection automatique
+   * — `globalThis.WebSocket` (navigateurs, React Native, Node 22+), sinon
+   * le paquet optionnel `ws` est chargé par le SDK lui-même à la volée
+   * (`npm install ws` suffit ; aucun `import "ws"` à écrire côté
+   * application). Ce champ ne sert qu'à imposer une implémentation
+   * précise (tests, environnement exotique) — le cas courant n'en a pas besoin.
    */
   webSocketImpl?: new (url: string) => WebSocketLike;
+};
+
+/** Construit l'URL `ws://`/`wss://` à partir d'un `RealtimeEndpoint` — le
+ * seul endroit du SDK où ce schéma apparaît en toutes lettres. */
+function resolveUrl(endpoint: RealtimeEndpoint): string {
+  if (endpoint.url !== undefined) return endpoint.url;
+  const scheme = endpoint.secure ? "wss" : "ws";
+  const port = endpoint.port ?? 8080;
+  const path = endpoint.path ?? "/ws";
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${scheme}://${endpoint.host}:${port}${normalizedPath}`;
+}
+
+/**
+ * Résout l'implémentation `WebSocket` à utiliser, sans jamais exiger que
+ * l'application appelante importe `ws` elle-même : en Node.js (pas de
+ * `WebSocket` global avant la v22), ce module est chargé dynamiquement ici.
+ * `/* @vite-ignore *\/` empêche les bundlers navigateur (Vite/esbuild) de
+ * tenter de résoudre ce chemin au build — il n'est de toute façon jamais
+ * atteint côté navigateur, `globalThis.WebSocket` y existe toujours.
+ */
+async function resolveWebSocketImpl(
+  explicit: (new (url: string) => WebSocketLike) | undefined,
+): Promise<new (url: string) => WebSocketLike> {
+  if (explicit) return explicit;
+
+  const globalImpl = (globalThis as { WebSocket?: unknown }).WebSocket;
+  if (globalImpl) return globalImpl as new (url: string) => WebSocketLike;
+
+  try {
+    const mod = (await import(/* @vite-ignore */ "ws")) as { default: new (url: string) => WebSocketLike };
+    return mod.default;
+  } catch {
+    throw new Error(
+      'Aucune implémentation WebSocket disponible. En Node.js (hors v22+), installez le paquet ' +
+        'optionnel `ws` (`npm install ws`) — aucun import à ajouter dans votre code, le SDK le charge lui-même.',
+    );
+  }
 }
 
 /** Sous-ensemble de l'API `WebSocket` réellement utilisé par ce client —
@@ -70,33 +140,52 @@ export interface WebSocketLike {
   close(): void;
 }
 
+interface ResolvedConfig {
+  url: string;
+  tenantId: string;
+  token: string;
+  heartbeatIntervalMs: number;
+  reconnect: boolean;
+  reconnectBaseDelayMs: number;
+  reconnectMaxDelayMs: number;
+  maxMessageBytes: number;
+  webSocketImpl: (new (url: string) => WebSocketLike) | undefined;
+}
+
 export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements RealtimeAdapter {
-  private readonly config: Required<Omit<RealtimeClientConfig, "webSocketImpl">> &
-    Pick<RealtimeClientConfig, "webSocketImpl">;
+  private readonly config: ResolvedConfig;
 
   private ws: WebSocketLike | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnectAttempt = 0;
   private closedByUser = true;
+  /** Résolu une seule fois (le dynamic `import("ws")` ne doit pas se
+   * répéter à chaque reconnexion) puis réutilisé pour toute la durée de vie du client. */
+  private wsImplPromise: Promise<new (url: string) => WebSocketLike> | null = null;
 
   /** Clé = channelId exact ou motif (`orders:*`) → handlers enregistrés. */
   private readonly subscriptions = new Map<string, Set<MessageHandler>>();
+  private readonly reassembler = new ChunkReassembler();
 
   constructor(config: RealtimeClientConfig) {
     super();
     this.config = {
-      heartbeatIntervalMs: 15_000,
-      reconnect: true,
-      reconnectBaseDelayMs: 500,
-      reconnectMaxDelayMs: 15_000,
-      ...config,
+      url: resolveUrl(config),
+      tenantId: config.tenantId,
+      token: config.token,
+      heartbeatIntervalMs: config.heartbeatIntervalMs ?? 15_000,
+      reconnect: config.reconnect ?? true,
+      reconnectBaseDelayMs: config.reconnectBaseDelayMs ?? 500,
+      reconnectMaxDelayMs: config.reconnectMaxDelayMs ?? 15_000,
+      maxMessageBytes: config.maxMessageBytes ?? DEFAULT_MAX_MESSAGE_BYTES,
+      webSocketImpl: config.webSocketImpl,
     };
   }
 
   connect(): void {
     this.closedByUser = false;
-    this.openSocket();
+    void this.openSocket();
   }
 
   disconnect(): void {
@@ -107,12 +196,23 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     this.ws = null;
   }
 
+  /**
+   * `payload` au-delà des 211 octets d'un seul frame est automatiquement
+   * découpé en plusieurs frames PUB successifs (voir `chunking.ts`) et
+   * réassemblé côté récepteur avant d'atteindre les handlers `subscribe` —
+   * transparent des deux côtés, rien à changer dans le code applicatif.
+   */
   publish(channelId: string, payload: string): void {
-    this.send(Opcode.Publish, channelId, payload);
+    for (const chunk of encodeChunks(payload, this.config.maxMessageBytes)) {
+      this.send(Opcode.Publish, channelId, chunk);
+    }
   }
 
+  /** Même découpage transparent que `publish()` — voir sa doc. */
   unicast(userId: string, payload: string): void {
-    this.send(Opcode.Unicast, userId, payload);
+    for (const chunk of encodeChunks(payload, this.config.maxMessageBytes)) {
+      this.send(Opcode.Unicast, userId, chunk);
+    }
   }
 
   /**
@@ -169,16 +269,25 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     }
   }
 
-  private openSocket(): void {
-    const Impl = this.config.webSocketImpl ?? (globalThis as { WebSocket?: unknown }).WebSocket;
-    if (!Impl) {
-      throw new Error(
-        "Aucune implémentation WebSocket disponible. En environnement navigateur/React Native, " +
-          "elle devrait être globale ; en Node.js, fournissez `webSocketImpl` (ex: le paquet `ws`).",
-      );
+  private async openSocket(): Promise<void> {
+    if (!this.wsImplPromise) {
+      this.wsImplPromise = resolveWebSocketImpl(this.config.webSocketImpl);
     }
 
-    const ws = new (Impl as new (url: string) => WebSocketLike)(this.config.url);
+    let Impl: new (url: string) => WebSocketLike;
+    try {
+      Impl = await this.wsImplPromise;
+    } catch (err) {
+      this.emit("error", err instanceof Error ? err : new Error(String(err)));
+      return;
+    }
+
+    // The user may have called `disconnect()` while the (async) impl
+    // resolution above was still in flight — don't open a socket they
+    // already asked to not have.
+    if (this.closedByUser) return;
+
+    const ws = new Impl(this.config.url);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
 
@@ -239,7 +348,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     const jitter = delay * (0.8 + Math.random() * 0.4);
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
-      if (!this.closedByUser) this.openSocket();
+      if (!this.closedByUser) void this.openSocket();
     }, jitter);
   }
 
@@ -266,9 +375,20 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   }
 
   private dispatch(frame: DecodedFrame): void {
+    let payload = frame.payload;
+
+    const chunkHeader = parseChunk(payload);
+    if (chunkHeader) {
+      const reassembled = this.reassembler.feed(chunkHeader);
+      // Réassemblage encore en cours (d'autres chunks à venir) : rien à
+      // émettre pour ce frame-là — pas de handler averti d'un fragment partiel.
+      if (reassembled === null) return;
+      payload = reassembled;
+    }
+
     const message: RealtimeMessage = {
       channelId: frame.channelId,
-      payload: frame.payload,
+      payload,
       tenantId: frame.tenantId,
       receivedAt: Date.now(),
     };

@@ -57,8 +57,14 @@ impl PresenceService {
     /// Registers a new session on authentication (connection-level "logical"
     /// JOIN, before any channel subscription). No presence message is
     /// published here: with no known channel yet, there's nowhere to announce it.
-    pub fn handle_join(&self, tenant_id: TenantId, session_id: SessionId) {
-        self.repo.register(tenant_id, session_id);
+    pub fn handle_join(&self, tenant_id: TenantId, session_id: SessionId, sub: String) {
+        self.repo.register(tenant_id, session_id, sub);
+    }
+
+    /// Live sessions for one tenant — the portal's "devices" view. See
+    /// `PresenceSessionRepository::list_for_tenant`'s doc comment.
+    pub fn list_sessions(&self, tenant_id: TenantId) -> Vec<crate::entities::PresenceEntry::PresenceEntry> {
+        self.repo.list_for_tenant(tenant_id)
     }
 
     pub fn heartbeat(&self, session_id: SessionId) {
@@ -145,7 +151,7 @@ mod tests {
         let tenant = Uuid::from_u128(1);
         let session = Uuid::from_u128(2);
 
-        service.handle_join(tenant, session);
+        service.handle_join(tenant, session, "user-1".to_string());
         service.handle_subscribe(tenant, session, "room-1");
 
         let presence_key = ChannelKey::new(tenant, "room-1").presence_key();
@@ -181,7 +187,7 @@ mod tests {
         let tenant = Uuid::from_u128(1);
         let session = Uuid::from_u128(2);
 
-        service.handle_join(tenant, session);
+        service.handle_join(tenant, session, "user-1".to_string());
         service.handle_subscribe(tenant, session, "room-1");
         service.handle_subscribe(tenant, session, "room-2");
 
@@ -203,7 +209,7 @@ mod tests {
         let tenant = Uuid::from_u128(1);
         let session = Uuid::from_u128(2);
 
-        service.handle_join(tenant, session);
+        service.handle_join(tenant, session, "user-1".to_string());
         service.handle_subscribe(tenant, session, "room-1");
 
         let presence_key = ChannelKey::new(tenant, "room-1").presence_key();

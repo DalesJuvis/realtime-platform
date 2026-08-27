@@ -132,6 +132,22 @@ impl RateLimitService {
     pub fn drop_session(&self, session_id: SessionId) {
         self.per_session.remove(&session_id);
     }
+
+    /// Tenant-only variant of `check`, for callers with no persistent
+    /// `SessionId` to key a per-session bucket on — namely the HTTP publish
+    /// endpoint (one-shot request/response, no socket lifecycle to call
+    /// `drop_session` from). Deliberately does not fabricate a session
+    /// bucket: a synthetic ID either gets a fresh bucket every call
+    /// (defeats session-level throttling entirely) or accumulates forever
+    /// in `per_session` with nothing to evict it. The shared tenant bucket
+    /// still bounds total abuse across every HTTP caller for that tenant.
+    pub fn check_tenant(&self, tenant_id: TenantId) -> bool {
+        let cfg = self.config_for(tenant_id);
+        self.per_tenant
+            .entry(tenant_id)
+            .or_insert_with(|| TokenBucket::new(cfg.tenant_capacity, cfg.tenant_refill_per_sec))
+            .try_consume()
+    }
 }
 
 #[cfg(test)]

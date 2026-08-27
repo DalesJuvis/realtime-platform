@@ -5,8 +5,14 @@
 # et vérifier qu'un message publié sur A atteint bien un abonné sur B).
 #
 # Usage : docker compose up --build
-#   Instance A : ws://localhost:8080/ws  (TCP: 7878, Admin: 9090)
-#   Instance B : ws://localhost:8081/ws  (TCP: 7879, Admin: 9091)
+#   Instance A : ws://localhost:8080/ws  (TCP: 7878, Admin: 9090, Portal: 8090)
+#   Instance B : ws://localhost:8081/ws  (TCP: 7879, Admin: 9091, Portal: 8091)
+#
+# Le Portal API (voir modules::portal) est la seule surface avec un état
+# durable : chaque instance a son propre fichier SQLite (volume nommé
+# dédié), tout le reste redémarre à vide comme d'habitude — cohérent avec
+# le fait que les secrets de tenant et les quotas restent eux aussi
+# propres à chaque instance (pas de coordination inter-instances).
 
 services:
   redis:
@@ -28,10 +34,15 @@ services:
       REDIS_URL: redis://redis:6379
       DEMO_TENANT_SECRET: dev-secret-change-me
       ADMIN_API_TOKEN: dev-admin-token-change-me
+      PORTAL_SESSION_SECRET: dev-portal-secret-change-me
+      PORTAL_DB_PATH: /data/portal.db
+    volumes:
+      - portal-data-a:/data
     ports:
       - "8080:8080"
       - "7878:7878"
       - "9090:9090" # dev uniquement : ne jamais publier ce port en production
+      - "8090:8090"
 
   engine-b:
     build: .
@@ -42,7 +53,16 @@ services:
       REDIS_URL: redis://redis:6379
       DEMO_TENANT_SECRET: dev-secret-change-me
       ADMIN_API_TOKEN: dev-admin-token-change-me
+      PORTAL_SESSION_SECRET: dev-portal-secret-change-me
+      PORTAL_DB_PATH: /data/portal.db
+    volumes:
+      - portal-data-b:/data
     ports:
       - "8081:8080"
       - "7879:7878"
       - "9091:9090" # dev uniquement : ne jamais publier ce port en production
+      - "8091:8090"
+
+volumes:
+  portal-data-a:
+  portal-data-b:

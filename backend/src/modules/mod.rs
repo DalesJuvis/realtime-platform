@@ -5,3 +5,4 @@ pub mod push;
 pub mod cluster;
 pub mod metrics;
 pub mod admin;
+pub mod portal;

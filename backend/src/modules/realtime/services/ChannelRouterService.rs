@@ -165,6 +165,12 @@ impl ChannelRouterService {
             .unwrap_or(0)
     }
 
+    /// Every channel this tenant currently has state for, with its live
+    /// subscriber count — see `ChannelStateRepository::list_for_tenant`.
+    pub fn list_channels(&self, tenant_id: TenantId) -> Vec<(String, usize)> {
+        self.repo.list_for_tenant(tenant_id)
+    }
+
     pub fn prune_empty(&self, key: &ChannelKey) {
         self.repo.prune_empty(key);
     }

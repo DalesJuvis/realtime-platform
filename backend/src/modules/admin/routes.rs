@@ -23,9 +23,11 @@
 //! random bytes) and returned in clear only once, in the create/rotate
 //! response — like a password, never stored or re-logged in clear.
 
+use axum::http::Method;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 use axum::Router;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::modules::admin::controllers::{
     CreateTenantController, HealthzController, RevokeTenantController,
@@ -53,9 +55,20 @@ fn system_segment_routes(ctx: AdminContext) -> Router {
 }
 
 pub fn router(ctx: AdminContext) -> Router {
+    // Permissive by origin: the security boundary for this API is already
+    // network-level (§ "never expose publicly" above), not CORS — an
+    // admin-panel SPA (e.g. `admin/`) is a legitimate first-party browser
+    // client and there's no fixed origin to allow-list (arbitrary
+    // localhost dev ports, or whatever host the operator deploys it to).
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
+        .allow_headers(Any);
+
     Router::new()
         .nest("/api/v1/admin", admin_segment_routes(ctx.clone()))
         .nest("/api/v1/system", system_segment_routes(ctx))
+        .layer(cors)
 }
 
 #[cfg(test)]

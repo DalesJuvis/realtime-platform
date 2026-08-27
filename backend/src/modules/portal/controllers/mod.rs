@@ -1,0 +1,14 @@
+pub mod RegisterController;
+pub mod LoginController;
+pub mod ListSessionsController;
+pub mod MintTokenController;
+pub mod GetOverviewController;
+pub mod SignupController;
+pub mod GetKeysController;
+pub mod RotateSecretController;
+pub mod ListChannelsController;
+pub mod BroadcastController;
+pub mod ListTemplatesController;
+pub mod CreateTemplateController;
+pub mod UpdateTemplateController;
+pub mod DeleteTemplateController;

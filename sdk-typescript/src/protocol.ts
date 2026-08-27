@@ -30,7 +30,9 @@ const LEN_TENANT = 16;
 const OFF_CHANNEL = OFF_TENANT + LEN_TENANT; // 19
 const LEN_CHANNEL = 24;
 const OFF_PAYLOAD = OFF_CHANNEL + LEN_CHANNEL; // 43
-const LEN_PAYLOAD = 211;
+/** Capacité utile du champ payload d'un frame — exporté pour `chunking.ts`,
+ * qui doit savoir combien d'octets tiennent dans un seul frame. */
+export const LEN_PAYLOAD = 211;
 const OFF_CRC = OFF_PAYLOAD + LEN_PAYLOAD; // 254
 const LEN_CRC = 2;
 

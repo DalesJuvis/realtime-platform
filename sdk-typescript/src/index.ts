@@ -9,7 +9,7 @@
  */
 
 export { RealtimeClient } from "./client.js";
-export type { RealtimeClientConfig, WebSocketLike } from "./client.js";
+export type { RealtimeClientConfig, RealtimeEndpoint, WebSocketLike } from "./client.js";
 
 export type {
   MessageHandler,
@@ -21,6 +21,8 @@ export type {
 
 export { Opcode, ProtocolError, crc16CcittFalse, globMatch } from "./protocol.js";
 export type { DecodedFrame, FrameFields } from "./protocol.js";
+
+export { DEFAULT_MAX_MESSAGE_BYTES } from "./chunking.js";
 
 import { RealtimeClient, type RealtimeClientConfig } from "./client.js";
 import type { RealtimeAdapter } from "./types.js";

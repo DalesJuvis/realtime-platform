@@ -23,6 +23,10 @@ rand = "0.8"
 subtle = "2"
 redis = { version = "0.27", default-features = false, features = ["tokio-comp", "aio", "connection-manager"] }
 prometheus = "0.13"
+tower-http = { version = "0.5", features = ["cors"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "uuid", "chrono"] }
+argon2 = "0.5"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

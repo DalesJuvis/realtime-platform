@@ -6,17 +6,18 @@ Gère la reconnexion automatique, le heartbeat, le multiplexage des
 souscriptions, et expose un pattern **Adapter** pour permuter vers
 Firebase ou PubNub sans réécrire le code applicatif.
 
-> **Statut** : projet démarré, non publié sur npm, non compilé/testé de
-> bout en bout (pas d'accès réseau dans l'environnement où il a été
-> écrit — `npm install` et `tsc` restent à lancer chez vous avant tout
-> usage réel). Les tests unitaires du codec binaire (`src/protocol.test.ts`)
-> couvrent la logique pure, sans dépendance réseau.
+> **Statut** : compilé et validé de bout en bout contre un backend réel
+> (docker-compose, `engine-a`/`engine-b`) depuis `web-client/`, `admin/`
+> et `tenant-portal/` dans ce repo. Les tests unitaires du codec binaire
+> (`src/protocol.test.ts`) couvrent la logique pure, sans dépendance réseau.
 
 ## Installation
 
 ```bash
 npm install @yourorg/realtime-sdk
-# En Node.js (hors v22+ expérimental), WebSocket n'est pas global :
+# En Node.js (hors v22+ expérimental), WebSocket n'est pas global : ce
+# paquet optionnel suffit — le SDK le charge lui-même, aucun `import "ws"`
+# à écrire dans votre code (voir plus bas).
 npm install ws
 ```
 
@@ -26,9 +27,10 @@ npm install ws
 import { createRealtimeClient } from "@yourorg/realtime-sdk";
 
 const client = createRealtimeClient({
-  url: "wss://realtime.example.com/ws",
+  host: "realtime.example.com",
+  secure: true, // wss:// au lieu de ws:// — construit en interne, jamais à écrire à la main
   tenantId: "12345678-9abc-def0-1122-334455667788",
-  token: monJetonEmisParLeServeur, // auth.rs::AuthManager::issue_token
+  token: monJetonEmisParLeServeur, // voir "Authentification HTTP" plus bas
 });
 
 const unsubscribe = client.subscribe("orders:42", (message) => {
@@ -43,19 +45,16 @@ unsubscribe();
 client.disconnect();
 ```
 
-En Node.js, injectez une implémentation `WebSocket` (le natif n'existe
-que dans les navigateurs et React Native) :
+`host` (+ `port`, défaut 8080 ; `path`, défaut `/ws`) suffit dans
+l'immense majorité des cas — `url` reste une échappatoire pour un besoin
+avancé (proxy, chemin non standard), mais **jamais les deux à la fois**.
 
-```ts
-import WebSocket from "ws";
-
-const client = createRealtimeClient({
-  url: "wss://realtime.example.com/ws",
-  tenantId,
-  token,
-  webSocketImpl: WebSocket as any,
-});
-```
+En Node.js, aucune ligne de plus à écrire : ni `import WebSocket from
+"ws"`, ni `webSocketImpl` — le SDK détecte l'absence de `WebSocket`
+global et charge le paquet optionnel `ws` lui-même à la volée. `npm
+install ws` (fait une seule fois, ci-dessus) est la seule étape encore
+nécessaire côté Node ; `webSocketImpl` ne sert plus qu'à imposer une
+implémentation précise (tests, environnement exotique).
 
 ## Fonctionnalités
 
@@ -72,6 +71,93 @@ Reconnexion automatique (backoff exponentiel + jitter, configurable),
 heartbeat PING périodique, et ré-abonnement transparent à tous les
 canaux actifs après une reconnexion — rien à orchestrer manuellement.
 
+## Authentification HTTP avant connexion
+
+Ce SDK n'émet jamais de jeton lui-même — un jeton signé HMAC ne doit être
+généré que côté serveur, qui seul détient le secret du tenant (jamais
+dans un navigateur/mobile). Le backend expose pour ça une route HTTP
+publique, pensée pour être appelée **par le backend du tenant lui-même**
+(jamais directement depuis un client final) juste avant que celui-ci ne
+remette le jeton à son utilisateur :
+
+```http
+POST /api/v1/auth/tokens
+Content-Type: application/json
+
+{ "tenant_id": "...", "secret": "...", "sub": "user-42", "ttl_secs": 3600 }
+```
+
+```json
+{ "success": true, "data": { "token": "…", "expires_in": 3600 }, "trace_id": "…" }
+```
+
+`secret` n'authentifie que cette requête HTTP — il ne circule jamais vers
+le client final, qui ne reçoit que le `token` résultant :
+
+```ts
+// Côté backend du tenant (jamais dans le navigateur) :
+const res = await fetch("https://realtime.example.com:8090/api/v1/auth/tokens", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ tenant_id, secret, sub: userId }),
+});
+const { data } = await res.json();
+
+// Le `token` seul est renvoyé au client final, qui s'en sert ici :
+const client = createRealtimeClient({ host, tenantId, token: data.token });
+```
+
+## Publier un message via HTTP (sans connexion persistante)
+
+Pour un backend qui n'a pas de socket ouvert en permanence (ex. un job qui
+notifie un canal une fois de temps en temps), `POST /api/v1/messages`
+publie un message sans passer par le SDK ni par une connexion WS/TCP.
+Authentification par jeton client déjà émis (`Authorization: Bearer`),
+jamais par le secret brut du tenant :
+
+```http
+POST /api/v1/messages
+Content-Type: application/json
+Authorization: Bearer <token émis par /api/v1/auth/tokens>
+
+{ "tenant_id": "...", "channel_id": "orders:42", "payload": "commande créée" }
+```
+
+```json
+{ "success": true, "data": { "published": true }, "trace_id": "…" }
+```
+
+**Limitation assumée :** contrairement à `client.publish()` côté SDK, cette
+route HTTP ne chunk pas — le `payload` doit tenir dans les 211 octets d'un
+seul frame (`400 INVALID_REQUEST` sinon). Un appelant avec des messages
+plus grands doit les découper lui-même en plusieurs appels, ou utiliser un
+client SDK connecté. Comme pour la connexion WS/TCP, un tenant qui dépasse
+son quota (`RateLimitService`, bucket partagé par tenant — pas de notion
+de session pour un appel HTTP sans état) reçoit `429 RATE_LIMITED`.
+
+## Messages plus grands qu'un frame
+
+Le frame reste toujours exactement 256 octets (211 de payload utile) —
+`publish()`/`unicast()` n'imposent aucune limite de taille pratique
+au-delà de ça : un payload trop grand pour un seul frame est
+automatiquement découpé en plusieurs frames PUB/UNICAST successifs et
+réassemblé côté récepteur, avant que `subscribe()` ne le voie. Rien à
+changer dans le code applicatif :
+
+```ts
+client.publish("logs:app", hugeJsonBlob); // fonctionne quelle que soit la taille (jusqu'à maxMessageBytes)
+```
+
+Garde-fou par défaut : 64 Kio (`DEFAULT_MAX_MESSAGE_BYTES`), ajustable
+via `maxMessageBytes` — ce n'est pas une limite protocolaire, juste une
+protection contre un appel malencontreux avec un payload énorme.
+
+**Limitation connue :** `replay()` récupère l'historique frame par
+frame depuis un ring buffer de capacité fixe côté serveur — si certains
+chunks d'un message ont été évincés avant les autres, il ne sera jamais
+réassemblé au rattrapage. Un message qui tient dans un seul frame n'a
+pas ce problème.
+
 ## Pattern Adapter — permuter vers Firebase/PubNub
 
 Le code applicatif ne doit programmer que contre l'interface
@@ -81,7 +167,7 @@ bascule tient en une ligne, dans `createRealtimeClient()` :
 
 ```ts
 // Moteur maison (par défaut)
-const client: RealtimeAdapter = createRealtimeClient({ url, tenantId, token });
+const client: RealtimeAdapter = createRealtimeClient({ host, tenantId, token });
 
 // Firebase (gabarit à compléter, voir src/adapters/firebase-adapter.ts)
 const client: RealtimeAdapter = new FirebaseAdapter({ firebaseConfig, basePath });

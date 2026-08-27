@@ -12,6 +12,9 @@ sdk-typescript/      SDK JS/TS — navigateur, Node.js, React Native
 sdk-rust/            SDK Rust (Tokio)
 sdk-python/          SDK Python (asyncio)
 sdk-android/         SDK Kotlin/Java — Android + JVM
+web-client/          Client de chat + notifications (React/Vite/Tailwind/shadcn)
+admin/               Panneau d'administration plateforme (gestion des tenants)
+tenant-portal/       Portail self-service tenant (login, devices, jetons)
 ```
 
 Chaque dossier a son propre `README.md` avec installation, démarrage

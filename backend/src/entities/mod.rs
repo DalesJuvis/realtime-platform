@@ -6,3 +6,6 @@ pub mod PresenceEntry;
 pub mod PresenceEvent;
 pub mod Claims;
 pub mod RateLimitConfig;
+pub mod TenantUser;
+pub mod PortalSession;
+pub mod MessageTemplate;

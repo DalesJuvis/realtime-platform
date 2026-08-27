@@ -7,7 +7,7 @@
 //! **Side effects:** In-memory `DashMap` mutation only.
 //! **Dependencies:** `dashmap`, `entities::PresenceEntry`, `entities::ChannelKey`.
 
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use dashmap::DashMap;
 
@@ -28,16 +28,31 @@ impl PresenceSessionRepository {
         }
     }
 
-    pub fn register(&self, tenant_id: TenantId, session_id: SessionId) {
+    pub fn register(&self, tenant_id: TenantId, session_id: SessionId, sub: String) {
         self.sessions.insert(
             session_id,
             PresenceEntry {
                 tenant_id,
                 session_id,
+                sub,
                 channels: Vec::new(),
                 last_seen: Instant::now(),
+                connected_at: SystemTime::now(),
             },
         );
+    }
+
+    /// Non-destructive snapshot of every currently tracked session for one
+    /// tenant — the portal's "devices" (live sessions) view. Unlike
+    /// `sweep_expired`, doesn't remove anything and doesn't filter by
+    /// timeout (a session already past `timeout` but not yet swept is
+    /// still "live" from the caller's perspective until the next sweep).
+    pub fn list_for_tenant(&self, tenant_id: TenantId) -> Vec<PresenceEntry> {
+        self.sessions
+            .iter()
+            .filter(|entry| entry.tenant_id == tenant_id)
+            .map(|entry| entry.clone())
+            .collect()
     }
 
     pub fn heartbeat(&self, session_id: SessionId) {
@@ -97,7 +112,7 @@ mod tests {
     fn untrack_channel_removes_only_that_channel() {
         let repo = PresenceSessionRepository::new(Duration::from_millis(1));
         let session = Uuid::from_u128(1);
-        repo.register(tenant_a(), session);
+        repo.register(tenant_a(), session, "user-1".to_string());
         repo.track_channel(session, "room-1");
         repo.track_channel(session, "room-2");
 
@@ -113,7 +128,7 @@ mod tests {
     fn sweep_detects_timeout() {
         let repo = PresenceSessionRepository::new(Duration::from_millis(1));
         let session = Uuid::from_u128(42);
-        repo.register(tenant_a(), session);
+        repo.register(tenant_a(), session, "user-1".to_string());
         repo.track_channel(session, "room-1");
 
         std::thread::sleep(Duration::from_millis(5));
@@ -128,7 +143,7 @@ mod tests {
     fn heartbeat_prevents_timeout() {
         let repo = PresenceSessionRepository::new(Duration::from_millis(50));
         let session = Uuid::from_u128(7);
-        repo.register(tenant_a(), session);
+        repo.register(tenant_a(), session, "user-1".to_string());
 
         std::thread::sleep(Duration::from_millis(20));
         repo.heartbeat(session);

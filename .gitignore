@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .venv/
 build/
+dist/
+
+# Unrelated payments-admin template kept locally only as a UI reference,
+# never wired to this backend — not part of the realtime platform.
+saas-admin/

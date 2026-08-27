@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Capital admin — Stripe-dashboard-inspired theme tokens.
+ * Indigo/blurple primary on a near-white surface (light), deep navy surface (dark).
+ * Consumed via tailwind.config.ts's `colors` block — never reference these hex/hsl
+ * values directly in components, always via the Tailwind color utility classes.
+ */
+
+@layer base {
+  :root {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 243 75% 59%;
+
+    --radius: 0.625rem;
+
+    /* Defaults — PreferencesProvider overrides --primary/--ring/--accent-user
+       at runtime from the user's chosen accent color (see Settings). */
+    --accent-user: #6366f1;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 20% 98%;
+
+    --card: 222 47% 9%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 243 75% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 222 30% 14%;
+    --muted-foreground: 220 9% 65%;
+
+    --accent: 222 30% 16%;
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 243 75% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+/*
+ * Thin document-level scrollbar app-wide (public pages that scroll at the
+ * body — login, checkout, onboarding, error boundary, 404 — since
+ * authenticated admin/workspace routes scroll inside `<main>` instead, via
+ * the `.scrollbar-thin` class below applied directly to that element).
+ */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+html::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+html::-webkit-scrollbar-track {
+  background: transparent;
+}
+html::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+}
+
+/* Tabular numerals for money/amount columns throughout the dashboard */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * `WavePanel` (login pages) — each band gets two independent motions:
+ *   - `.wave-scroll-*` slides the doubled wave tile left by exactly one
+ *     tile width (1440px) so the loop has no visible seam. Different
+ *     durations/directions per band create horizontal parallax.
+ *   - `.wave-float-*` gently bobs the whole band up/down on its own cycle
+ *     (different duration + delay per band) so the motion reads as silk
+ *     drifting rather than a mechanical scroll.
+ * Both are transform-only (no layout thrash) and disabled entirely under
+ * `prefers-reduced-motion` — the waves still render, just still.
+ */
+@keyframes wave-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-1440px);
+  }
+}
+@keyframes wave-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+.wave-scroll-a {
+  animation: wave-scroll 22s linear infinite;
+}
+.wave-scroll-b {
+  animation: wave-scroll 30s linear infinite reverse;
+}
+.wave-scroll-c {
+  animation: wave-scroll 16s linear infinite;
+}
+.wave-scroll-d {
+  animation: wave-scroll 38s linear infinite reverse;
+}
+.wave-float-a {
+  animation: wave-float 9s ease-in-out infinite;
+}
+.wave-float-b {
+  animation: wave-float 11s ease-in-out infinite 1.5s;
+}
+.wave-float-c {
+  animation: wave-float 7.5s ease-in-out infinite 0.5s;
+}
+.wave-float-d {
+  animation: wave-float 13s ease-in-out infinite 2s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wave-scroll-a,
+  .wave-scroll-b,
+  .wave-scroll-c,
+  .wave-scroll-d,
+  .wave-float-a,
+  .wave-float-b,
+  .wave-float-c,
+  .wave-float-d {
+    animation: none;
+  }
+}
+
+/*
+ * Thin scrollbar, invisible until hovered — used on the sidebar nav and any
+ * other overflow region where a full-width native scrollbar would be too
+ * heavy visually. Firefox via `scrollbar-color`, everything else via the
+ * (non-standard but universally supported) `::-webkit-scrollbar` pseudo-elements.
+ */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scrollbar-thin:hover {
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+}

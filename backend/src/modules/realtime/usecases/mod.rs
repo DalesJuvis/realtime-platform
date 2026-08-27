@@ -6,3 +6,4 @@ pub mod PublishMessageUseCase;
 pub mod UnicastMessageUseCase;
 pub mod ReplayHistoryUseCase;
 pub mod DispatchFrameUseCase;
+pub mod PublishMessageHttpUseCase;

@@ -23,13 +23,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use hmac::{Hmac, Mac};
+use rand::RngCore;
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 
 use crate::entities::Claims::Claims;
 use crate::entities::ChannelKey::TenantId;
 use crate::modules::auth::repositories::TenantSecretRepository::TenantSecretRepository;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Generates a random 256-bit secret, base64url-encoded — the one place
+/// this happens, shared by the Admin API (create/rotate tenant) and the
+/// Portal API's self-serve signup/key-rotation.
+pub fn generate_secret() -> String {
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
@@ -65,6 +76,18 @@ impl TokenService {
     /// fails with `UnknownTenant`.
     pub fn revoke_tenant(&self, tenant_id: TenantId) {
         self.repo.revoke(tenant_id);
+    }
+
+    /// Constant-time check that `secret` is this tenant's real HMAC
+    /// secret — used once, by the portal's self-registration flow, to
+    /// prove a caller actually holds the secret an admin gave them at
+    /// tenant creation (see `modules::portal`), not for the per-frame hot
+    /// path (that's `validate`, which checks a signed token, never a raw secret).
+    pub fn verify_tenant_secret(&self, tenant_id: TenantId, secret: &[u8]) -> bool {
+        match self.repo.get(&tenant_id) {
+            Some(stored) => stored.as_slice().ct_eq(secret).into(),
+            None => false,
+        }
     }
 
     /// Issues a token for a given tenant/subject, valid for `ttl_secs`

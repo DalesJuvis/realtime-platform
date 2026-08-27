@@ -137,6 +137,20 @@ impl ChannelStateRepository {
         self.channels.get(key)
     }
 
+    /// Snapshot of every channel this tenant currently has state for
+    /// (`channel_id`, live subscriber count) — channels are never a
+    /// first-class persisted entity in this system, only born implicitly
+    /// on first SUB/PUB and pruned once empty (`prune_empty`), so this is
+    /// the actual source of truth for "what channels does this tenant
+    /// have", not a separate registry.
+    pub fn list_for_tenant(&self, tenant_id: TenantId) -> Vec<(String, usize)> {
+        self.channels
+            .iter()
+            .filter(|entry| entry.key().tenant_id == tenant_id)
+            .map(|entry| (entry.key().channel_id.clone(), entry.value().sender.receiver_count()))
+            .collect()
+    }
+
     pub fn get_or_create_wildcard_sender(
         &self,
         key: WildcardKey,
