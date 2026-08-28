@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.0
+Stable tag: 0.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -70,6 +70,11 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.1 =
+* JS assets are now minified for production (`assets/js/*.min.js`,
+  built with terser via `npm run build`); the plugin serves the minified
+  build unless `SCRIPT_DEBUG` is on. Source `.js` files are unchanged.
 
 = 0.1.0 =
 * Initial release: `Mio\Realtime\Client` (PHP), `/wp-json/mio/v1/token`,

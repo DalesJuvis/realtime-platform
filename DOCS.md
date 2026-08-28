@@ -392,10 +392,13 @@ section for the full usage and its honest token-exposure trade-off.
 
 No hosting to set up — the repo is public, so [jsDelivr's GitHub
 CDN](https://www.jsdelivr.com/documentation#id-github) serves the file
-straight from a tagged release, globally cached:
+straight from a tagged release, globally cached. Use the `.min.js`
+build — a committed, terser-minified artifact (`npm run build` in
+`sdk-wordpress/`, see `sdk-wordpress/scripts/minify.js`), not the raw
+source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-embed.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
   data-host="realtime.example.com"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -404,23 +407,24 @@ straight from a tagged release, globally cached:
 ></script>
 ```
 
-> **Pin the version.** `@v0.1.0` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.1` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
 > this repo could break every site embedding it without warning. Cut a
-> new tag and bump the URL when you want people to pick up a fix.
+> new tag and bump the URL (running `npm run build` first, so the tagged
+> commit's `.min.js` files are current) when you want people to pick up a fix.
 
 ### `mio-protocol.js` + `mio-client.js` — building your own page logic
 
 For anything beyond the auto-rendered feed above — custom UI around
 messages, multiple channels, your own publish form — load the two files
 `mio-embed.js` bundles, and drive `MioRealtimeClient` yourself. Same
-CDN, same tag, loaded in dependency order:
+CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-protocol.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-client.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     host: 'realtime.example.com',

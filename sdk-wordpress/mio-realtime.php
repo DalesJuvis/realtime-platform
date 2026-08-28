@@ -3,7 +3,7 @@
  * Plugin Name:       mio Realtime
  * Plugin URI:        https://github.com/DalesJuvis/realtime-platform/tree/master/sdk-wordpress
  * Description:       Connects a WordPress site to a mio realtime-platform tenant — server-side token minting and message publishing (PHP), plus a [mio_realtime channel="..."] shortcode for a live-updating feed in the browser.
- * Version:           0.1.0
+ * Version:           0.1.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            mio
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
     exit; // Direct access disallowed.
 }
 
-define('MIO_REALTIME_VERSION', '0.1.0');
+define('MIO_REALTIME_VERSION', '0.1.1');
 define('MIO_REALTIME_DIR', plugin_dir_path(__FILE__));
 define('MIO_REALTIME_URL', plugin_dir_url(__FILE__));
 

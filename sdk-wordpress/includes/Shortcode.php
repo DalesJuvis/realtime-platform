@@ -85,23 +85,30 @@ class Shortcode
 
         $version = defined('MIO_REALTIME_VERSION') ? MIO_REALTIME_VERSION : false;
 
+        // Minified in production; the plain source is only served when
+        // SCRIPT_DEBUG is on (same convention WordPress core itself uses),
+        // so a site owner debugging in devtools still sees readable code.
+        // *.min.js is a committed build artifact (`npm run build` in this
+        // directory) — not generated at request time.
+        $suffix = (defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) ? '' : '.min';
+
         wp_enqueue_script(
             'mio-realtime-protocol',
-            MIO_REALTIME_URL . 'assets/js/mio-protocol.js',
+            MIO_REALTIME_URL . 'assets/js/mio-protocol' . $suffix . '.js',
             array(),
             $version,
             true
         );
         wp_enqueue_script(
             'mio-realtime-client',
-            MIO_REALTIME_URL . 'assets/js/mio-client.js',
+            MIO_REALTIME_URL . 'assets/js/mio-client' . $suffix . '.js',
             array('mio-realtime-protocol'),
             $version,
             true
         );
         wp_enqueue_script(
             'mio-realtime-shortcode',
-            MIO_REALTIME_URL . 'assets/js/mio-shortcode.js',
+            MIO_REALTIME_URL . 'assets/js/mio-shortcode' . $suffix . '.js',
             array('mio-realtime-client'),
             $version,
             true
