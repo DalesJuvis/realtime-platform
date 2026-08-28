@@ -51,6 +51,14 @@ services:
       ADMIN_API_TOKEN: dev-admin-token-change-me
       PORTAL_SESSION_SECRET: dev-portal-secret-change-me
       PORTAL_DB_PATH: /data/portal.db
+      # Web Push (browser notifications, see modules::push::services::WebPushCrypto):
+      # both must be set together or Web Push stays disabled (see
+      # Settings::vapid_public_key's doc comment for why no dev default is
+      # generated the way the secrets above are). Generate a real pair once:
+      #   cargo run --example generate_vapid_keys
+      # VAPID_PUBLIC_KEY: ...
+      # VAPID_PRIVATE_KEY: ...
+      # VAPID_SUBJECT: mailto:ops@example.com
     volumes:
       - portal-data-a:/data
     ports:
@@ -71,6 +79,14 @@ services:
       ADMIN_API_TOKEN: dev-admin-token-change-me
       PORTAL_SESSION_SECRET: dev-portal-secret-change-me
       PORTAL_DB_PATH: /data/portal.db
+      # Web Push (browser notifications, see modules::push::services::WebPushCrypto):
+      # both must be set together or Web Push stays disabled (see
+      # Settings::vapid_public_key's doc comment for why no dev default is
+      # generated the way the secrets above are). Generate a real pair once:
+      #   cargo run --example generate_vapid_keys
+      # VAPID_PUBLIC_KEY: ...
+      # VAPID_PRIVATE_KEY: ...
+      # VAPID_SUBJECT: mailto:ops@example.com
     volumes:
       - portal-data-b:/data
     ports:

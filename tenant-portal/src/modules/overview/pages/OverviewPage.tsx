@@ -14,25 +14,23 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
-import { Activity, Hash, MessageSquare, ShieldAlert, FileText, KeyRound, TrendingUp } from 'lucide-react'
+import { Activity, Hash, MessageSquare, ShieldAlert, FileText, KeyRound, TrendingUp, Maximize2, Minimize2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
 import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
-import { Input } from '@components/ui/input'
-import { Label } from '@components/ui/label'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
 import { Sparkline } from '@components/shared/Sparkline'
 import { ActivityChart, type ActivitySample } from '@components/shared/ActivityChart'
 import { SetupGuideCard } from '@components/shared/SetupGuideCard'
 import { CopyButton } from '@components/shared/CopyButton'
+import { MintTokenCard } from '@components/shared/MintTokenCard'
 import { getOverviewAction } from '@actions/overview/getOverview.action'
-import { mintTokenAction } from '@actions/overview/mintToken.action'
 import { getChannelsAction } from '@actions/channels/getChannels.action'
 import { getTemplatesAction } from '@actions/templates/getTemplates.action'
 import { getKeysAction } from '@actions/keys/getKeys.action'
-import { errorMessage } from '@lib/errors'
 import { env } from '@lib/env'
 import { usePortalAuthStore } from '@store/portalAuth.store'
+import { useUiStore } from '@store/ui.store'
 import type { Overview } from '@entities/Overview.entity'
 import type { Channel } from '@entities/Channel.entity'
 import type { Template } from '@entities/Template.entity'
@@ -108,48 +106,45 @@ function LinkTile({ label, value, to }: { label: string; value: number | null; t
   )
 }
 
-function MintTokenCard() {
-  const [sub, setSub] = useState('demo-user')
-  const [token, setToken] = useState<string | null>(null)
-  const [isSubmitting, setSubmitting] = useState(false)
-
-  async function mint() {
-    setSubmitting(true)
-    try {
-      setToken(await mintTokenAction({ sub: sub.trim() || 'demo-user' }))
-    } catch (err) {
-      toast.error(errorMessage(err, 'Failed to mint token.'))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
+/**
+ * Stat tiles + the Activity chart — the "metrics" `OverviewPage`'s focus
+ * mode isolates. Extracted so that view and the normal full layout render
+ * the exact same cards rather than two copies that could drift apart.
+ */
+function MetricsGrid({
+  overview,
+  sessionsHistory,
+  messagesHistory,
+  rateLimitedHistory,
+  activityHistory,
+}: {
+  overview: Overview | null
+  sessionsHistory: number[]
+  messagesHistory: number[]
+  rateLimitedHistory: number[]
+  activityHistory: ActivitySample[]
+}) {
   return (
-    <Card className="rounded-sm shadow-none">
-      <CardHeader>
-        <CardTitle className="text-base">Client token</CardTitle>
-        <CardDescription>
-          Mint a signed WebSocket/TCP token for a user of your app — your secret key never leaves the server.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex gap-2">
-          <div className="flex-1 space-y-1.5">
-            <Label htmlFor="mint-sub">Subject (sub)</Label>
-            <Input id="mint-sub" value={sub} onChange={(e) => setSub(e.target.value)} />
-          </div>
-          <Button className="mt-6" onClick={mint} disabled={isSubmitting}>
-            {isSubmitting ? 'Minting…' : 'Mint token'}
-          </Button>
-        </div>
-        {token && (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs">
-            <span className="flex-1 truncate">{token}</span>
-            <CopyButton value={token} label="Token" />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatTile label="Active sessions" value={overview?.active_sessions ?? null} icon={Activity} history={sessionsHistory} />
+        <StatTile label="Messages processed" value={overview?.messages_total ?? null} icon={MessageSquare} history={messagesHistory} />
+        <StatTile label="Rate limited" value={overview?.rate_limited_total ?? null} icon={ShieldAlert} history={rateLimitedHistory} />
+      </div>
+
+      <Card className="rounded-sm shadow-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            Activity
+          </CardTitle>
+          <CardDescription>Active sessions, messages processed, and rate-limited sends — live, last {SAMPLE_HISTORY_SIZE} samples.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ActivityChart samples={activityHistory} />
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
@@ -191,6 +186,8 @@ function PublicKeyCard() {
 
 export default function OverviewPage() {
   const email = usePortalAuthStore((s) => s.email)
+  const focusMode = useUiStore((s) => s.focusMode)
+  const toggleFocusMode = useUiStore((s) => s.toggleFocusMode)
   const [overview, setOverview] = useState<Overview | null>(null)
   const [channels, setChannels] = useState<Channel[] | null>(null)
   const [templates, setTemplates] = useState<Template[] | null>(null)
@@ -249,6 +246,43 @@ export default function OverviewPage() {
     })
   }
 
+  if (focusMode) {
+    // Kiosk/TV view: sidebar, top banner/mobile header, and this page's
+    // own right rail are all animated away by `AppLayout`/`AppSidebar`
+    // reading the same `focusMode` flag (see their doc comments) — this
+    // branch only has to isolate the metrics themselves and center them.
+    // Polling above keeps running unchanged: the whole point is that this
+    // stays live.
+    return (
+      <div className="relative flex min-h-[70vh] items-center justify-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0"
+              onClick={toggleFocusMode}
+              aria-label="Exit focus mode"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">Exit focus mode</TooltipContent>
+        </Tooltip>
+
+        <div className="w-full max-w-3xl">
+          <MetricsGrid
+            overview={overview}
+            sessionsHistory={sessionsHistory}
+            messagesHistory={messagesHistory}
+            rateLimitedHistory={rateLimitedHistory}
+            activityHistory={activityHistory}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -256,37 +290,36 @@ export default function OverviewPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
           <p className="text-sm text-muted-foreground">{email} — workspace.</p>
         </div>
-        <Badge variant="success" className="gap-1.5">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-600" />
-          Live · updates every 5s
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="success" className="gap-1.5">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-600" />
+            Live · updates every 5s
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" onClick={toggleFocusMode} aria-label="Focus on metrics">
+                <Maximize2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Focus on metrics — hides the sidebar and everything else</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
         <div className="space-y-6 lg:col-span-2">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <StatTile label="Active sessions" value={overview?.active_sessions ?? null} icon={Activity} history={sessionsHistory} />
-            <StatTile label="Messages processed" value={overview?.messages_total ?? null} icon={MessageSquare} history={messagesHistory} />
-            <StatTile label="Rate limited" value={overview?.rate_limited_total ?? null} icon={ShieldAlert} history={rateLimitedHistory} />
-          </div>
+          <MetricsGrid
+            overview={overview}
+            sessionsHistory={sessionsHistory}
+            messagesHistory={messagesHistory}
+            rateLimitedHistory={rateLimitedHistory}
+            activityHistory={activityHistory}
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <LinkTile label="Channels" value={channels?.length ?? null} to="/channels" />
             <LinkTile label="Templates" value={templates?.length ?? null} to="/templates" />
           </div>
-
-          <Card className="rounded-sm shadow-none">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                Activity
-              </CardTitle>
-              <CardDescription>Active sessions, messages processed, and rate-limited sends — live, last {SAMPLE_HISTORY_SIZE} samples.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ActivityChart samples={activityHistory} />
-            </CardContent>
-          </Card>
 
           <Card className="rounded-sm shadow-none">
             <CardHeader className="flex-row items-center justify-between space-y-0">

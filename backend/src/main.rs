@@ -38,9 +38,13 @@ use modules::cluster::adapters::RedisClusterAdapter::RedisClusterAdapter;
 use modules::cluster::ports::ClusterBroadcastPort::ClusterBroadcastPort;
 use modules::metrics::services::MetricsService::MetricsService;
 use modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
+use modules::push::adapters::WebPushAdapter::WebPushAdapter;
 use modules::push::ports::PushPort::PushPort;
+use modules::push::ports::WebPushPort::WebPushPort;
+use modules::push::services::WebPushCrypto::VapidKeys;
 use modules::rate_limit::services::RateLimitService::RateLimitService;
 use modules::realtime::controllers::{TcpController, WsController};
+use modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
 use modules::realtime::services::ChannelRouterService::ChannelRouterService;
 use modules::realtime::services::PresenceService::PresenceService;
 use modules::realtime::services::PushFallbackService::PushFallbackService;
@@ -64,10 +68,51 @@ async fn main() {
     let rate_limiter = Arc::new(RateLimitService::new(Default::default()));
     let metrics = MetricsService::new();
 
+    // SQLite pool backing all durable state (`modules::portal`'s tables,
+    // plus `push_subscriptions` below) — created here rather than down in
+    // the "Portal API" section like before, since `PushFallbackService`
+    // (built just below, needed for both the WS/TCP and Portal listeners)
+    // now depends on `PushSubscriptionRepository`, which needs this pool.
+    let portal_connect_options =
+        sqlx::sqlite::SqliteConnectOptions::from_str(&format!("sqlite://{}", settings.portal_db_path))
+            .unwrap_or_else(|e| panic!("invalid PORTAL_DB_PATH {}: {e}", settings.portal_db_path))
+            .create_if_missing(true);
+    let portal_pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(portal_connect_options)
+        .await
+        .unwrap_or_else(|e| panic!("cannot open portal DB at {}: {e}", settings.portal_db_path));
+    sqlx::migrate!("./migrations")
+        .run(&portal_pool)
+        .await
+        .unwrap_or_else(|e| panic!("portal DB migration failed: {e}"));
+
+    let push_subscriptions = Arc::new(PushSubscriptionRepository::new(portal_pool.clone()));
+
     let push: Arc<dyn PushPort> = FcmPushAdapter::spawn(FcmConfig {
         project_id: settings.fcm_project_id.clone(),
         bearer_token: settings.fcm_bearer_token.clone(),
     });
+
+    // Web Push: optional, enabled only if both VAPID keys are set. Unlike
+    // `admin_api_token`/`portal_session_secret`, no temporary keypair is
+    // generated when they're missing — see `Settings::vapid_public_key`'s
+    // doc comment for why silently rotating this one is actively harmful.
+    let web_push: Option<Arc<dyn WebPushPort>> = match (&settings.vapid_public_key, &settings.vapid_private_key) {
+        (Some(_), Some(private)) => match VapidKeys::from_env(private, settings.vapid_subject.clone()) {
+            Ok(keys) => {
+                tracing::info!("VAPID keys loaded: Web Push fallback enabled");
+                Some(WebPushAdapter::spawn(Arc::new(keys)))
+            }
+            Err(err) => {
+                tracing::error!(error = %err, "invalid VAPID_PRIVATE_KEY, Web Push disabled");
+                None
+            }
+        },
+        _ => {
+            tracing::info!("VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not set: Web Push fallback disabled");
+            None
+        }
+    };
 
     // Multi-instance broadcast: optional, enabled only if REDIS_URL is
     // set. Without it, the service runs single-instance, unchanged.
@@ -88,13 +133,21 @@ async fn main() {
         }
     };
 
-    let push_fallback = PushFallbackService::new(channel_router.clone(), push, cluster, metrics.clone());
+    let push_fallback = PushFallbackService::new(
+        channel_router.clone(),
+        push,
+        web_push,
+        push_subscriptions.clone(),
+        cluster,
+        metrics.clone(),
+    );
 
     let realtime_ctx = RealtimeContext {
         auth: auth.clone(),
         channel_router: channel_router.clone(),
         presence: presence.clone(),
         push_fallback,
+        push_subscriptions: push_subscriptions.clone(),
         rate_limiter: rate_limiter.clone(),
         metrics: metrics.clone(),
     };
@@ -138,21 +191,9 @@ async fn main() {
     // auto-provisions a tenant + key pair), key-pair management, channel
     // management, broadcasting, message templates, and a live "devices"
     // (connected sessions) view — see `modules::portal`'s doc comment.
-    // Durable state: `tenant_users`, `tenant_secrets`, `message_templates`.
-    let portal_connect_options = sqlx::sqlite::SqliteConnectOptions::from_str(&format!(
-        "sqlite://{}",
-        settings.portal_db_path
-    ))
-    .unwrap_or_else(|e| panic!("invalid PORTAL_DB_PATH {}: {e}", settings.portal_db_path))
-    .create_if_missing(true);
-    let portal_pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .connect_with(portal_connect_options)
-        .await
-        .unwrap_or_else(|e| panic!("cannot open portal DB at {}: {e}", settings.portal_db_path));
-    sqlx::migrate!("./migrations")
-        .run(&portal_pool)
-        .await
-        .unwrap_or_else(|e| panic!("portal DB migration failed: {e}"));
+    // Durable state: `tenant_users`, `tenant_secrets`, `message_templates`,
+    // `push_subscriptions`. `portal_pool` itself was already opened and
+    // migrated above (`PushFallbackService` needed it earlier).
 
     // `TokenService`'s in-memory secret store forgets every self-serve
     // tenant on restart (only the env-var-provisioned demo tenant survives

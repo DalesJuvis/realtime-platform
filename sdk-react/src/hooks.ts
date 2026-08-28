@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { MessageHandler, RealtimeMessage } from "@yourorg/realtime-sdk";
+import type { MessageHandler, RealtimeMessage } from "@mio/realtime-sdk";
 import { useRealtimeContext, type ConnectionState } from "./RealtimeContext.js";
 
 /** Le `RealtimeClient` du `<RealtimeProvider>` englobant. */

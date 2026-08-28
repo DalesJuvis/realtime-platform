@@ -35,7 +35,7 @@ pub enum RouterError {
 /// Worst-case exponential (naive backtracking) but harmless in practice:
 /// `channel_id` is capped at 24 bytes by the fixed frame format, so the
 /// input is always tiny.
-fn glob_match(pattern: &str, candidate: &str) -> bool {
+pub(crate) fn glob_match(pattern: &str, candidate: &str) -> bool {
     fn helper(p: &[u8], c: &[u8]) -> bool {
         match p.first() {
             None => c.is_empty(),

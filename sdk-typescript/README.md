@@ -1,4 +1,4 @@
-# @yourorg/realtime-sdk
+# @mio/realtime-sdk
 
 SDK client TypeScript/JavaScript pour le moteur de notification et
 messagerie temps réel multi-tenant (protocole binaire fixe 256 octets).
@@ -14,7 +14,7 @@ Firebase ou PubNub sans réécrire le code applicatif.
 ## Installation
 
 ```bash
-npm install @yourorg/realtime-sdk
+npm install @mio/realtime-sdk
 # En Node.js (hors v22+ expérimental), WebSocket n'est pas global : ce
 # paquet optionnel suffit — le SDK le charge lui-même, aucun `import "ws"`
 # à écrire dans votre code (voir plus bas).
@@ -24,7 +24,7 @@ npm install ws
 ## Démarrage rapide
 
 ```ts
-import { createRealtimeClient } from "@yourorg/realtime-sdk";
+import { createRealtimeClient } from "@mio/realtime-sdk";
 
 const client = createRealtimeClient({
   host: "realtime.example.com",
@@ -66,6 +66,8 @@ implémentation précise (tests, environnement exotique).
 | Envoi direct à un utilisateur | `client.unicast(userId, payload)` |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds?)` |
 | Évènements de connexion | `client.on("open" \| "close" \| "error" \| "authenticated" \| "message", ...)` |
+| Notification d'onglet en arrière-plan | `attachBackgroundNotifications(client, options?)` |
+| Abonnement Web Push (onglet/navigateur fermé) | `registerPushServiceWorker(url)` + `subscribeToPush(registration, vapidPublicKey)` |
 
 Reconnexion automatique (backoff exponentiel + jitter, configurable),
 heartbeat PING périodique, et ré-abonnement transparent à tous les
@@ -157,6 +159,39 @@ frame depuis un ring buffer de capacité fixe côté serveur — si certains
 chunks d'un message ont été évincés avant les autres, il ne sera jamais
 réassemblé au rattrapage. Un message qui tient dans un seul frame n'a
 pas ce problème.
+
+## Notifications navigateur
+
+Deux niveaux, deux garanties différentes — voir la doc de tête de
+`src/notifications.ts` pour le détail :
+
+```ts
+import {
+  attachBackgroundNotifications,
+  requestNotificationPermission,
+  registerPushServiceWorker,
+  subscribeToPush,
+} from "@mio/realtime-sdk";
+
+// 1. Onglet ouvert mais caché/sans focus — fonctionne dès aujourd'hui,
+//    aucune infrastructure serveur nécessaire.
+await requestNotificationPermission(); // sur un clic utilisateur
+attachBackgroundNotifications(client);
+
+// 2. Onglet fermé, voire navigateur pas lancé — nécessite un Service
+//    Worker (public/sw.js dans votre app) et un backend qui envoie un
+//    vrai Web Push chiffré à l'abonnement obtenu ici (voir
+//    backend/src/modules/push/services/WebPushCrypto.rs et
+//    POST /api/v1/push/subscriptions dans ce repo pour un exemple complet).
+const registration = await registerPushServiceWorker("/sw.js");
+const subscription = await subscribeToPush(registration, vapidPublicKey);
+// POSTez `subscription` ({ endpoint, keys: { p256dh, auth } }) à votre backend.
+```
+
+**Ce que `subscribeToPush()` ne garantit pas :** un navigateur réellement
+quitté (pas juste l'onglet fermé) ne reçoit rien tant que l'OS/le
+navigateur ne le réveille pas pour traiter le push — hors du contrôle de
+ce SDK et du serveur qui envoie le Web Push.
 
 ## Pattern Adapter — permuter vers Firebase/PubNub
 

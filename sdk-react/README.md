@@ -1,7 +1,7 @@
-# @yourorg/realtime-sdk-react
+# @mio/realtime-sdk-react
 
 Bindings React (contexte, hooks, composants) pour
-[`@yourorg/realtime-sdk`](../sdk-typescript) — le moteur de notification et
+[`@mio/realtime-sdk`](../sdk-typescript) — le moteur de notification et
 messagerie temps réel multi-tenant (protocole binaire fixe 256 octets).
 N'ajoute aucune logique protocolaire : c'est une couche fine au-dessus de
 `RealtimeClient`, pensée pour éviter le boilerplate `useEffect` +
@@ -17,13 +17,13 @@ N'ajoute aucune logique protocolaire : c'est une couche fine au-dessus de
 ## Installation
 
 ```bash
-npm install @yourorg/realtime-sdk-react @yourorg/realtime-sdk
+npm install @mio/realtime-sdk-react @mio/realtime-sdk
 ```
 
 ## Démarrage rapide
 
 ```tsx
-import { RealtimeProvider, useChannel } from "@yourorg/realtime-sdk-react";
+import { RealtimeProvider, useChannel } from "@mio/realtime-sdk-react";
 
 function App() {
   return (
@@ -67,6 +67,8 @@ function OrdersFeed() {
 | `usePublish(channelId)` | Publication seule, sans souscription. |
 | `<ChannelSubscriber channelId>{state => ...}</ChannelSubscriber>` | Équivalent render-prop de `useChannel`, pour composition JSX ou composants classe. |
 | `<ConnectionIndicator labels?>` | Texte d'état de connexion minimal, non stylé — un point de départ, pas un composant themé. |
+| `useBackgroundNotifications(options?)` | Affiche une `Notification` navigateur pour chaque message reçu tant que l'onglet est caché/sans focus — voir `attachBackgroundNotifications` côté `sdk-typescript`. |
+| `usePushSubscription(serviceWorkerUrl, vapidPublicKey)` | Cycle de vie complet d'un abonnement Web Push : `{ status, subscription, error, subscribe, unsubscribe, isSupported }`. |
 
 `channelId` accepte `null`/`undefined` partout (`useSubscription`,
 `useChannel`) : la souscription reste simplement inactive tant qu'il n'est
@@ -99,8 +101,12 @@ Pas de génération de jeton (toujours côté serveur — voir le README de
 design system), pas de persistance des messages au-delà du buffer en
 mémoire de `useChannel`. Pour React Native spécifiquement (reconnexion
 `AppState`/réseau), voir
-[`@yourorg/realtime-sdk-react-native`](../sdk-react-native), qui réexporte
-tout ce package.
+[`@mio/realtime-sdk-react-native`](../sdk-react-native), qui réexporte
+tout ce package **sauf** `useBackgroundNotifications`/`usePushSubscription` —
+ils enveloppent les API navigateur `Notification`/`ServiceWorker`/
+`PushManager`, qui n'existent pas en React Native (notifications natives
+RN : un mécanisme entièrement différent, FCM/APNs via une lib comme
+`@react-native-firebase/messaging`, hors du périmètre de ce SDK).
 
 ## Développement
 

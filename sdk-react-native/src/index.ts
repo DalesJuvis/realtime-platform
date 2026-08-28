@@ -1,7 +1,7 @@
 /**
  * `index.ts` — Point d'entrée public du package.
  *
- * Réexporte tout `@yourorg/realtime-sdk-react` (hooks/composants
+ * Réexporte tout `@mio/realtime-sdk-react` (hooks/composants
  * identiques en React Native — aucun d'entre eux ne touche le DOM) sauf
  * `RealtimeProvider`, remplacé ici par la version consciente de
  * `AppState`.
@@ -20,7 +20,7 @@ export {
   ChannelSubscriber,
   ConnectionIndicator,
   RealtimeClient,
-} from "@yourorg/realtime-sdk-react";
+} from "@mio/realtime-sdk-react";
 
 export type {
   RealtimeProviderProps,
@@ -34,4 +34,4 @@ export type {
   RealtimeEndpoint,
   RealtimeMessage,
   MessageHandler,
-} from "@yourorg/realtime-sdk-react";
+} from "@mio/realtime-sdk-react";

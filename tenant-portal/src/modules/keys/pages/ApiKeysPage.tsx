@@ -16,6 +16,7 @@ import { Ban, Copy } from 'lucide-react'
 import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
 import { DataTable } from '@components/DataTable/DataTable'
+import { MintTokenCard } from '@components/shared/MintTokenCard'
 import { formatDateTime } from '@lib/utils'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { MockApiKeyMode, MockApiKeyPair, MockApiKeyStatus } from '@entities/MockApiKey.entity'
@@ -96,13 +97,16 @@ export default function ApiKeysPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">API Keys</h1>
         <p className="text-sm text-muted-foreground">
-          Sample data — your real key pair is at{' '}
+          Mint a real client token below. The table underneath is sample
+          data — your actual tenant key pair is at{' '}
           <Link to="/settings" className="font-medium text-primary hover:underline">
             Settings → API keys
           </Link>
           .
         </p>
       </div>
+
+      <MintTokenCard />
 
       <DataTable
         source={{ type: 'json', data: MOCK_KEY_PAIRS }}

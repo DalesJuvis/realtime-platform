@@ -12,7 +12,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { RealtimeClient, RealtimeMessage, Unsubscribe } from '@yourorg/realtime-sdk'
+import { attachBackgroundNotifications, type RealtimeClient, type RealtimeMessage, type Unsubscribe } from '@mio/realtime-sdk'
 import type { ConnectionCredentials, ConnectionStatus } from '@entities/Connection.entity'
 import { createRealtimeConnectionAction } from '@actions/realtime/createRealtimeConnection.action'
 
@@ -20,6 +20,10 @@ type MessageListener = (message: RealtimeMessage) => void
 
 /** The live client instance — not persisted, not part of render-diffed state. */
 let activeClient: RealtimeClient | null = null
+/** Detaches the previous client's OS-notification listener (see `connect`
+ * below) before attaching a new one — otherwise reconnecting would stack
+ * a second listener on top rather than replacing it. */
+let detachBackgroundNotifications: Unsubscribe | null = null
 
 interface ConnectionState {
   readonly credentials: ConnectionCredentials | null
@@ -43,6 +47,7 @@ export const useConnectionStore = create<ConnectionState>()(
 
       connect: (creds) => {
         activeClient?.disconnect()
+        detachBackgroundNotifications?.()
 
         const client = createRealtimeConnectionAction(creds)
         activeClient = client
@@ -51,6 +56,17 @@ export const useConnectionStore = create<ConnectionState>()(
         client.on('close', () => set((s) => ({ status: s.status === 'error' ? s.status : 'closed' })))
         client.on('error', (err) => set({ status: 'error', lastError: err.message }))
 
+        // Real OS-level notification, distinct from the in-app bell
+        // (`notifications.store`): fires only while the tab is hidden/
+        // unfocused, so it never doubles up with the bell while you're
+        // actually looking at the app. Silently a no-op until
+        // `Notification.requestPermission()` has been granted (see
+        // `PushNotificationToggle`) — never prompts on its own.
+        detachBackgroundNotifications = attachBackgroundNotifications(client, {
+          title: (m) => `#${m.channelId}`,
+          onClick: () => window.focus(),
+        })
+
         set({ credentials: creds, status: 'connecting', lastError: null })
         client.connect()
       },
@@ -58,6 +74,8 @@ export const useConnectionStore = create<ConnectionState>()(
       disconnect: () => {
         activeClient?.disconnect()
         activeClient = null
+        detachBackgroundNotifications?.()
+        detachBackgroundNotifications = null
         set({ credentials: null, status: 'idle', lastError: null })
       },
 

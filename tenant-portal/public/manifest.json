@@ -1,0 +1,11 @@
+{
+  "name": "mio — Unified Push Messaging",
+  "short_name": "mio",
+  "description": "Self-service tenant portal for the mio realtime messaging platform.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#FF5E1A",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

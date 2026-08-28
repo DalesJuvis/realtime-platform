@@ -20,3 +20,14 @@ createRoot(document.getElementById('root')!).render(
     </PreferencesProvider>
   </StrictMode>,
 )
+
+// Registers the PWA offline-shell worker (see public/sw.js) — installable
+// on its own; no push subscription wired here (see that file's doc
+// comment for why this app doesn't need one).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err: unknown) => {
+      console.warn('Service worker registration failed:', err)
+    })
+  })
+}

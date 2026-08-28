@@ -39,6 +39,26 @@ pub struct Settings {
     /// one is generated and logged — fine for dev, but every portal login
     /// session breaks on restart, so set this explicitly for anything longer-lived.
     pub portal_session_secret: Option<String>,
+    /// VAPID keypair (RFC 8292) signing every Web Push send —
+    /// `modules::push::services::WebPushCrypto::VapidKeys`. Both `None`
+    /// (the default) disables Web Push entirely: no unique-per-instance
+    /// keys are ever generated silently the way `admin_api_token` is,
+    /// because unlike that one, a VAPID keypair changing invalidates every
+    /// already-registered browser subscription (a push service rejects a
+    /// JWT signed by a key it didn't see at subscribe time) — restarting
+    /// with a fresh keypair each time would make Web Push permanently
+    /// non-functional rather than just less convenient. Generate a real
+    /// pair once (see `sdk-typescript`/`web-client` README for the
+    /// one-liner) and keep it stable. Base64url (no padding): public key
+    /// is the 65-byte uncompressed P-256 point, private key the raw
+    /// 32-byte scalar.
+    pub vapid_public_key: Option<String>,
+    pub vapid_private_key: Option<String>,
+    /// A `mailto:` or `https:` URL identifying the sender, per RFC 8292 §2
+    /// — some push services use this to contact you if your sends are
+    /// misbehaving. Defaults to a placeholder if VAPID keys are set but
+    /// this isn't: still valid, just worth setting for real.
+    pub vapid_subject: String,
 }
 
 impl Settings {
@@ -57,6 +77,9 @@ impl Settings {
             admin_api_token: std::env::var("ADMIN_API_TOKEN").ok(),
             portal_db_path: std::env::var("PORTAL_DB_PATH").unwrap_or_else(|_| "portal.db".to_string()),
             portal_session_secret: std::env::var("PORTAL_SESSION_SECRET").ok(),
+            vapid_public_key: std::env::var("VAPID_PUBLIC_KEY").ok(),
+            vapid_private_key: std::env::var("VAPID_PRIVATE_KEY").ok(),
+            vapid_subject: std::env::var("VAPID_SUBJECT").unwrap_or_else(|_| "mailto:ops@example.com".to_string()),
         }
     }
 }

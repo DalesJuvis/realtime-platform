@@ -12,6 +12,7 @@ use std::sync::Arc;
 use crate::modules::auth::services::TokenService::TokenService;
 use crate::modules::metrics::services::MetricsService::MetricsService;
 use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
+use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
 use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
 use crate::modules::realtime::services::PresenceService::PresenceService;
 use crate::modules::realtime::services::PushFallbackService::PushFallbackService;
@@ -22,6 +23,7 @@ pub struct RealtimeContext {
     pub channel_router: Arc<ChannelRouterService>,
     pub presence: Arc<PresenceService>,
     pub push_fallback: Arc<PushFallbackService>,
+    pub push_subscriptions: Arc<PushSubscriptionRepository>,
     pub rate_limiter: Arc<RateLimitService>,
     pub metrics: Arc<MetricsService>,
 }

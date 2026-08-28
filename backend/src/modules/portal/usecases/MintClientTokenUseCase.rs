@@ -27,5 +27,5 @@ pub fn execute(
         .map_err(|_| PortalError::InvalidTenantSecret)?;
 
     tracing::info!(%tenant_id, sub = %dto.sub, "client token minted via the portal");
-    Ok(ClientTokenResponseDto { token })
+    Ok(ClientTokenResponseDto { token, expires_in: ttl })
 }

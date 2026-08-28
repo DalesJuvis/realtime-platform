@@ -6,7 +6,7 @@
  * Output:  RealtimeClient (not yet connected — caller calls `.connect()`)
  */
 
-import { RealtimeClient } from '@yourorg/realtime-sdk'
+import { RealtimeClient } from '@mio/realtime-sdk'
 import type { ConnectionCredentials } from '@entities/Connection.entity'
 
 /**

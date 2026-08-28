@@ -15,12 +15,17 @@ export interface MintTokenDto {
   readonly ttlSecs?: number
 }
 
-export async function mintTokenAction(dto: MintTokenDto): Promise<string> {
+export interface MintedToken {
+  readonly token: string
+  readonly expiresIn: number
+}
+
+export async function mintTokenAction(dto: MintTokenDto): Promise<MintedToken> {
   const response = await apiRequest(
-    http.post<ApiResponse<{ token: string }>>('/api/v1/portal/tokens', {
+    http.post<ApiResponse<{ token: string; expires_in: number }>>('/api/v1/portal/tokens', {
       sub: dto.sub,
       ttl_secs: dto.ttlSecs,
     }),
   )
-  return response.token
+  return { token: response.token, expiresIn: response.expires_in }
 }

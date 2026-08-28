@@ -15,18 +15,23 @@
 //! never a raw tenant secret. See `PublishMessageHttpController`.
 
 use axum::http::Method;
-use axum::routing::post;
+use axum::routing::{delete, post};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::modules::realtime::controllers::PublishMessageHttpController;
+use crate::modules::realtime::controllers::{PublishMessageHttpController, PushSubscriptionController};
 use crate::modules::realtime::RealtimeContext::RealtimeContext;
 
 pub fn router(ctx: RealtimeContext) -> Router {
-    let cors = CorsLayer::new().allow_origin(Any).allow_methods([Method::POST]).allow_headers(Any);
+    let cors =
+        CorsLayer::new().allow_origin(Any).allow_methods([Method::POST, Method::DELETE]).allow_headers(Any);
 
     Router::new()
         .route("/api/v1/messages", post(PublishMessageHttpController::handle))
+        .route(
+            "/api/v1/push/subscriptions",
+            post(PushSubscriptionController::register).delete(PushSubscriptionController::unregister),
+        )
         .with_state(ctx)
         .layer(cors)
 }
@@ -49,11 +54,12 @@ mod tests {
     use crate::modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
     use crate::modules::push::ports::PushPort::PushPort;
     use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
+    use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
     use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
     use crate::modules::realtime::services::PresenceService::PresenceService;
     use crate::modules::realtime::services::PushFallbackService::PushFallbackService;
 
-    fn test_ctx() -> (RealtimeContext, Arc<TokenService>, Arc<ChannelRouterService>, Arc<RateLimitService>) {
+    async fn test_ctx() -> (RealtimeContext, Arc<TokenService>, Arc<ChannelRouterService>, Arc<RateLimitService>) {
         let auth = Arc::new(TokenService::new());
         let channel_router = Arc::new(ChannelRouterService::new());
         let presence = PresenceService::new(std::time::Duration::from_secs(30), channel_router.clone());
@@ -66,13 +72,24 @@ mod tests {
             project_id: "test".to_string(),
             bearer_token: "test".to_string(),
         });
-        let push_fallback = PushFallbackService::new(channel_router.clone(), push, None, metrics.clone());
+        let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool));
+        let push_fallback = PushFallbackService::new(
+            channel_router.clone(),
+            push,
+            None,
+            push_subscriptions.clone(),
+            None,
+            metrics.clone(),
+        );
 
         let ctx = RealtimeContext {
             auth: auth.clone(),
             channel_router: channel_router.clone(),
             presence,
             push_fallback,
+            push_subscriptions,
             rate_limiter: rate_limiter.clone(),
             metrics,
         };
@@ -111,14 +128,14 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_missing_bearer_token() {
-        let (ctx, ..) = test_ctx();
+        let (ctx, ..) = test_ctx().await;
         let resp = post(router(ctx), None, json!({ "tenant_id": Uuid::new_v4(), "channel_id": "room-1", "payload": "hi" })).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn publishes_and_reaches_a_local_subscriber() {
-        let (ctx, auth, channel_router, _) = test_ctx();
+        let (ctx, auth, channel_router, _) = test_ctx().await;
         let tenant = Uuid::new_v4();
         auth.register_tenant(tenant, b"secret".to_vec());
         let token = auth.issue_token(tenant, "user-1", 60).unwrap();
@@ -146,7 +163,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_token_for_a_different_tenant() {
-        let (ctx, auth, ..) = test_ctx();
+        let (ctx, auth, ..) = test_ctx().await;
         let tenant_a = Uuid::new_v4();
         let tenant_b = Uuid::new_v4();
         auth.register_tenant(tenant_a, b"secret-a".to_vec());
@@ -164,7 +181,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_oversized_payload() {
-        let (ctx, auth, ..) = test_ctx();
+        let (ctx, auth, ..) = test_ctx().await;
         let tenant = Uuid::new_v4();
         auth.register_tenant(tenant, b"secret".to_vec());
         let token = auth.issue_token(tenant, "user-1", 60).unwrap();
@@ -183,7 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_when_tenant_rate_limit_is_exhausted() {
-        let (ctx, auth, _, rate_limiter) = test_ctx();
+        let (ctx, auth, _, rate_limiter) = test_ctx().await;
         let tenant = Uuid::new_v4();
         auth.register_tenant(tenant, b"secret".to_vec());
         let token = auth.issue_token(tenant, "user-1", 60).unwrap();
@@ -204,5 +221,95 @@ mod tests {
 
         let second = post(app, Some(&format!("Bearer {token}")), body).await;
         assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    async fn push_req(app: Router, method: &str, auth_header: Option<&str>, body: serde_json::Value) -> axum::response::Response {
+        let mut req = Request::builder()
+            .method(method)
+            .uri("/api/v1/push/subscriptions")
+            .header("content-type", "application/json");
+        if let Some(h) = auth_header {
+            req = req.header("authorization", h);
+        }
+        app.oneshot(req.body(Body::from(body.to_string())).unwrap()).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn registers_and_matches_a_push_subscription() {
+        let (ctx, auth, ..) = test_ctx().await;
+        let push_subscriptions = ctx.push_subscriptions.clone();
+        let tenant = Uuid::new_v4();
+        auth.register_tenant(tenant, b"secret".to_vec());
+        let token = auth.issue_token(tenant, "user-1", 60).unwrap();
+
+        let resp = push_req(
+            router(ctx),
+            "POST",
+            Some(&format!("Bearer {token}")),
+            json!({
+                "tenant_id": tenant,
+                "endpoint": "https://push.example/abc",
+                "keys": { "p256dh": "p256dh-key", "auth": "auth-key" },
+                "channels": ["orders:*"]
+            }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let matches = push_subscriptions.find_matching(tenant, "orders:42").await.unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].sub, "user-1");
+    }
+
+    #[tokio::test]
+    async fn unregisters_a_push_subscription() {
+        let (ctx, auth, ..) = test_ctx().await;
+        let push_subscriptions = ctx.push_subscriptions.clone();
+        let tenant = Uuid::new_v4();
+        auth.register_tenant(tenant, b"secret".to_vec());
+        let token = auth.issue_token(tenant, "user-1", 60).unwrap();
+        let app = router(ctx);
+
+        push_req(
+            app.clone(),
+            "POST",
+            Some(&format!("Bearer {token}")),
+            json!({
+                "tenant_id": tenant,
+                "endpoint": "https://push.example/abc",
+                "keys": { "p256dh": "p256dh-key", "auth": "auth-key" },
+                "channels": ["orders:1"]
+            }),
+        )
+        .await;
+        assert_eq!(push_subscriptions.find_matching(tenant, "orders:1").await.unwrap().len(), 1);
+
+        let resp = push_req(
+            app,
+            "DELETE",
+            Some(&format!("Bearer {token}")),
+            json!({ "tenant_id": tenant, "endpoint": "https://push.example/abc" }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(push_subscriptions.find_matching(tenant, "orders:1").await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejects_push_subscription_registration_without_bearer_token() {
+        let (ctx, ..) = test_ctx().await;
+        let resp = push_req(
+            router(ctx),
+            "POST",
+            None,
+            json!({
+                "tenant_id": Uuid::new_v4(),
+                "endpoint": "https://push.example/abc",
+                "keys": { "p256dh": "p256dh-key", "auth": "auth-key" },
+                "channels": []
+            }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 }

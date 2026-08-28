@@ -1,6 +1,6 @@
 /**
  * `RealtimeProvider.tsx` — Enveloppe le `RealtimeProvider` de
- * `@yourorg/realtime-sdk-react` avec une reconnexion consciente de
+ * `@mio/realtime-sdk-react` avec une reconnexion consciente de
  * `AppState`.
  *
  * Nécessaire spécifiquement en React Native (contrairement à un onglet
@@ -22,7 +22,7 @@ import {
   RealtimeProvider as BaseRealtimeProvider,
   useRealtimeClient,
   type RealtimeProviderProps,
-} from "@yourorg/realtime-sdk-react";
+} from "@mio/realtime-sdk-react";
 
 function AppStateReconnector({ children }: { children: ReactNode }) {
   const client = useRealtimeClient();
@@ -50,7 +50,7 @@ function AppStateReconnector({ children }: { children: ReactNode }) {
 }
 
 /**
- * Remplace le `RealtimeProvider` de `@yourorg/realtime-sdk-react` dans une
+ * Remplace le `RealtimeProvider` de `@mio/realtime-sdk-react` dans une
  * app React Native — même API (`client`/`config`/`autoConnect`), plus la
  * reconnexion `AppState` ci-dessus. Pour la reconnexion réseau (retour de
  * connectivité), voir `useNetworkReconnect` séparément — optionnelle,

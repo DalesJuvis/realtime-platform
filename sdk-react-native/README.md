@@ -1,8 +1,8 @@
-# @yourorg/realtime-sdk-react-native
+# @mio/realtime-sdk-react-native
 
 Bindings React Native pour
-[`@yourorg/realtime-sdk`](../sdk-typescript) — réexporte l'intégralité de
-[`@yourorg/realtime-sdk-react`](../sdk-react) (aucun de ses hooks/composants
+[`@mio/realtime-sdk`](../sdk-typescript) — réexporte l'intégralité de
+[`@mio/realtime-sdk-react`](../sdk-react) (aucun de ses hooks/composants
 ne touche le DOM, donc tous fonctionnent tels quels en RN) et remplace
 `<RealtimeProvider>` par une version consciente de `AppState`.
 
@@ -41,7 +41,7 @@ séparation plutôt que de les ajouter directement à `sdk-react`.
 ## Installation
 
 ```bash
-npm install @yourorg/realtime-sdk-react-native @yourorg/realtime-sdk
+npm install @mio/realtime-sdk-react-native @mio/realtime-sdk
 # Optionnel — pour useNetworkReconnect :
 npm install @react-native-community/netinfo
 ```
@@ -49,7 +49,7 @@ npm install @react-native-community/netinfo
 ## Démarrage rapide
 
 ```tsx
-import { RealtimeProvider, useChannel, useNetworkReconnect } from "@yourorg/realtime-sdk-react-native";
+import { RealtimeProvider, useChannel, useNetworkReconnect } from "@mio/realtime-sdk-react-native";
 
 function App() {
   return (
@@ -74,7 +74,7 @@ function OrdersFeed() {
 
 ## API
 
-Tout ce qu'exporte [`@yourorg/realtime-sdk-react`](../sdk-react) — voir
+Tout ce qu'exporte [`@mio/realtime-sdk-react`](../sdk-react) — voir
 son README pour `useChannel`, `useSubscription`, `useConnectionState`,
 `<ChannelSubscriber>`, etc. — plus, spécifique à ce package :
 

@@ -9,7 +9,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { RealtimeMessage, Unsubscribe } from '@yourorg/realtime-sdk'
+import type { RealtimeMessage, Unsubscribe } from '@mio/realtime-sdk'
 import type { ChatMessage, ChannelId } from '@entities/Chat.entity'
 import { useConnectionStore } from '@store/connection.store'
 import { useNotificationsStore } from '@store/notifications.store'

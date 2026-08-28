@@ -20,7 +20,7 @@
  */
 
 import { useEffect } from "react";
-import { useRealtimeClient } from "@yourorg/realtime-sdk-react";
+import { useRealtimeClient } from "@mio/realtime-sdk-react";
 
 interface NetInfoState {
   isConnected: boolean | null;
@@ -31,7 +31,7 @@ interface NetInfoModule {
 }
 
 /** Appelez ce hook sous un `<RealtimeProvider>` (de ce package ou de
- * `@yourorg/realtime-sdk-react`) pour reconnecter dès que la connectivité
+ * `@mio/realtime-sdk-react`) pour reconnecter dès que la connectivité
  * réseau revient après une coupure. */
 export function useNetworkReconnect(): void {
   const client = useRealtimeClient();

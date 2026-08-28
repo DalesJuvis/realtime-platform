@@ -12,6 +12,7 @@ import { Button } from '@components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@components/ui/sheet'
 import { ChannelList } from '@modules/chat/components/ChannelList'
 import { NotificationBell } from '@components/shared/NotificationBell'
+import { PushNotificationToggle } from '@components/shared/PushNotificationToggle'
 import { env } from '@lib/env'
 
 interface AppLayoutProps {
@@ -43,10 +44,14 @@ export function AppLayout({ children }: AppLayoutProps) {
             </SheetContent>
           </Sheet>
           <span className="text-sm font-semibold">{env.appName}</span>
-          <NotificationBell />
+          <div className="flex items-center">
+            <PushNotificationToggle />
+            <NotificationBell />
+          </div>
         </header>
 
-        <div className="hidden items-center justify-end border-b px-4 py-2 md:flex">
+        <div className="hidden items-center justify-end gap-1 border-b px-4 py-2 md:flex">
+          <PushNotificationToggle />
           <NotificationBell />
         </div>
 

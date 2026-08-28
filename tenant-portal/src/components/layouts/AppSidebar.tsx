@@ -138,6 +138,7 @@ export function AppSidebar({
   const logout = usePortalAuthStore((s) => s.logout)
   const sidebarOpen = useUiStore((s) => s.sidebarOpen)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const focusMode = useUiStore((s) => s.focusMode)
   const collapsed = !sidebarOpen
   const iconOnly = collapsed && !mobileOpen
   const isProduction = env.appEnv === 'production'
@@ -154,10 +155,16 @@ export function AppSidebar({
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-border bg-card transition-transform duration-200',
-          'lg:static lg:inset-y-auto lg:z-auto lg:translate-x-0 lg:transition-[width]',
+          'fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col overflow-hidden border-r border-border bg-card transition-transform duration-200',
+          'lg:static lg:inset-y-auto lg:z-auto lg:translate-x-0 lg:transition-[width,opacity,border-color] lg:duration-300',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           collapsed ? 'lg:w-16' : 'lg:w-60',
+          // Overview's focus mode (`useUiStore.focusMode`) collapses the
+          // sidebar further still, to nothing — beyond the icon-only rail
+          // `collapsed` alone gives, since the point is showing metrics
+          // and nothing else. Ordered after `collapsed`'s width classes so
+          // `cn`'s `twMerge` lets this one win when both are true.
+          focusMode && 'lg:w-0 lg:border-r-0 lg:opacity-0',
         )}
       >
         <div className={cn('flex items-center gap-2 px-5 py-5', iconOnly && 'justify-center px-0')}>

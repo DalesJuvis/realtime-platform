@@ -31,6 +31,22 @@ export function workspaceNameFromEmail(email: string | null): string {
   return local.length > 0 ? local.charAt(0).toUpperCase() + local.slice(1) : 'Workspace'
 }
 
+/**
+ * Derives the WS host from the connected Portal API URL — same host,
+ * different port: this project always runs WS on 8080 alongside Portal on
+ * 8090 for a given engine instance (see `docker-compose.yml`'s
+ * per-instance port block; same convention `admin`'s `deriveWsHost` uses
+ * for its own Sandbox feature), so there's no separate "WS URL" setting
+ * to ask the tenant for.
+ */
+export function deriveWsHost(portalApiUrl: string): string {
+  try {
+    return new URL(portalApiUrl).hostname
+  } catch {
+    return 'localhost'
+  }
+}
+
 /** Triggers a browser download of an already-fetched blob (e.g. a CSV export). */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)

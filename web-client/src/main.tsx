@@ -11,3 +11,15 @@ createRoot(document.getElementById('root')!).render(
     <Toaster richColors position="top-right" />
   </StrictMode>,
 )
+
+// Registers the PWA/push service worker unconditionally at startup —
+// `PushNotificationToggle` only *subscribes* to push on it later, but the
+// worker itself (offline shell + `push`/`notificationclick` handlers,
+// see `public/sw.js`) needs to be active regardless, for installability.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err: unknown) => {
+      console.warn('Service worker registration failed:', err)
+    })
+  })
+}

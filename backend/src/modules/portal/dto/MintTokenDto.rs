@@ -16,4 +16,9 @@ pub struct MintTokenDto {
 #[derive(Serialize)]
 pub struct ClientTokenResponseDto {
     pub token: String,
+    /// The TTL actually applied (the request's `ttl_secs`, or the 3600s
+    /// default — see `MintClientTokenUseCase`) — returned so a caller
+    /// never has to duplicate that default to know when its own token
+    /// expires (e.g. `tenant-portal`'s downloadable credentials file).
+    pub expires_in: u64,
 }

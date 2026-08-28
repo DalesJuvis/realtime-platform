@@ -107,6 +107,7 @@ mod tests {
     use crate::modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
     use crate::modules::push::ports::PushPort::PushPort;
     use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
+    use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
     use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
     use crate::modules::realtime::services::PresenceService::PresenceService;
     use crate::modules::realtime::services::PushFallbackService::PushFallbackService;
@@ -130,7 +131,9 @@ mod tests {
             project_id: "test".to_string(),
             bearer_token: "test".to_string(),
         });
-        let push_fallback = PushFallbackService::new(channel_router.clone(), push, None, metrics.clone());
+        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool.clone()));
+        let push_fallback =
+            PushFallbackService::new(channel_router.clone(), push, None, push_subscriptions, None, metrics.clone());
 
         let ctx = PortalContext {
             token_service: Arc::new(TokenService::new()),

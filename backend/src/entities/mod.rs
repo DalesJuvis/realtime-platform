@@ -10,3 +10,4 @@ pub mod TenantUser;
 pub mod PortalSession;
 pub mod MessageTemplate;
 pub mod WorkspaceProfile;
+pub mod PushSubscription;

@@ -7,3 +7,5 @@ pub mod UnicastMessageUseCase;
 pub mod ReplayHistoryUseCase;
 pub mod DispatchFrameUseCase;
 pub mod PublishMessageHttpUseCase;
+pub mod RegisterPushSubscriptionUseCase;
+pub mod UnregisterPushSubscriptionUseCase;

@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RealtimeClient, type RealtimeClientConfig } from "@yourorg/realtime-sdk";
+import { RealtimeClient, type RealtimeClientConfig } from "@mio/realtime-sdk";
 
 export type ConnectionState = "idle" | "connecting" | "open" | "closed" | "error";
 

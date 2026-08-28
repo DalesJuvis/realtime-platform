@@ -27,6 +27,10 @@ tower-http = { version = "0.5", features = ["cors"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate", "uuid", "chrono"] }
 argon2 = "0.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+p256 = { version = "0.13.2", features = ["ecdsa", "ecdh", "pkcs8"] }
+aes-gcm = "0.10.3"
+hkdf = "0.12.4"
+url = "2.5.8"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

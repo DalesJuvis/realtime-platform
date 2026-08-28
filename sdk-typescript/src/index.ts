@@ -24,6 +24,20 @@ export type { DecodedFrame, FrameFields } from "./protocol.js";
 
 export { DEFAULT_MAX_MESSAGE_BYTES } from "./chunking.js";
 
+export {
+  isNotificationSupported,
+  requestNotificationPermission,
+  attachBackgroundNotifications,
+  registerPushServiceWorker,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "./notifications.js";
+export type {
+  BackgroundNotificationOptions,
+  PushSubscriptionInfo,
+  PushSubscriptionKeys,
+} from "./notifications.js";
+
 import { RealtimeClient, type RealtimeClientConfig } from "./client.js";
 import type { RealtimeAdapter } from "./types.js";
 
