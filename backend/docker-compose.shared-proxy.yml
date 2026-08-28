@@ -33,9 +33,38 @@ services:
     networks:
       - default
       - proxy
+    depends_on:
+      service-cache:
+        condition: service_healthy
+
+  # Same `service-cache` name/image as docker-compose.yml's local demo —
+  # only reached if `REDIS_URL` is set in `.env` (both inter-instance
+  # broadcast and durable REPLAY history, see `modules::cluster`/
+  # `modules::history`). No ports published — reachable only from
+  # `service-messengio` over this compose project's own default network,
+  # by container name (`redis://service-cache:6379`), never the internet
+  # or even the shared `proxy` network. Unlike the local demo's ephemeral
+  # instance, `--appendonly yes` + the named volume below are what make
+  # REPLAY history actually survive a container restart here, not just a
+  # process one — the whole point of running this in production.
+  service-cache:
+    image: redis:7-alpine
+    container_name: service-cache
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
 
 volumes:
   portal-data:
+  redis-data:
 
 networks:
   proxy:
