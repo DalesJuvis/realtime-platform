@@ -15,6 +15,7 @@ import { useConnectionStore } from '@store/connection.store'
 import { useNotificationsStore } from '@store/notifications.store'
 import { decodeChatEnvelope, encodeChatEnvelope } from '@actions/chat/chatEnvelope.action'
 import { omitKey } from '@lib/objectUtils'
+import { randomId } from '@lib/utils'
 
 const MAX_MESSAGES_PER_CHANNEL = 500
 
@@ -37,7 +38,7 @@ interface ChatState {
 function toChatMessage(raw: RealtimeMessage): ChatMessage {
   const envelope = decodeChatEnvelope(raw.payload)
   return {
-    id: crypto.randomUUID(),
+    id: randomId(),
     channelId: raw.channelId,
     from: envelope?.from ?? null,
     text: envelope?.text ?? raw.payload,
@@ -129,7 +130,7 @@ export const useChatStore = create<ChatState>()(
           const payload = encodeChatEnvelope({ from: displayName, text })
 
           const message: ChatMessage = {
-            id: crypto.randomUUID(),
+            id: randomId(),
             channelId,
             from: displayName,
             text,

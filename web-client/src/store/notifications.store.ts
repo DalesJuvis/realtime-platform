@@ -7,6 +7,7 @@
  */
 
 import { create } from 'zustand'
+import { randomId } from '@lib/utils'
 import type { AppNotification } from '@entities/Notification.entity'
 
 const MAX_NOTIFICATIONS = 100
@@ -26,7 +27,7 @@ export const useNotificationsStore = create<NotificationsState>()((set) => ({
 
   push: (channelId, preview) => {
     const notification: AppNotification = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       channelId,
       preview,
       createdAt: Date.now(),
