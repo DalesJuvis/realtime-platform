@@ -390,8 +390,12 @@ Custom HTML block, a theme's header/footer area) — no PHP, no build
 step. See `sdk-wordpress/README.md`'s "Sans installer l'extension"
 section for the full usage and its honest token-exposure trade-off.
 
+No hosting to set up — the repo is public, so [jsDelivr's GitHub
+CDN](https://www.jsdelivr.com/documentation#id-github) serves the file
+straight from a tagged release, globally cached:
+
 ```html
-<script src="https://your-site.example/mio-embed.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-embed.js"
   data-host="realtime.example.com"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -399,3 +403,41 @@ section for the full usage and its honest token-exposure trade-off.
   data-replay="true"
 ></script>
 ```
+
+> **Pin the version.** `@v0.1.0` above is a git tag — jsDelivr caches
+> tagged refs aggressively (fast, and a future commit can never silently
+> change what's already embedded on someone's site). Never use `@master`
+> in a URL you hand to a third party: it's mutable, so a later change to
+> this repo could break every site embedding it without warning. Cut a
+> new tag and bump the URL when you want people to pick up a fix.
+
+### `mio-protocol.js` + `mio-client.js` — building your own page logic
+
+For anything beyond the auto-rendered feed above — custom UI around
+messages, multiple channels, your own publish form — load the two files
+`mio-embed.js` bundles, and drive `MioRealtimeClient` yourself. Same
+CDN, same tag, loaded in dependency order:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-protocol.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.0/sdk-wordpress/assets/js/mio-client.js"></script>
+<script>
+  var client = new window.MioRealtimeClient({
+    host: 'realtime.example.com',
+    secure: true,
+    tenantId: '<your-tenant-id>',
+    token: '…', // minted server-side, never your tenant secret
+  })
+  client.subscribe('orders:42', function (message) {
+    console.log(message.channelId, message.payload)
+  })
+  client.connect()
+  client.publish('orders:42', 'order created')
+</script>
+```
+
+> **Not from this CDN:** `mio-shortcode.js`. It only makes sense wired up
+> by the WordPress plugin itself — it expects DOM structure
+> (`.mio-realtime-feed`) and a `mioRealtimeConfig.restTokenUrl` global
+> that only `wp_localize_script` injects, so there's nothing a bare
+> `<script>` tag on another site could do with it.
