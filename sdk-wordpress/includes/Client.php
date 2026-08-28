@@ -43,7 +43,7 @@ class Client
      *        (requires WordPress to be loaded); inject your own outside
      *        WordPress or in tests.
      */
-    public function __construct($apiUrl, $tenantId, $secret, HttpTransport $transport = null)
+    public function __construct($apiUrl, $tenantId, $secret, ?HttpTransport $transport = null)
     {
         $this->apiUrl = rtrim($apiUrl, '/');
         $this->tenantId = $tenantId;

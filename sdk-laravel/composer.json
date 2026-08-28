@@ -1,0 +1,44 @@
+{
+  "name": "mio/realtime-laravel",
+  "description": "Laravel service provider + facade for the mio realtime-platform's framework-independent PHP client (server-side token minting and message publishing).",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "require": {
+    "php": ">=8.0",
+    "illuminate/support": "^9.0|^10.0|^11.0|^12.0",
+    "illuminate/http": "^9.0|^10.0|^11.0|^12.0",
+    "mio/realtime-wordpress": "*"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6|^10.0"
+  },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "../sdk-wordpress"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Mio\\Realtime\\Laravel\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Mio\\Realtime\\Laravel\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": ["Mio\\Realtime\\Laravel\\MioRealtimeServiceProvider"],
+      "aliases": {
+        "MioRealtime": "Mio\\Realtime\\Laravel\\Facades\\MioRealtime"
+      }
+    }
+  },
+  "scripts": {
+    "test": "phpunit --colors=always tests"
+  }
+}

@@ -116,6 +116,63 @@ await fetch('https://realtime.example.com:8090/api/v1/push/subscriptions', {
 > still depends on the OS/browser waking it for the push — outside any
 > SDK's or server's control.
 
+## Advanced features (connected SDKs)
+
+Available identically in every persistently-connected SDK — TypeScript,
+Python, Rust, Android — once `client` is constructed as shown in each
+SDK's own section below. Not available in the lightweight WordPress
+browser client (`mio-client.js`/`mio-embed.js` — deliberately trimmed,
+see their own header comments) or the stateless REST endpoints.
+
+### Wildcard subscribe
+
+Subscribe to a whole family of channels with a trailing `*` — every
+matching `channelId` routes to the same handler.
+
+```typescript
+client.subscribe('orders:*', (message) => console.log(message.channelId, message.payload))
+```
+
+### Unicast — direct to one user
+
+Sends to one connected user instead of a channel's subscribers.
+`userId` reuses the frame's `channelId` field, so it inherits the same
+24-byte limit.
+
+```typescript
+client.unicast('user-42', 'you have a new order')
+```
+
+### Replay — catch up on channel history
+
+Requests everything published to a channel since `sinceUnixSeconds`
+(`0` = all available history). Replayed messages arrive through the
+same `subscribe()` handler already registered for that channel — no
+separate callback to wire up.
+
+```typescript
+client.subscribe('orders:42', (message) => console.log(message.payload))
+client.replay('orders:42', 0)
+```
+
+> **Caveat:** not supported on a wildcard pattern (`orders:*`) — the
+> server silently ignores a REPLAY request for anything but an exact
+> channel ID.
+
+### Automatic chunking
+
+`publish()` and `unicast()` transparently split any payload larger than
+one 211-byte frame into multiple frames and reassemble them on the
+receiving end before your `subscribe()` handler ever sees it — nothing
+to configure. Only the stateless REST publish endpoint (`POST
+/api/v1/messages`, see REST API above) lacks this and caps at 211
+bytes per call.
+
+Same methods, other SDKs: Python — `await client.unicast(...)` /
+`await client.replay(...)`; Rust — `client.unicast(...)` /
+`client.replay(...)`; Android (Kotlin/Java) — `client.unicast(...)` /
+`client.replay(...)`.
+
 ## JavaScript / TypeScript
 
 Browser, Node.js, and the base for the React/React Native bindings.
@@ -383,12 +440,52 @@ connection in the visitor's browser.
 Functional starting point, not a themed component — style
 `.mio-realtime-feed` yourself.
 
-### No plugin at all — `mio-embed.js`
+## Laravel
 
-A single, dependency-free file for pasting directly into WordPress (a
-Custom HTML block, a theme's header/footer area) — no PHP, no build
-step. See `sdk-wordpress/README.md`'s "Sans installer l'extension"
-section for the full usage and its honest token-exposure trade-off.
+Same framework-independent `Mio\Realtime\Client` PHP class the
+WordPress plugin uses above — it calls zero WordPress functions itself
+(see `sdk-wordpress/includes/HttpTransport.php`'s own doc comment) —
+wired into Laravel's service container instead: a service provider, a
+facade, and Laravel's own HTTP client in place of `wp_remote_post`.
+
+```bash
+composer require mio/realtime-laravel
+php artisan vendor:publish --tag=mio-realtime-config
+```
+
+```env
+MIO_REALTIME_API_URL=https://realtime.example.com:8090
+MIO_REALTIME_TENANT_ID=<your-tenant-id>
+MIO_REALTIME_SECRET=<your-tenant-secret>
+```
+
+```php
+use Mio\Realtime\Laravel\Facades\MioRealtime;
+
+$minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn }
+MioRealtime::publish('orders:42', 'order created', $minted->token);
+```
+
+Or resolve `Mio\Realtime\Client` directly via the container (constructor
+injection, a form request, a job) instead of the facade — both reach
+the same bound singleton. See `sdk-laravel/README.md` for why this
+package depends on `mio/realtime-wordpress` (naming leftover, not a
+functional coupling) and its honest test-coverage caveat.
+
+> **Caveat:** same HTTP-only publish path as WordPress above — no
+> persistent WebSocket connection, no chunking. `publish()` throws
+> before any network call if `$payload` exceeds 211 UTF-8 bytes.
+
+## Embed script — any website, no build step
+
+Not WordPress-specific despite living in `sdk-wordpress/assets/js/` —
+`mio-embed.js` is a single, dependency-free file for pasting into any
+HTML page (a Custom HTML block, a theme's header/footer area, a static
+site's `<head>`) — no PHP, no build step, no framework of any kind. See
+`sdk-wordpress/README.md`'s "Sans installer l'extension" section for
+the full usage and its honest token-exposure trade-off; the
+`vanilla-client/` directory in this repo is a working local test
+harness for it.
 
 No hosting to set up — the repo is public, so [jsDelivr's GitHub
 CDN](https://www.jsdelivr.com/documentation#id-github) serves the file
