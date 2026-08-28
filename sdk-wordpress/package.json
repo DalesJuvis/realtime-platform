@@ -4,6 +4,6 @@
   "version": "0.1.0",
   "description": "Test runner only — this package ships no JS dependencies to the WordPress site itself (assets/js/*.js are plain, dependency-free scripts).",
   "scripts": {
-    "test": "node --test tests/js/protocol.test.js tests/js/client.test.js"
+    "test": "node --test tests/js/protocol.test.js tests/js/client.test.js tests/js/embed.test.js"
   }
 }

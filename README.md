@@ -21,7 +21,10 @@ tenant-portal/       Portail self-service tenant (login, devices, jetons)
 ```
 
 Chaque dossier a son propre `README.md` avec installation, démarrage
-rapide, et limitations connues.
+rapide, et limitations connues. [`DOCS.md`](DOCS.md) rassemble un
+démarrage rapide par SDK en un seul fichier (même contenu que la page
+Docs intégrée à `tenant-portal/`, avec des valeurs d'exemple à la place
+de celles d'un tenant réel).
 
 ## Statut de validation — à lire avant de faire confiance à quoi que ce soit ici
 

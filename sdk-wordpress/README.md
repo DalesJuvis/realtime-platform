@@ -13,11 +13,14 @@ propres à WordPress/PHP.
 >   testé** : 9/9 tests PHPUnit passants (`composer test`), contre un
 >   `HttpTransport` factice, sans dépendre de WordPress (voir la doc de
 >   tête de `HttpTransport.php` pour pourquoi c'est possible).
-> - `assets/js/mio-protocol.js` (codec du frame binaire) et
->   `assets/js/mio-client.js` (client WebSocket navigateur) — **réellement
->   testés** : 17/17 tests `node --test` passants (`npm test`), y compris
+> - `assets/js/mio-protocol.js` (codec du frame binaire), `mio-client.js`
+>   (client WebSocket navigateur) et `mio-embed.js` (même logique,
+>   consolidée en un seul fichier — voir plus bas) — **réellement
+>   testés** : 23/23 tests `node --test` passants (`npm test`), y compris
 >   un test dédié au découpage UTF-8 sur une frontière de caractère valide
->   (piège classique d'un port naïf).
+>   (piège classique d'un port naïf) et un test garantissant que
+>   `mio-embed.js` reste une copie fidèle du reste (mêmes cas, deux
+>   fichiers).
 > - `includes/RestController.php`, `Shortcode.php`, `AdminPage.php`
 >   (l'intégration WordPress proprement dite : routes REST, shortcode,
 >   page de réglages) — **non testées au runtime**, faute d'installation
@@ -52,7 +55,7 @@ via le shortcode `[mio_realtime]`.
 ```bash
 composer install    # includes/ + tests/php (phpunit en dev uniquement)
 composer test        # 9 tests
-npm test              # 17 tests (assets/js/)
+npm test              # 23 tests (assets/js/)
 ```
 
 Puis, dans WordPress : copier ce dossier dans `wp-content/plugins/`,
@@ -85,6 +88,43 @@ sortir (voir `RestController`, qui fait exactement ça).
 Rend un flux live minimal (liste de messages, mis à jour en direct) —
 point de départ fonctionnel, pas un composant themé (même logique que
 `sdk-react`'s `<ConnectionIndicator>` : un vrai début, pas une UI finie).
+
+## Sans installer l'extension — `mio-embed.js`
+
+Pas d'accès à `wp-content/plugins/`, ou juste besoin d'un flux sur une
+seule page ? `assets/js/mio-embed.js` est `mio-protocol.js` +
+`mio-client.js` consolidés en **un seul fichier**, sans dépendance, à
+coller directement dans WordPress (bloc HTML personnalisé, zone
+"Insérer en-tête et pied de page" du thème, `footer.php`) — aucun PHP,
+aucune étape de build.
+
+```html
+<script src="https://votre-site.example/mio-embed.js"
+  data-host="mio.gabonnettoyage.online"
+  data-tenant-id="12345678-9abc-def0-1122-334455667788"
+  data-token="…"
+  data-channel="orders:42"
+  data-limit="20"
+  data-replay="true"
+></script>
+<div id="my-feed"></div> <!-- optionnel : sans data-target, une div est créée automatiquement -->
+```
+
+**Un script exécuté dans le navigateur d'un visiteur ne peut jamais
+détenir votre secret tenant en sécurité** — n'importe qui peut voir le
+code source de la page. `mio-embed.js` n'accepte donc qu'un jeton *déjà
+miné* (`data-token`) : jamais le secret. Ce jeton reste visible dans le
+code source une fois sur la page — c'est le compromis honnête d'un embed
+sans backend, pas un bug : exactement comme une clé API publique ou une
+clé publiable Stripe. Minez-en un avec un `sub` à faible privilège
+(`"public-embed"`, pas un vrai utilisateur) et un TTL que vous êtes prêt à
+faire tourner (`Client::mintToken($sub, $ttlSecs)` côté PHP, ou
+`POST /api/v1/auth/tokens` directement — voir le README de
+`sdk-typescript`), puis renouvelez-le sur ce rythme.
+
+Omettre `data-token`/`data-channel` charge juste `window.MioEmbedClient`
+(le constructeur) sans rendu automatique, pour qui préfère construire sa
+propre UI.
 
 ## Fonctionnalités
 
