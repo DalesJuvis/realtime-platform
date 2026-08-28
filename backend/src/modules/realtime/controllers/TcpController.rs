@@ -53,7 +53,7 @@ pub async fn handle_connection(socket: TcpStream, ctx: RealtimeContext) -> std::
                     continue;
                 }
 
-                match DispatchFrameUseCase::execute(&ctx, session_id, &mut authenticated_tenant, &frame) {
+                match DispatchFrameUseCase::execute(&ctx, session_id, &mut authenticated_tenant, &frame).await {
                     FrameCommand::Subscribed(key, mut rx) => {
                         let out_tx = out_tx.clone();
                         let handle = tokio::spawn(async move {

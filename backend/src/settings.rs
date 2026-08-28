@@ -25,6 +25,13 @@ pub struct Settings {
     /// `None` disables multi-instance broadcast (single-instance mode, no
     /// Redis dependency) — a first-class deployment mode, not a degraded fallback.
     pub redis_url: Option<String>,
+    /// Approximate cap (`XADD ... MAXLEN ~`) on each channel's durable
+    /// Redis Stream (`modules::history::adapters::RedisStreamsHistoryAdapter`)
+    /// — only relevant when `redis_url` is set. Deliberately well above
+    /// `ChannelStateRepository::DEFAULT_HISTORY_CAPACITY` (the in-memory
+    /// ring buffer's cap): this exists specifically to outlast that
+    /// buffer's 50-entry/in-process-only limits, not to match them.
+    pub history_stream_maxlen: usize,
     /// `None` means no `ADMIN_API_TOKEN` was provided: the caller must
     /// generate a temporary one and log it, since it wouldn't survive a
     /// restart anyway (dev convenience, never leave this as-is in production).
@@ -74,6 +81,10 @@ impl Settings {
             fcm_project_id: std::env::var("FCM_PROJECT_ID").unwrap_or_default(),
             fcm_bearer_token: std::env::var("FCM_BEARER_TOKEN").unwrap_or_default(),
             redis_url: std::env::var("REDIS_URL").ok(),
+            history_stream_maxlen: std::env::var("HISTORY_STREAM_MAXLEN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1000),
             admin_api_token: std::env::var("ADMIN_API_TOKEN").ok(),
             portal_db_path: std::env::var("PORTAL_DB_PATH").unwrap_or_else(|_| "portal.db".to_string()),
             portal_session_secret: std::env::var("PORTAL_SESSION_SECRET").ok(),

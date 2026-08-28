@@ -12,10 +12,13 @@
 //! every operation takes the caller's tenant and cross-checks it against
 //! the key's tenant before touching the repository (constraint #2).
 
+use std::sync::Arc;
+
 use tokio::sync::broadcast;
 
 use crate::entities::ChannelKey::{ChannelKey, TenantId};
 use crate::entities::Frame::FRAME_SIZE;
+use crate::modules::history::ports::HistoryPort::HistoryPort;
 use crate::modules::realtime::repositories::ChannelStateRepository::{
     ChannelStateRepository, WildcardKey, DEFAULT_HISTORY_CAPACITY,
 };
@@ -50,6 +53,14 @@ pub(crate) fn glob_match(pattern: &str, candidate: &str) -> bool {
 /// tenant isolation on every operation.
 pub struct ChannelRouterService {
     repo: ChannelStateRepository,
+    /// `None` in single-instance mode without `REDIS_URL` (or when Redis
+    /// connection fails at startup) — REPLAY then falls back entirely to
+    /// `repo`'s in-memory ring buffer, exactly today's behavior. `Some`
+    /// makes `history_port` the sole source for `replay()` (a strict
+    /// superset of the ring buffer, since every `publish()` writes to
+    /// both), while `publish()` keeps writing to the ring buffer too — it
+    /// stays a cheap local cache/fallback even when Redis is enabled.
+    history_port: Option<Arc<dyn HistoryPort>>,
 }
 
 impl ChannelRouterService {
@@ -60,7 +71,19 @@ impl ChannelRouterService {
     pub fn with_history_capacity(history_capacity: usize) -> Self {
         Self {
             repo: ChannelStateRepository::new(history_capacity),
+            history_port: None,
         }
+    }
+
+    /// Attaches a durable `HistoryPort`, consuming `self` — call this
+    /// *before* wrapping the result in `Arc` (see `main.rs`: unlike
+    /// `RedisClusterAdapter`, which needs an already-`Arc`'d
+    /// `channel_router` to re-inject remote frames, `RedisStreamsHistoryAdapter`
+    /// has no such circular dependency, so there's no reason to require
+    /// interior mutability here just to accommodate it).
+    pub fn with_history_port(mut self, port: Arc<dyn HistoryPort>) -> Self {
+        self.history_port = Some(port);
+        self
     }
 
     /// Subscribes to a **pattern** of channels (`orders:*`) rather than an
@@ -127,6 +150,12 @@ impl ChannelRouterService {
             entry.sender.send(frame).unwrap_or(0)
         };
 
+        // Fire-and-forget durable persist, on top of (never instead of) the
+        // in-memory buffer above — see `history_port`'s own doc comment.
+        if let Some(history_port) = &self.history_port {
+            history_port.persist(key, frame);
+        }
+
         // Fan-out to this tenant's wildcard subscriptions. The number of
         // active patterns is expected to stay small, so a linear scan per
         // publish is plenty and avoids a dedicated index for a marginal need.
@@ -142,7 +171,14 @@ impl ChannelRouterService {
     /// Frames published on `key` since `since_unix_secs` (exclusive), in
     /// chronological order — answers a REPLAY opcode (0x07). `0` returns
     /// the entire available history.
-    pub fn replay(
+    ///
+    /// `async` — the one place in this router that can involve real
+    /// network I/O (`history_port.since()`, when Redis-backed durable
+    /// history is enabled), unlike every other method here, which stays
+    /// synchronous. See `HistoryPort`'s doc comment for why REPLAY alone
+    /// justifies this, and `DispatchFrameUseCase`'s for how that
+    /// propagates to the one opcode arm that now needs `.await`.
+    pub async fn replay(
         &self,
         requester_tenant: TenantId,
         key: &ChannelKey,
@@ -153,6 +189,11 @@ impl ChannelRouterService {
                 session: requester_tenant,
                 requested: key.tenant_id,
             });
+        }
+        if let Some(history_port) = &self.history_port {
+            // Strict superset of the ring buffer (every publish() writes
+            // both), so no merge needed — just prefer it outright.
+            return Ok(history_port.since(key, since_unix_secs).await);
         }
         Ok(self.repo.get_or_create_channel(key).history.since(since_unix_secs))
     }
@@ -246,8 +287,8 @@ mod tests {
         assert_eq!(delivered, 0);
     }
 
-    #[test]
-    fn replay_returns_history_after_disconnect() {
+    #[tokio::test]
+    async fn replay_returns_history_after_disconnect() {
         let router = ChannelRouterService::new();
         let key = ChannelKey::new(tenant_a(), "room-1");
 
@@ -263,17 +304,17 @@ mod tests {
         router.publish(tenant_a(), &key, frame1).unwrap();
         router.publish(tenant_a(), &key, frame2).unwrap();
 
-        let replayed = router.replay(tenant_a(), &key, 0).unwrap();
+        let replayed = router.replay(tenant_a(), &key, 0).await.unwrap();
         assert_eq!(replayed.len(), 2);
         assert_eq!(replayed[0], frame1);
         assert_eq!(replayed[1], frame2);
     }
 
-    #[test]
-    fn replay_rejects_foreign_tenant() {
+    #[tokio::test]
+    async fn replay_rejects_foreign_tenant() {
         let router = ChannelRouterService::new();
         let key = ChannelKey::new(tenant_a(), "room-1");
-        let err = router.replay(tenant_b(), &key, 0).unwrap_err();
+        let err = router.replay(tenant_b(), &key, 0).await.unwrap_err();
         assert_eq!(
             err,
             RouterError::TenantMismatch {
@@ -283,8 +324,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn history_buffer_evicts_oldest_beyond_capacity() {
+    #[tokio::test]
+    async fn history_buffer_evicts_oldest_beyond_capacity() {
         let router = ChannelRouterService::with_history_capacity(2);
         let key = ChannelKey::new(tenant_a(), "room-1");
 
@@ -296,7 +337,7 @@ mod tests {
             router.publish(tenant_a(), &key, frame).unwrap();
         }
 
-        let replayed = router.replay(tenant_a(), &key, 0).unwrap();
+        let replayed = router.replay(tenant_a(), &key, 0).await.unwrap();
         assert_eq!(replayed.len(), 2);
         let frame = crate::entities::Frame::Frame::parse(&replayed[0]).unwrap();
         assert_eq!(frame.payload(), "msg-1");
@@ -355,5 +396,57 @@ mod tests {
 
         let delivered = router.publish(tenant_b(), &key_b, frame).unwrap();
         assert_eq!(delivered, 0);
+    }
+
+    /// In-process `HistoryPort` test double — proves the *wiring*
+    /// (`publish()` calls `persist()`, `replay()` prefers `history_port`
+    /// over the ring buffer) without needing a live Redis connection.
+    /// `RedisStreamsHistoryAdapter` itself has its own tests, against a
+    /// real Redis instance, in its own module.
+    struct FakeHistoryPort {
+        persisted: std::sync::Mutex<Vec<(ChannelKey, [u8; FRAME_SIZE])>>,
+    }
+
+    impl FakeHistoryPort {
+        fn new() -> Self {
+            Self {
+                persisted: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl crate::modules::history::ports::HistoryPort::HistoryPort for FakeHistoryPort {
+        fn persist(&self, key: &ChannelKey, frame: [u8; FRAME_SIZE]) {
+            self.persisted.lock().unwrap().push((key.clone(), frame));
+        }
+
+        async fn since(&self, key: &ChannelKey, _since_unix_secs: u64) -> Vec<[u8; FRAME_SIZE]> {
+            self.persisted
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(k, _)| k == key)
+                .map(|(_, f)| *f)
+                .collect()
+        }
+    }
+
+    #[tokio::test]
+    async fn publish_persists_to_history_port_and_replay_prefers_it() {
+        let history_port = Arc::new(FakeHistoryPort::new());
+        let router = ChannelRouterService::new().with_history_port(history_port.clone());
+        let key = ChannelKey::new(tenant_a(), "room-1");
+
+        let frame = crate::entities::Frame::FrameBuilder::new(crate::entities::Frame::Opcode::Publish, tenant_a())
+            .channel_id("room-1")
+            .payload("durable msg")
+            .build();
+        router.publish(tenant_a(), &key, frame).unwrap();
+
+        assert_eq!(history_port.persisted.lock().unwrap().len(), 1);
+
+        let replayed = router.replay(tenant_a(), &key, 0).await.unwrap();
+        assert_eq!(replayed, vec![frame]);
     }
 }

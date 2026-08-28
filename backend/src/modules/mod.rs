@@ -3,6 +3,7 @@ pub mod auth;
 pub mod rate_limit;
 pub mod push;
 pub mod cluster;
+pub mod history;
 pub mod metrics;
 pub mod admin;
 pub mod portal;

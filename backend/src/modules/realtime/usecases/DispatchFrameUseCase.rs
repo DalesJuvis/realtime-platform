@@ -30,9 +30,13 @@ use crate::modules::realtime::RealtimeContext::RealtimeContext;
 /// Processes an already-parsed frame: business logic shared by WS/TCP
 /// (auth, heartbeat, sub, pub + push fallback).
 ///
-/// Measures and records processing latency (excluding network I/O, which
-/// is the caller's concern) plus a per-tenant/opcode message counter, for `/api/v1/system/metrics`.
-pub fn execute(
+/// Measures and records processing latency plus a per-tenant/opcode
+/// message counter, for `/api/v1/system/metrics`. Excludes network I/O for
+/// every opcode except REPLAY (`async` since `ReplayHistoryUseCase` can
+/// involve a real Redis round-trip when durable history is enabled — see
+/// that use case's own doc comment) — a deliberate, documented exception,
+/// not a drift from the original rule.
+pub async fn execute(
     ctx: &RealtimeContext,
     session_id: SessionId,
     authenticated_tenant: &mut Option<TenantId>,
@@ -41,14 +45,14 @@ pub fn execute(
     let started_at = Instant::now();
     let opcode = frame.opcode();
 
-    let command = execute_inner(ctx, session_id, authenticated_tenant, frame);
+    let command = execute_inner(ctx, session_id, authenticated_tenant, frame).await;
 
     ctx.metrics.record_frame(frame.tenant_id(), opcode.label(), started_at.elapsed());
 
     command
 }
 
-fn execute_inner(
+async fn execute_inner(
     ctx: &RealtimeContext,
     session_id: SessionId,
     authenticated_tenant: &mut Option<TenantId>,
@@ -67,7 +71,7 @@ fn execute_inner(
         Opcode::Unsub => UnsubscribeChannelUseCase::execute(ctx, session_id, *authenticated_tenant, frame),
         Opcode::Publish => PublishMessageUseCase::execute(ctx, session_id, *authenticated_tenant, frame),
         Opcode::Unicast => UnicastMessageUseCase::execute(ctx, session_id, *authenticated_tenant, frame),
-        Opcode::Replay => ReplayHistoryUseCase::execute(ctx, session_id, *authenticated_tenant, frame),
+        Opcode::Replay => ReplayHistoryUseCase::execute(ctx, session_id, *authenticated_tenant, frame).await,
         Opcode::Message | Opcode::Presence => FrameCommand::None, // server -> client only opcodes
     }
 }

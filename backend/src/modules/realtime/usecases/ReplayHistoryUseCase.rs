@@ -3,7 +3,12 @@
 //! **Action:** Handles the REPLAY opcode — catch-up history retrieval.
 //! **Input:** `RealtimeContext`, session ID, authenticated tenant, REPLAY `Frame`.
 //! **Output:** `FrameCommand::Replayed` with matching frames.
-//! **Side effects:** None (read-only).
+//! **Side effects:** None (read-only) — but, unlike every other use case
+//! in this module, can involve real network I/O: `ChannelRouterService::replay`
+//! is `async` because a Redis-backed `HistoryPort` may be answering it (see
+//! that method's own doc comment). This is the one deliberate exception to
+//! `DispatchFrameUseCase::execute`'s "processing latency excludes network
+//! I/O" rule — REPLAY's recorded latency legitimately includes it now.
 //! **Dependencies:** `services::ChannelRouterService`.
 
 use crate::entities::ChannelKey::{ChannelKey, SessionId, TenantId};
@@ -11,7 +16,7 @@ use crate::entities::Frame::Frame;
 use crate::modules::realtime::dto::FrameCommand::FrameCommand;
 use crate::modules::realtime::RealtimeContext::RealtimeContext;
 
-pub fn execute(
+pub async fn execute(
     ctx: &RealtimeContext,
     session_id: SessionId,
     authenticated_tenant: Option<TenantId>,
@@ -38,7 +43,7 @@ pub fn execute(
     // the whole history available in the channel's ring buffer.
     let since_secs: u64 = frame.payload().trim().parse().unwrap_or(0);
     let key = ChannelKey::new(tenant_id, frame.channel_id());
-    match ctx.channel_router.replay(tenant_id, &key, since_secs) {
+    match ctx.channel_router.replay(tenant_id, &key, since_secs).await {
         Ok(frames) => FrameCommand::Replayed(frames),
         Err(err) => {
             tracing::debug!(%session_id, error = %err, "REPLAY rejected");

@@ -36,6 +36,8 @@ use modules::admin::AdminContext::AdminContext;
 use modules::auth::services::TokenService::TokenService;
 use modules::cluster::adapters::RedisClusterAdapter::RedisClusterAdapter;
 use modules::cluster::ports::ClusterBroadcastPort::ClusterBroadcastPort;
+use modules::history::adapters::RedisStreamsHistoryAdapter::RedisStreamsHistoryAdapter;
+use modules::history::ports::HistoryPort::HistoryPort;
 use modules::metrics::services::MetricsService::MetricsService;
 use modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
 use modules::push::adapters::WebPushAdapter::WebPushAdapter;
@@ -63,7 +65,31 @@ async fn main() {
         auth.register_tenant(Uuid::from_u128(1), secret.clone().into_bytes());
     }
 
-    let channel_router = Arc::new(ChannelRouterService::new());
+    // Durable channel history: optional, enabled only if REDIS_URL is set
+    // — same on/off signal as the cluster bus below, gated separately here
+    // since a `HistoryPort` must be attached to `ChannelRouterService`
+    // *before* it's wrapped in `Arc` (see `with_history_port`'s own doc
+    // comment for why), which has to happen ahead of everything else that
+    // takes a `channel_router.clone()`.
+    let history_port: Option<Arc<dyn HistoryPort>> = match &settings.redis_url {
+        Some(url) => match RedisStreamsHistoryAdapter::connect(url, settings.history_stream_maxlen).await {
+            Ok(adapter) => {
+                tracing::info!(%url, maxlen = settings.history_stream_maxlen, "connected to Redis for durable channel history (REPLAY)");
+                Some(adapter)
+            }
+            Err(err) => {
+                tracing::error!(error = %err, %url, "Redis history stream connection failed, REPLAY falls back to in-memory history only");
+                None
+            }
+        },
+        None => None,
+    };
+
+    let mut channel_router = ChannelRouterService::new();
+    if let Some(port) = history_port {
+        channel_router = channel_router.with_history_port(port);
+    }
+    let channel_router = Arc::new(channel_router);
     let presence = PresenceService::new(settings.presence_timeout, channel_router.clone());
     let rate_limiter = Arc::new(RateLimitService::new(Default::default()));
     let metrics = MetricsService::new();
