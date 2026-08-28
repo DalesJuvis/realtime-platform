@@ -118,3 +118,67 @@
 .scrollbar-thin:hover::-webkit-scrollbar-thumb {
   background-color: hsl(var(--border));
 }
+
+/*
+ * Prism.js token colors for `CodeBlock` — the Dracula palette
+ * (draculatheme.com/prism, official-ish token mapping), fixed regardless
+ * of this app's own light/dark toggle (see CodeBlock.tsx's doc comment
+ * for why: code blocks staying dark is a deliberate choice, not tied to
+ * `.dark`). Scoped to `code[class*="language-"]` so these never leak onto
+ * unrelated `.token`-classed content.
+ */
+code[class*='language-'] .token.comment,
+code[class*='language-'] .token.prolog,
+code[class*='language-'] .token.doctype,
+code[class*='language-'] .token.cdata {
+  color: #6272a4;
+}
+code[class*='language-'] .token.punctuation {
+  color: #f8f8f2;
+}
+code[class*='language-'] .token.property,
+code[class*='language-'] .token.tag,
+code[class*='language-'] .token.constant,
+code[class*='language-'] .token.symbol,
+code[class*='language-'] .token.deleted {
+  color: #ff79c6;
+}
+code[class*='language-'] .token.boolean,
+code[class*='language-'] .token.number {
+  color: #bd93f9;
+}
+code[class*='language-'] .token.selector,
+code[class*='language-'] .token.attr-name,
+code[class*='language-'] .token.string,
+code[class*='language-'] .token.char,
+code[class*='language-'] .token.builtin,
+code[class*='language-'] .token.inserted {
+  color: #50fa7b;
+}
+code[class*='language-'] .token.operator,
+code[class*='language-'] .token.entity,
+code[class*='language-'] .token.url,
+code[class*='language-'] .token.variable {
+  color: #f8f8f2;
+}
+code[class*='language-'] .token.atrule,
+code[class*='language-'] .token.attr-value,
+code[class*='language-'] .token.function,
+code[class*='language-'] .token.class-name,
+code[class*='language-'] .token.method {
+  color: #f1fa8c;
+}
+code[class*='language-'] .token.keyword {
+  color: #8be9fd;
+}
+code[class*='language-'] .token.regex,
+code[class*='language-'] .token.important {
+  color: #ffb86c;
+}
+code[class*='language-'] .token.important,
+code[class*='language-'] .token.bold {
+  font-weight: bold;
+}
+code[class*='language-'] .token.italic {
+  font-style: italic;
+}

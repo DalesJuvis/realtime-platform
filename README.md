@@ -14,6 +14,7 @@ sdk-react-native/    Bindings React Native (+ reconnexion AppState/réseau) sur 
 sdk-rust/            SDK Rust (Tokio)
 sdk-python/          SDK Python (asyncio)
 sdk-android/         SDK Kotlin/Java — Android + JVM
+sdk-wordpress/       Extension WordPress — client PHP (mint/publish HTTP) + shortcode JS live
 web-client/          Client de chat + notifications (React/Vite/Tailwind/shadcn)
 admin/               Panneau d'administration plateforme (gestion des tenants)
 tenant-portal/       Portail self-service tenant (login, devices, jetons)
@@ -38,6 +39,7 @@ toolchains. Résultat, par composant :
 | `sdk-rust/` | Écrit, **jamais compilé** |
 | `sdk-python/` | Codec (`protocol.py`) **testé** (13/13, stdlib pur) ; client réseau (`client.py`, dépend de `websockets`) non testé faute d'installation possible |
 | `sdk-android/` | Écrit, **jamais compilé** (ni `kotlinc` ni JDK complet disponibles) |
+| `sdk-wordpress/` | Client PHP **testé** (`composer test`, 9/9, PHPUnit contre un transport HTTP factice) ; codec + client WS JS **testés** (`npm test`, 17/17, `node --test`) ; intégration WordPress (routes REST, shortcode, page de réglages) non testée faute d'installation WordPress disponible |
 
 Chaque README de sous-dossier détaille précisément ce qui a été vérifié
 et ce qui ne l'a pas été. Avant toute mise en production : `cargo build`

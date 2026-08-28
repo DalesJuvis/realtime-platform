@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AuthLayout } from '@components/layouts/AuthLayout'
 import { AppLayout } from '@components/layouts/AppLayout'
+import { DocsLayout } from '@components/layouts/DocsLayout'
 import { ProtectedRoute } from './guards/ProtectedRoute'
 import RegisterPage from '@modules/auth/pages/RegisterPage'
 import JoinPage from '@modules/auth/pages/JoinPage'
@@ -15,6 +16,7 @@ import SubscriptionsPage from '@modules/subscriptions/pages/SubscriptionsPage'
 import CheckoutPage from '@modules/checkout/pages/CheckoutPage'
 import ReportsPage from '@modules/reports/pages/ReportsPage'
 import SettingsPage from '@modules/settings/pages/SettingsPage'
+import DocsPage from '@modules/docs/pages/DocsPage'
 
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to="/overview" replace /> },
@@ -25,6 +27,11 @@ export const router = createBrowserRouter([
       { path: 'join', element: <JoinPage /> },
       { path: 'login', element: <LoginPage /> },
     ],
+  },
+  {
+    // Outside ProtectedRoute deliberately — see DocsLayout's doc comment.
+    element: <DocsLayout />,
+    children: [{ path: 'docs', element: <DocsPage /> }],
   },
   {
     element: <ProtectedRoute />,

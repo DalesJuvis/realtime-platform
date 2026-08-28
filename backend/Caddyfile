@@ -1,0 +1,20 @@
+# Caddyfile — TLS termination + path-based routing to the one engine
+# instance. Caddy proxies WebSocket upgrades transparently (no special
+# config needed beyond a normal reverse_proxy), so `/ws` just works.
+#
+# Site address comes from $DOMAIN (.env, read via docker-compose's
+# `env_file` on the caddy service — see docker-compose.prod.yml):
+#   - Have a domain pointed at this VPS's IP (an A record)? Set
+#     DOMAIN=realtime.example.com in .env — Caddy gets you a real,
+#     auto-renewing Let's Encrypt certificate for it automatically, no
+#     extra config. Do this once DNS has propagated
+#     (`dig +short your-domain` should print the VPS's IP).
+#   - No domain yet, IP only? Set DOMAIN=:80 — Caddy then serves plain
+#     HTTP on port 80 (no certificate to issue for a bare IP). Switch to
+#     the domain form the moment you have one and restart Caddy
+#     (`docker compose -f docker-compose.prod.yml restart caddy`).
+
+{$DOMAIN} {
+	reverse_proxy /ws* service-messengio:8080
+	reverse_proxy /api/* service-messengio:8090
+}

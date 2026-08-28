@@ -1,0 +1,62 @@
+# docker-compose.prod.yml — single-VPS production deployment.
+#
+# Differs from docker-compose.yml (the local 2-instance demo) in the ways
+# that actually matter for running this on a public server:
+#   - One engine instance, not two — no Redis/multi-instance broadcast
+#     needed until you actually have more than one box. Add a second
+#     `service-messengio-b` + `service-cache` (copy the pattern from
+#     docker-compose.yml) later if you scale out; nothing here blocks it.
+#   - Every secret comes from a `.env` file (see .env.production.example),
+#     never hardcoded — the dev compose file's "dev-secret-change-me"
+#     values are fine for a laptop, not for a box with a public IP.
+#   - The Admin API (9090) is bound to 127.0.0.1 only, per its own
+#     long-standing comment in main.rs ("internal network only, never
+#     expose publicly") — actually enforced here, not just documented.
+#     Reach it via an SSH tunnel: `ssh -L 9090:localhost:9090 user@vps`,
+#     then browse `admin/` locally against `http://localhost:9090`.
+#   - Caddy terminates TLS on 80/443 and reverse-proxies `/ws` and `/api/*`
+#     to the engine — see Caddyfile. Raw TCP (7878) is published directly
+#     since it isn't HTTP and Caddy's stock build can't proxy it; it stays
+#     unencrypted, same as the dev setup — fine for trusted/internal TCP
+#     clients, not for sending secrets over it from the open internet.
+#
+# Usage: see DEPLOY.md in this directory.
+
+services:
+  service-messengio:
+    build: .
+    container_name: service-messengio
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORTAL_DB_PATH: /data/portal.db
+    volumes:
+      - portal-data:/data
+    ports:
+      - "127.0.0.1:9090:9090" # Admin API — never public, see header comment
+      - "7878:7878" # raw TCP — unencrypted, see header comment
+    expose:
+      - "8080" # WS — reached through Caddy (wss://), not published directly
+      - "8090" # Portal API — reached through Caddy (https://), not published directly
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: service-caddy
+    restart: unless-stopped
+    depends_on:
+      - service-messengio
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  portal-data:
+  caddy-data:
+  caddy-config:

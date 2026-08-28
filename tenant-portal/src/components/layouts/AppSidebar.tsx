@@ -40,6 +40,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@lib/utils'
 import { env } from '@lib/env'
@@ -61,6 +62,7 @@ const NAV = [
   { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },
   { to: '/checkout', label: 'Checkout', icon: Link2 },
   { to: '/reports', label: 'Reports', icon: FileBarChart },
+  { to: '/docs', label: 'Docs', icon: BookOpen },
   { to: '/settings', label: 'Settings', icon: Settings },
 ]
 

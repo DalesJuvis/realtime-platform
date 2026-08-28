@@ -89,6 +89,11 @@ export function LoginForm() {
           Create one
         </Link>
       </p>
+      <p className="text-center text-xs text-muted-foreground">
+        <Link to="/docs" className="font-medium text-primary hover:underline">
+          Read the docs
+        </Link>
+      </p>
     </form>
   )
 }

@@ -1,0 +1,25 @@
+{
+  "name": "mio/realtime-wordpress",
+  "description": "WordPress plugin connecting a site to a mio realtime-platform tenant (server-side token minting + publish, plus a [mio_realtime] live-feed shortcode).",
+  "type": "wordpress-plugin",
+  "license": "GPL-2.0-or-later",
+  "require": {
+    "php": ">=7.4"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9.6"
+  },
+  "autoload": {
+    "psr-4": {
+      "Mio\\Realtime\\": "includes/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Mio\\Realtime\\Tests\\": "tests/php/"
+    }
+  },
+  "scripts": {
+    "test": "phpunit --colors=always tests/php"
+  }
+}

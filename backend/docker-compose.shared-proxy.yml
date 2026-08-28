@@ -1,0 +1,43 @@
+# docker-compose.shared-proxy.yml — for a VPS that already runs its own
+# reverse proxy (Caddy/nginx/Traefik) in front of *other* projects, port
+# 80/443 already taken. No Caddy service here at all: this file's engine
+# joins the existing proxy's Docker network as an extra service on it, and
+# the existing proxy gets one new site block added to its own config
+# (reverse-proxying to this container by name) — see DEPLOY.md's "Sharing
+# an existing reverse proxy" section for the full walkthrough.
+#
+# Differs from docker-compose.prod.yml only in what it *doesn't* do: no
+# `caddy` service, no `80`/`443` ports, WS/Portal API not published to the
+# host at all (reached over the shared network by container name instead).
+# Same Admin-API-stays-private and secrets-from-.env choices as
+# docker-compose.prod.yml — see its header comment.
+#
+# Usage:
+#   EXTERNAL_PROXY_NETWORK=your-proxy-stack_default \
+#     docker compose -f docker-compose.shared-proxy.yml up -d --build
+
+services:
+  service-messengio:
+    build: .
+    container_name: service-messengio
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORTAL_DB_PATH: /data/portal.db
+    volumes:
+      - portal-data:/data
+    ports:
+      - "127.0.0.1:9090:9090" # Admin API — never public, see docker-compose.prod.yml's header comment
+      - "7878:7878" # raw TCP — unencrypted, published directly (Caddy can't proxy non-HTTP)
+    networks:
+      - default
+      - proxy
+
+volumes:
+  portal-data:
+
+networks:
+  proxy:
+    name: ${EXTERNAL_PROXY_NETWORK}
+    external: true

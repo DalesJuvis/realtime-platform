@@ -1,0 +1,466 @@
+/**
+ * # DocsPage
+ *
+ * In-app SDK/API reference — quick-start snippets for every SDK in this
+ * platform's family (TypeScript, React, React Native, Python, Rust,
+ * Android, WordPress), plus the raw REST API and Web Push. Snippets are
+ * interpolated with this tenant's *real* tenant ID (`getKeysAction`, same
+ * source `PublicKeyCard`/`MintTokenCard` already use) and the actual
+ * configured API host (`deriveWsHost(env.defaultApiUrl)`) — copy-pasteable
+ * against this workspace, not generic placeholders. The token itself is
+ * never fabricated here: every snippet points at Overview/API Keys'
+ * "Mint token" flow rather than inventing one.
+ *
+ * Content mirrors each SDK's own README exactly (including their honestly
+ * documented "not yet verified" caveats — see `sdk-rust`/`sdk-android`'s
+ * own status callouts) rather than a rewritten summary, so it can't drift
+ * into claiming more than each SDK actually delivers.
+ */
+
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { AlertTriangle, BookOpen, KeyRound } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@components/ui/tabs'
+import { CodeBlock } from '@components/shared/CodeBlock'
+import { getKeysAction } from '@actions/keys/getKeys.action'
+import { env } from '@lib/env'
+import { deriveWsHost } from '@lib/utils'
+import type { CodeLanguage } from '@lib/prism'
+
+function Caveat({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-400">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+function Section({
+  title,
+  description,
+  install,
+  installLabel = 'Install',
+  installLanguage = 'bash',
+  code,
+  codeLabel = 'Quick start',
+  language,
+  caveat,
+  children,
+}: {
+  title: string
+  description: string
+  install?: string
+  installLabel?: string
+  installLanguage?: CodeLanguage
+  code: string
+  codeLabel?: string
+  language?: CodeLanguage
+  caveat?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <Card className="rounded-sm shadow-none">
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {install && <CodeBlock label={installLabel} code={install} language={installLanguage} />}
+        <CodeBlock label={codeLabel} code={code} language={language} />
+        {children}
+        {caveat && <Caveat>{caveat}</Caveat>}
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function DocsPage() {
+  const [tenantId, setTenantId] = useState<string | null>(null)
+
+  useEffect(() => {
+    getKeysAction()
+      .then((keys) => setTenantId(keys.tenantId))
+      .catch(() => setTenantId(null))
+  }, [])
+
+  const tid = tenantId ?? '<your-tenant-id>'
+  const host = deriveWsHost(env.defaultApiUrl)
+  const secure = (() => {
+    try {
+      return new URL(env.defaultApiUrl).protocol === 'https:'
+    } catch {
+      return false
+    }
+  })()
+  const apiUrl = env.defaultApiUrl
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <BookOpen className="h-5 w-5 text-muted-foreground" />
+          Docs
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          SDKs and API reference for this workspace — snippets below are filled in with your real tenant ID and API host.
+        </p>
+      </div>
+
+      <Tabs defaultValue="getting-started" className="flex flex-col gap-6 lg:flex-row">
+        <TabsList className="h-auto w-full shrink-0 flex-row flex-wrap justify-start gap-1 bg-transparent p-0 lg:w-56 lg:flex-col lg:items-stretch">
+          <TabsTrigger value="getting-started" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Getting started</TabsTrigger>
+          <TabsTrigger value="rest-api" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">REST API</TabsTrigger>
+          <TabsTrigger value="web-push" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Web Push</TabsTrigger>
+          <TabsTrigger value="typescript" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">JavaScript / TypeScript</TabsTrigger>
+          <TabsTrigger value="react" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React</TabsTrigger>
+          <TabsTrigger value="react-native" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React Native</TabsTrigger>
+          <TabsTrigger value="python" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Python</TabsTrigger>
+          <TabsTrigger value="rust" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Rust</TabsTrigger>
+          <TabsTrigger value="android" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Android (Kotlin/Java)</TabsTrigger>
+          <TabsTrigger value="wordpress" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">WordPress</TabsTrigger>
+        </TabsList>
+
+        <div className="min-w-0 flex-1 space-y-6">
+          <TabsContent value="getting-started" className="mt-0 space-y-4">
+            <Card className="rounded-sm border-none bg-primary/5 shadow-none">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <KeyRound className="h-4 w-4" />
+                  Every SDK needs two things
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">Your tenant ID</strong> — public, safe to embed:{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{tid}</code>
+                </p>
+                <p>
+                  <strong className="text-foreground">A client token</strong> — signed server-side, scoped to one user
+                  (the <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">sub</code>).
+                  Mint one from{' '}
+                  <Link to="/overview" className="font-medium text-primary hover:underline">
+                    Overview
+                  </Link>{' '}
+                  or{' '}
+                  <Link to="/keys" className="font-medium text-primary hover:underline">
+                    API Keys
+                  </Link>{' '}
+                  — never generate one yourself, and never ship your tenant secret to a browser/mobile app.
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-sm shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">Your API host</CardTitle>
+                <CardDescription>What every SDK snippet below connects to.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <CodeBlock label="WebSocket host (SDKs)" code={`${host}${secure ? ' (secure: true)' : ' (secure: false)'}`} />
+                <CodeBlock label="Portal API URL (REST)" code={apiUrl} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rest-api" className="mt-0 space-y-4">
+            <Section
+              title="Mint a token"
+              description="Call this from your own backend only — your tenant secret never leaves it. The resulting token is what you hand to an end user's SDK/browser/app."
+              code={`POST ${apiUrl}/api/v1/auth/tokens
+Content-Type: application/json
+
+{ "tenant_id": "${tid}", "secret": "<your-tenant-secret>", "sub": "user-42", "ttl_secs": 3600 }`}
+              codeLabel="Request"
+              language="http"
+            >
+              <CodeBlock
+                label="Response"
+                language="json"
+                code={`{ "success": true, "data": { "token": "…", "expires_in": 3600 }, "trace_id": "…" }`}
+              />
+            </Section>
+            <Section
+              title="Publish over HTTP"
+              description="For a backend with no persistent connection open — a cron job, a webhook handler. Authenticated with a token already minted above, never the raw secret."
+              code={`POST ${apiUrl}/api/v1/messages
+Content-Type: application/json
+Authorization: Bearer <token from /api/v1/auth/tokens>
+
+{ "tenant_id": "${tid}", "channel_id": "orders:42", "payload": "order created" }`}
+              codeLabel="Request"
+              language="http"
+              caveat="No chunking on this endpoint — unlike a connected SDK client, payload must fit in 211 UTF-8 bytes (one protocol frame) or it returns 400 INVALID_REQUEST. Split larger messages into multiple calls, or use a connected SDK client instead."
+            >
+              <CodeBlock
+                label="Response"
+                language="json"
+                code={`{ "success": true, "data": { "published": true }, "trace_id": "…" }`}
+              />
+            </Section>
+          </TabsContent>
+
+          <TabsContent value="web-push" className="mt-0 space-y-4">
+            <Section
+              title="Background notifications (tab open, hidden)"
+              description="Works today, no server setup needed — shows a native Notification whenever a message arrives while the tab is hidden or unfocused."
+              install="npm install @mio/realtime-sdk"
+              code={`import { attachBackgroundNotifications, requestNotificationPermission } from '@mio/realtime-sdk'
+
+// On a user gesture (a click) — never auto-request on load:
+await requestNotificationPermission()
+
+attachBackgroundNotifications(client, {
+  title: (m) => \`#\${m.channelId}\`,
+})`}
+              language="typescript"
+            />
+            <Section
+              title="Push notifications (tab or browser closed)"
+              description="Needs a Service Worker in your app and a backend that sends real encrypted Web Push (VAPID) to the subscription below — see this platform's push_subscriptions endpoint."
+              language="typescript"
+              code={`import { registerPushServiceWorker, subscribeToPush } from '@mio/realtime-sdk'
+
+const registration = await registerPushServiceWorker('/sw.js')
+const subscription = await subscribeToPush(registration, vapidPublicKey)
+// subscription: { endpoint, keys: { p256dh, auth } }
+
+await fetch('${apiUrl}/api/v1/push/subscriptions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: \`Bearer \${token}\` },
+  body: JSON.stringify({
+    tenant_id: '${tid}',
+    endpoint: subscription.endpoint,
+    keys: subscription.keys,
+    channels: ['orders:*'],
+  }),
+})`}
+              caveat="Delivery to a fully-quit browser (not just a closed tab) still depends on the OS/browser waking it for the push — outside any SDK's or server's control."
+            />
+          </TabsContent>
+
+          <TabsContent value="typescript" className="mt-0 space-y-4">
+            <Section
+              title="JavaScript / TypeScript"
+              description="Browser, Node.js, and the base for the React/React Native bindings."
+              install={'npm install @mio/realtime-sdk\n# Node.js only (pre-v22): WebSocket isn\'t global — the SDK loads this itself, no import needed\nnpm install ws'}
+              language="typescript"
+              code={`import { createRealtimeClient } from '@mio/realtime-sdk'
+
+const client = createRealtimeClient({
+  host: '${host}',
+  secure: ${secure},
+  tenantId: '${tid}',
+  token: myTokenFromMintToken,
+})
+
+const unsubscribe = client.subscribe('orders:42', (message) => {
+  console.log(message.channelId, message.payload)
+})
+
+client.connect()
+client.publish('orders:42', 'order created')
+
+// later:
+unsubscribe()
+client.disconnect()`}
+              caveat="No AUTH acknowledgement in the protocol — the 'authenticated' event fires optimistically right after sending; watch the 'close' event to detect an auth failure instead."
+            />
+          </TabsContent>
+
+          <TabsContent value="react" className="mt-0 space-y-4">
+            <Section
+              title="React"
+              description="Context + hooks over the TypeScript SDK — no manual useEffect/subscribe/unsubscribe boilerplate."
+              install="npm install @mio/realtime-sdk-react @mio/realtime-sdk"
+              language="jsx"
+              code={`import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react'
+
+function App() {
+  return (
+    <RealtimeProvider
+      config={{ host: '${host}', secure: ${secure}, tenantId: '${tid}', token: myTokenFromMintToken }}
+    >
+      <OrdersFeed />
+    </RealtimeProvider>
+  )
+}
+
+function OrdersFeed() {
+  const { messages, publish } = useChannel('orders:42', { limit: 100 })
+  return (
+    <>
+      <ul>{messages.map((m, i) => <li key={i}>{m.payload}</li>)}</ul>
+      <button onClick={() => publish('order created')}>Publish</button>
+    </>
+  )
+}`}
+            >
+              <p className="text-xs text-muted-foreground">
+                Also available: <code className="rounded bg-muted px-1 py-0.5 font-mono">useSubscription</code> (effect-only, no
+                re-render), <code className="rounded bg-muted px-1 py-0.5 font-mono">useConnectionState</code>,{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">useBackgroundNotifications</code>,{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">usePushSubscription</code>.
+              </p>
+            </Section>
+          </TabsContent>
+
+          <TabsContent value="react-native" className="mt-0 space-y-4">
+            <Section
+              title="React Native"
+              description="Re-exports the React SDK's hooks/components as-is (none touch the DOM) and adds AppState-aware reconnection — necessary because a backgrounded RN app can be fully suspended by the OS, unlike a browser tab."
+              install="npm install @mio/realtime-sdk-react-native @mio/realtime-sdk"
+              language="jsx"
+              code={`import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react-native'
+
+function App() {
+  return (
+    <RealtimeProvider
+      config={{ host: '${host}', secure: ${secure}, tenantId: '${tid}', token: myTokenFromMintToken }}
+    >
+      <OrdersFeed />
+    </RealtimeProvider>
+  )
+}
+
+function OrdersFeed() {
+  const { messages, publish } = useChannel('orders:42', { limit: 100 })
+  // ... same API as @mio/realtime-sdk-react
+}`}
+              caveat="Notification hooks (useBackgroundNotifications/usePushSubscription) are deliberately NOT re-exported here — they wrap browser-only Notification/PushManager APIs that don't exist in React Native. Native push needs a different mechanism (e.g. @react-native-firebase/messaging)."
+            />
+          </TabsContent>
+
+          <TabsContent value="python" className="mt-0 space-y-4">
+            <Section
+              title="Python"
+              description="asyncio-based client."
+              install="pip install realtime-sdk  # or `pip install -e .` from sdk-python/ in this repo"
+              language="python"
+              code={`import asyncio
+from uuid import UUID
+from realtime_sdk import ClientConfig, RealtimeClient
+
+async def main():
+    config = ClientConfig(
+        url="${secure ? 'wss' : 'ws'}://${host}/ws",
+        tenant_id=UUID("${tid}"),
+        token=my_token_from_mint_token,
+    )
+    async with RealtimeClient(config) as client:
+        client.subscribe("orders:42", lambda msg: print(msg.payload))
+        await client.publish("orders:42", "order created")
+        await asyncio.sleep(3600)
+
+asyncio.run(main())`}
+              caveat="The WebSocket client (client.py) is documented as not yet runtime-tested by its authors — only the pure-stdlib protocol codec has real test coverage. Verify against a live connection before production use."
+            />
+          </TabsContent>
+
+          <TabsContent value="rust" className="mt-0 space-y-4">
+            <Section
+              title="Rust"
+              description="Tokio-based client."
+              install={'[dependencies]\nrealtime-sdk = { path = "../sdk-rust" } # or git/crates.io once published\ntokio = { version = "1", features = ["full"] }'}
+              installLabel="Cargo.toml"
+              installLanguage="toml"
+              language="rust"
+              code={`use realtime_sdk::{ClientConfig, RealtimeClient};
+use uuid::Uuid;
+
+#[tokio::main]
+async fn main() {
+    let client = RealtimeClient::connect(ClientConfig {
+        url: "${secure ? 'wss' : 'ws'}://${host}/ws".to_string(),
+        tenant_id: Uuid::parse_str("${tid}").unwrap(),
+        token: my_token_from_mint_token,
+        ..Default::default()
+    });
+
+    let mut rx = client.subscribe("orders:42");
+    tokio::spawn(async move {
+        while let Ok(message) = rx.recv().await {
+            println!("{}: {}", message.channel_id, message.payload);
+        }
+    });
+
+    client.publish("orders:42", "order created").unwrap();
+}`}
+              caveat="This SDK is documented as not yet compiled by its authors (no Rust toolchain was available when it was written) — run cargo build yourself and treat it as a first draft, not a validated artifact."
+            />
+          </TabsContent>
+
+          <TabsContent value="android" className="mt-0 space-y-4">
+            <Section
+              title="Android — Kotlin"
+              description="Gradle library module, OkHttp-based. No Maven artifact published yet — integrate as a local module."
+              language="kotlin"
+              code={`val client = RealtimeClient(
+    RealtimeClientConfig(
+        url = "${secure ? 'wss' : 'ws'}://${host}/ws",
+        tenantId = UUID.fromString("${tid}"),
+        token = myTokenFromMintToken,
+    )
+)
+
+val subscription = client.subscribe("orders:42") { message ->
+    println(message.payload)
+}
+
+client.connect()
+client.publish("orders:42", "order created")
+
+// later:
+subscription.close()
+client.disconnect()`}
+              caveat="Not yet compiled by its authors (no kotlinc/full JDK available when written) — run ./gradlew build test yourself. Callbacks fire on OkHttp's own thread, not the Android main thread — dispatch to the UI thread yourself."
+            />
+            <Section
+              title="Android — Java"
+              description="Same client, Java-friendly surface (SAM interfaces, @JvmOverloads)."
+              language="java"
+              code={`RealtimeClientConfig config = new RealtimeClientConfig(
+    "${secure ? 'wss' : 'ws'}://${host}/ws",
+    UUID.fromString("${tid}"),
+    myTokenFromMintToken
+);
+RealtimeClient client = new RealtimeClient(config);
+
+AutoCloseable subscription = client.subscribe("orders:42",
+    message -> System.out.println(message.getPayload()));
+
+client.connect();
+client.publish("orders:42", "order created");`}
+            />
+          </TabsContent>
+
+          <TabsContent value="wordpress" className="mt-0 space-y-4">
+            <Section
+              title="WordPress — server side (PHP)"
+              description="Mint tokens and publish from PHP hooks (save_post, a cron job, ...). Configure Settings > mio Realtime in your WP admin with this tenant's ID and secret first."
+              install="composer require mio/realtime-wordpress  # or copy sdk-wordpress/ into wp-content/plugins/"
+              language="php"
+              code={`use Mio\\Realtime\\Client;
+
+$client = new Client('${apiUrl}', '${tid}', $secret);
+
+$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
+$client->publish('orders:42', 'order created', $minted->token);`}
+              caveat="Client::publish() does not chunk — payload over 211 UTF-8 bytes throws before any network call. Never return $secret to the browser — only $minted->token should leave PHP."
+            />
+            <Section
+              title="WordPress — on the page"
+              description="A shortcode renders a live-updating feed, backed by a real WebSocket connection in the visitor's browser."
+              code={`[mio_realtime channel="orders:42" limit="20" replay="true"]`}
+              codeLabel="Add to any page or post"
+            >
+              <p className="text-xs text-muted-foreground">
+                Functional starting point, not a themed component — style <code className="rounded bg-muted px-1 py-0.5 font-mono">.mio-realtime-feed</code> yourself.
+              </p>
+            </Section>
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  )
+}
