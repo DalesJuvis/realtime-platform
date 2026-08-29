@@ -82,33 +82,43 @@ function NavItem({
   onNavigate: () => void
 }) {
   const link = (
-    <NavLink
-      to={to}
-      end={end ?? false}
-      onClick={onNavigate}
-      className={({ isActive }) =>
-        cn(
-          // `w-full` is what makes `justify-center` (collapsed) actually
-          // have room to center within — without it the link shrinks to
-          // its icon's own width and renders flush-left in `nav`'s block
-          // flow, landing several px left of the logo mark above, which
-          // *is* centered in the full aside width.
-          'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-          iconOnly && 'justify-center px-0',
-          isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-        )
-      }
-    >
+    // `className="contents"` (not the real flex/padding classes — those
+    // move to the inner `<span>` below) is load-bearing, not cosmetic:
+    // the collapsed rail wraps this NavLink in `<TooltipTrigger asChild>`,
+    // and Radix Slot's prop merge does
+    // `[slotClassName, childClassName].filter(Boolean).join(" ")` for
+    // `className` (see @radix-ui/react-slot's mergeProps). NavLink's own
+    // `className` here would otherwise be a *function*
+    // (`({isActive}) => cn(...)`) — `Array.prototype.join` stringifies a
+    // non-string element via `Function.prototype.toString()`, so Slot was
+    // silently writing the function's literal source code (comments
+    // included) into the DOM `class` attribute instead of ever calling
+    // it. Tokens that happened to survive as clean, unquoted substrings
+    // of that source (`w-full`, `px-3`, ...) still matched real Tailwind
+    // classes by accident; `flex`, `justify-center`, and `px-0` all had a
+    // stray `"`/`,` fused onto them from the surrounding string literals
+    // and matched nothing — hence `flex` (and therefore `justify-center`)
+    // silently never applied, and `px-3` never got overridden to `px-0`
+    // for the icon-only rail, leaving nav icons unpadded-but-uncentered
+    // and visibly offset from the logo above. A plain string here is
+    // Slot-merge-safe regardless of nesting; `display: contents` makes
+    // the `<a>` invisible to layout so the inner `<span>` (rendered from
+    // NavLink's `children` render-prop, never touched by Slot at all)
+    // is what actually carries flex/padding/color — same visual result
+    // `<a>` itself used to produce, just resolved somewhere Slot can't
+    // reach it.
+    <NavLink to={to} end={end ?? false} onClick={onNavigate} className="contents">
       {({ isActive }) => (
-        <>
-          {/* Icon color set explicitly here (not just inherited via `currentColor`
-              from the `<a>` above) because the collapsed rail's icon is cloned
-              through Radix `Slot` for the tooltip trigger — that composition
-              was silently breaking the inherited color, leaving the icon
-              uncolored even while the active `<a>` itself was orangered. */}
+        <span
+          className={cn(
+            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+            iconOnly && 'justify-center px-0',
+            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+          )}
+        >
           <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
           {!iconOnly && label}
-        </>
+        </span>
       )}
     </NavLink>
   )

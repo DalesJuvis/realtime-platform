@@ -96,10 +96,20 @@
 /*
  * Thin scrollbar, invisible until hovered — used on the sidebar nav and the
  * main scroll region, matching saas-admin's `.scrollbar-thin`.
+ *
+ * `scrollbar-gutter: stable both-edges` reserves the scrollbar's track
+ * width on *both* sides rather than just the real (right) one — without
+ * it, a scrollable region's centered content (the collapsed sidebar nav's
+ * icon-only rail, e.g.) sits a few px left of a sibling that isn't
+ * scrollable (the logo header above it), since only the nav's right edge
+ * loses width to the track. Reserving it symmetrically keeps the visible
+ * content centered the same regardless of whether the track is scrolled
+ * into view, matching non-scrolling siblings exactly.
  */
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable both-edges;
 }
 .scrollbar-thin:hover {
   scrollbar-color: hsl(var(--border)) transparent;
