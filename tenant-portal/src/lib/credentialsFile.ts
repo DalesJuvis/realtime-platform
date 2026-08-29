@@ -6,9 +6,15 @@
  * as a Firebase service-account JSON you download once and load straight
  * into an SDK. Adapted to what this platform actually has: no API key
  * concept beyond `tenant_id` itself (already labelled "Public key" on
- * `PublicKeyCard`/Settings — `public_key` here is that same value, just
- * named for what a reader expects next to `token`), and no project/app id
- * to include, so nothing is invented to fill the shape out.
+ * `PublicKeyCard`/Settings), and no project/app id to include, so nothing
+ * is invented to fill the shape out.
+ *
+ * Deliberately no `public_key` field: an earlier version repeated
+ * `tenant_id`'s own value under that second, key-shaped name as a
+ * "friendlier alias next to `token`" — in practice that reads as a real
+ * bug (two credential-looking fields holding an identical value, with no
+ * actual secret anywhere in sight), not a convenience. `tenant_id` is the
+ * platform's only public identifier; nothing else to alias it as.
  */
 
 import { env } from '@lib/env'
@@ -19,7 +25,6 @@ export function buildCredentialsFile(creds: MintedCredentials) {
   return {
     type: 'mio_client_credentials',
     tenant_id: creds.tenantId,
-    public_key: creds.tenantId,
     sub: creds.sub,
     token: creds.token,
     expires_in: creds.expiresIn,
