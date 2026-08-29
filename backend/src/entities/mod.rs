@@ -11,3 +11,4 @@ pub mod PortalSession;
 pub mod MessageTemplate;
 pub mod WorkspaceProfile;
 pub mod PushSubscription;
+pub mod ApiKey;

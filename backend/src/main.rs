@@ -240,6 +240,24 @@ async fn main() {
         }
         Err(err) => tracing::error!(error = %err, "failed to reload tenant secrets from storage"),
     }
+
+    // Same reload, for the additive "extra API key pairs" store (see
+    // `TokenService`'s own doc comment on why it's a second, separate
+    // in-memory store from the one just above rather than folded into it).
+    let api_keys = Arc::new(modules::portal::repositories::ApiKeyRepository::ApiKeyRepository::new(
+        portal_pool.clone(),
+    ));
+    match api_keys.list_all_active().await {
+        Ok(keys) => {
+            let count = keys.len();
+            for key in keys {
+                auth.add_extra_key(key.tenant_id, &key.public_key, key.secret.into_bytes());
+            }
+            tracing::info!(count, "reloaded active API key pairs from storage");
+        }
+        Err(err) => tracing::error!(error = %err, "failed to reload API key pairs from storage"),
+    }
+
     let templates = Arc::new(
         modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository::new(portal_pool.clone()),
     );
@@ -270,6 +288,7 @@ async fn main() {
             portal_pool,
         )),
         tenant_secrets,
+        api_keys,
         templates,
         workspace_profile,
         channel_router: channel_router.clone(),

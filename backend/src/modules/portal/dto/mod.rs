@@ -13,3 +13,4 @@ pub mod BroadcastDto;
 pub mod TemplateDto;
 pub mod WorkspaceProfileDto;
 pub mod ChangePasswordDto;
+pub mod ApiKeyDto;

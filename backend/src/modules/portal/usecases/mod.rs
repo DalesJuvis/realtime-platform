@@ -16,3 +16,6 @@ pub mod GetWorkspaceProfileUseCase;
 pub mod UpdateWorkspaceProfileUseCase;
 pub mod UploadLogoUseCase;
 pub mod ChangePasswordUseCase;
+pub mod GenerateApiKeyUseCase;
+pub mod ListApiKeysUseCase;
+pub mod RevokeApiKeyUseCase;

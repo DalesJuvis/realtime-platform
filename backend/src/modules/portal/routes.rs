@@ -22,15 +22,16 @@
 use axum::extract::DefaultBodyLimit;
 use axum::http::Method;
 use axum::middleware;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::modules::portal::controllers::{
     BroadcastController, ChangePasswordController, CreateTemplateController, DeleteTemplateController,
-    GetKeysController, GetOverviewController, GetProfileController, ListChannelsController, ListSessionsController,
-    ListTemplatesController, LoginController, MintTokenController, RegisterController, RotateSecretController,
-    SignupController, UpdateProfileController, UpdateTemplateController, UploadLogoController,
+    GenerateApiKeyController, GetKeysController, GetOverviewController, GetProfileController,
+    ListApiKeysController, ListChannelsController, ListSessionsController, ListTemplatesController, LoginController,
+    MintTokenController, RegisterController, RevokeApiKeyController, RotateSecretController, SignupController,
+    UpdateProfileController, UpdateTemplateController, UploadLogoController,
 };
 use crate::modules::portal::middleware::PortalSessionGuard;
 use crate::modules::portal::PortalContext::PortalContext;
@@ -50,6 +51,8 @@ fn protected_segment_routes(ctx: PortalContext) -> Router {
         .route("/overview", get(GetOverviewController::handle))
         .route("/keys", get(GetKeysController::handle))
         .route("/keys/rotate", post(RotateSecretController::handle))
+        .route("/api-keys", get(ListApiKeysController::handle).post(GenerateApiKeyController::handle))
+        .route("/api-keys/:id", delete(RevokeApiKeyController::handle))
         .route("/channels", get(ListChannelsController::handle))
         .route("/broadcast", post(BroadcastController::handle))
         .route("/templates", get(ListTemplatesController::handle).post(CreateTemplateController::handle))
@@ -99,6 +102,7 @@ mod tests {
     use crate::entities::ChannelKey::ChannelKey;
     use crate::modules::auth::services::TokenService::TokenService;
     use crate::modules::metrics::services::MetricsService::MetricsService;
+    use crate::modules::portal::repositories::ApiKeyRepository::ApiKeyRepository;
     use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
     use crate::modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository;
     use crate::modules::portal::repositories::TenantUserRepository::TenantUserRepository;
@@ -142,6 +146,7 @@ mod tests {
             portal_auth: Arc::new(PortalAuthService::new(b"test-session-secret".to_vec())),
             tenant_users: Arc::new(TenantUserRepository::new(pool.clone())),
             tenant_secrets: Arc::new(TenantSecretStoreRepository::new(pool.clone())),
+            api_keys: Arc::new(ApiKeyRepository::new(pool.clone())),
             templates: Arc::new(MessageTemplateRepository::new(pool.clone())),
             workspace_profile: Arc::new(WorkspaceProfileRepository::new(pool)),
             channel_router: channel_router.clone(),
@@ -538,5 +543,214 @@ mod tests {
 
         let resp = login("new-strong-password").await;
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[derive(Deserialize, Default)]
+    struct GeneratedKey {
+        id: uuid::Uuid,
+        public_key: String,
+        secret: String,
+    }
+
+    #[derive(Deserialize, Default)]
+    struct ListedKey {
+        id: uuid::Uuid,
+        public_key: String,
+        status: String,
+    }
+
+    #[tokio::test]
+    async fn generated_api_key_mints_a_working_token_alongside_the_primary_secret() {
+        let (ctx, _) = test_ctx().await;
+        let auth = ctx.token_service.clone();
+        let app = router(ctx);
+        let signup_data = signup(&app, "extra-key@example.com").await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_data.access_token,
+                json!({ "name": "Production server" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let generated: GeneratedKey = body_json(resp).await;
+
+        assert!(!generated.public_key.is_empty());
+        assert_ne!(generated.public_key, signup_data.keys.tenant_id.to_string());
+        assert_ne!(generated.secret, signup_data.keys.secret_key);
+
+        // The new key must actually be live in the request-hot-path store,
+        // not just persisted — same proof pattern as the primary secret's
+        // own signup test.
+        assert!(auth.verify_tenant_secret(signup_data.keys.tenant_id, generated.secret.as_bytes()));
+        let token = auth
+            .issue_token_with_secret(signup_data.keys.tenant_id, "user-1", 60, generated.secret.as_bytes())
+            .unwrap();
+        assert!(auth.validate(signup_data.keys.tenant_id, &token).is_ok());
+
+        // The primary secret must still work untouched.
+        assert!(auth.issue_token(signup_data.keys.tenant_id, "user-2", 60).is_ok());
+    }
+
+    #[tokio::test]
+    async fn list_api_keys_shows_generated_pairs_scoped_to_the_caller() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_a = signup(&app, "list-a@example.com").await;
+        let signup_b = signup(&app, "list-b@example.com").await;
+
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_a.access_token,
+                json!({ "name": "A's key" }),
+            ))
+            .await
+            .unwrap();
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_b.access_token,
+                json!({ "name": "B's key" }),
+            ))
+            .await
+            .unwrap();
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/api-keys", &signup_a.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let keys: Vec<ListedKey> = body_json(resp).await;
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].status, "active");
+        assert!(!keys[0].public_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn revoking_one_api_key_leaves_others_and_the_primary_secret_working() {
+        let (ctx, _) = test_ctx().await;
+        let auth = ctx.token_service.clone();
+        let app = router(ctx);
+        let signup_data = signup(&app, "revoke@example.com").await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_data.access_token,
+                json!({ "name": "Key A" }),
+            ))
+            .await
+            .unwrap();
+        let key_a: GeneratedKey = body_json(resp).await;
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_data.access_token,
+                json!({ "name": "Key B" }),
+            ))
+            .await
+            .unwrap();
+        let key_b: GeneratedKey = body_json(resp).await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/api/v1/portal/api-keys/{}", key_a.id),
+                &signup_data.access_token,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        assert!(!auth.verify_tenant_secret(signup_data.keys.tenant_id, key_a.secret.as_bytes()));
+        assert!(auth.verify_tenant_secret(signup_data.keys.tenant_id, key_b.secret.as_bytes()));
+        assert!(auth.verify_tenant_secret(signup_data.keys.tenant_id, signup_data.keys.secret_key.as_bytes()));
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/api-keys", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        let keys: Vec<ListedKey> = body_json(resp).await;
+        let revoked = keys.iter().find(|k| k.id == key_a.id).unwrap();
+        assert_eq!(revoked.status, "revoked");
+
+        // Revoking the same key again is a clean 404, not a 500.
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/api/v1/portal/api-keys/{}", key_a.id),
+                &signup_data.access_token,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn cannot_revoke_another_tenants_api_key() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_a = signup(&app, "owner@example.com").await;
+        let signup_b = signup(&app, "attacker@example.com").await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_a.access_token,
+                json!({ "name": "Owner's key" }),
+            ))
+            .await
+            .unwrap();
+        let key: GeneratedKey = body_json(resp).await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/api/v1/portal/api-keys/{}", key.id),
+                &signup_b.access_token,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn generating_an_api_key_with_an_empty_name_is_rejected() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "emptyname@example.com").await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/api-keys",
+                &signup_data.access_token,
+                json!({ "name": "   " }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }

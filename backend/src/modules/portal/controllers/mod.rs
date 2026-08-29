@@ -16,3 +16,6 @@ pub mod GetProfileController;
 pub mod UpdateProfileController;
 pub mod UploadLogoController;
 pub mod ChangePasswordController;
+pub mod GenerateApiKeyController;
+pub mod ListApiKeysController;
+pub mod RevokeApiKeyController;

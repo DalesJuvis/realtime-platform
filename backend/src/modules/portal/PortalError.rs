@@ -16,6 +16,10 @@ pub enum PortalError {
     InvalidCredentials,
     #[error("no key pair found for this tenant yet — rotate to generate one")]
     KeyPairNotFound,
+    #[error("no active API key with that id for this tenant")]
+    ApiKeyNotFound,
+    #[error("name must not be empty")]
+    ApiKeyNameRequired,
     #[error("template not found")]
     TemplateNotFound,
     #[error("channel_id exceeds 24 bytes")]
@@ -39,10 +43,13 @@ impl PortalError {
             PortalError::EmailAlreadyRegistered => StatusCode::CONFLICT,
             PortalError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             PortalError::KeyPairNotFound => StatusCode::NOT_FOUND,
+            PortalError::ApiKeyNotFound => StatusCode::NOT_FOUND,
             PortalError::TemplateNotFound => StatusCode::NOT_FOUND,
             PortalError::ChannelIdTooLong | PortalError::PayloadTooLarge => StatusCode::BAD_REQUEST,
             PortalError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
-            PortalError::InvalidLogo(_) | PortalError::WeakPassword => StatusCode::BAD_REQUEST,
+            PortalError::InvalidLogo(_) | PortalError::WeakPassword | PortalError::ApiKeyNameRequired => {
+                StatusCode::BAD_REQUEST
+            }
             PortalError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -53,6 +60,8 @@ impl PortalError {
             PortalError::EmailAlreadyRegistered => "EMAIL_ALREADY_REGISTERED",
             PortalError::InvalidCredentials => "INVALID_CREDENTIALS",
             PortalError::KeyPairNotFound => "KEY_PAIR_NOT_FOUND",
+            PortalError::ApiKeyNotFound => "API_KEY_NOT_FOUND",
+            PortalError::ApiKeyNameRequired => "API_KEY_NAME_REQUIRED",
             PortalError::TemplateNotFound => "TEMPLATE_NOT_FOUND",
             PortalError::ChannelIdTooLong => "CHANNEL_ID_TOO_LONG",
             PortalError::PayloadTooLarge => "PAYLOAD_TOO_LARGE",

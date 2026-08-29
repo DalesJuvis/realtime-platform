@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use crate::modules::auth::services::TokenService::TokenService;
 use crate::modules::metrics::services::MetricsService::MetricsService;
+use crate::modules::portal::repositories::ApiKeyRepository::ApiKeyRepository;
 use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
 use crate::modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository;
 use crate::modules::portal::repositories::TenantUserRepository::TenantUserRepository;
@@ -35,6 +36,7 @@ pub struct PortalContext {
     pub portal_auth: Arc<PortalAuthService>,
     pub tenant_users: Arc<TenantUserRepository>,
     pub tenant_secrets: Arc<TenantSecretStoreRepository>,
+    pub api_keys: Arc<ApiKeyRepository>,
     pub templates: Arc<MessageTemplateRepository>,
     pub workspace_profile: Arc<WorkspaceProfileRepository>,
     pub channel_router: Arc<ChannelRouterService>,
