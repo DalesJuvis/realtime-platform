@@ -20,7 +20,13 @@ const SHELL_URLS = ['/', '/manifest.json', '/favicon.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS)))
-  self.skipWaiting()
+  // No self.skipWaiting() here on purpose: a newly-installed worker now
+  // stays in the "waiting" state (instead of taking over immediately)
+  // until the page's own update-available prompt tells it to via the
+  // message listener below — see main.tsx's registration code. Without
+  // this, a deploy would silently swap the worker under an already-open
+  // tab while that tab kept running its old, already-loaded JS bundle —
+  // update applied, nothing visibly changed until an unrelated reload.
 })
 
 self.addEventListener('activate', (event) => {
@@ -30,6 +36,10 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
       .then(() => self.clients.claim()),
   )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('fetch', (event) => {
