@@ -113,6 +113,7 @@ export default function DocsPage() {
           <TabsTrigger value="getting-started" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Getting started</TabsTrigger>
           <TabsTrigger value="rest-api" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">REST API</TabsTrigger>
           <TabsTrigger value="web-push" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Web Push</TabsTrigger>
+          <TabsTrigger value="advanced" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Advanced features</TabsTrigger>
           <TabsTrigger value="typescript" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">JavaScript / TypeScript</TabsTrigger>
           <TabsTrigger value="react" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React</TabsTrigger>
           <TabsTrigger value="react-native" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React Native</TabsTrigger>
@@ -120,6 +121,8 @@ export default function DocsPage() {
           <TabsTrigger value="rust" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Rust</TabsTrigger>
           <TabsTrigger value="android" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Android (Kotlin/Java)</TabsTrigger>
           <TabsTrigger value="wordpress" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">WordPress</TabsTrigger>
+          <TabsTrigger value="laravel" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Laravel</TabsTrigger>
+          <TabsTrigger value="embed" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Embed script (any site)</TabsTrigger>
         </TabsList>
 
         <div className="min-w-0 flex-1 space-y-6">
@@ -166,7 +169,7 @@ export default function DocsPage() {
           <TabsContent value="rest-api" className="mt-0 space-y-4">
             <Section
               title="Mint a token"
-              description="Call this from your own backend only — your tenant secret never leaves it. The resulting token is what you hand to an end user's SDK/browser/app."
+              description="Call this from your own backend only — your tenant secret never leaves it. The resulting token is what you hand to an end user's SDK/browser/app. secret accepts your primary secret (Settings) or any additional key pair's secret from API Keys — either works identically here."
               code={`POST ${apiUrl}/api/v1/auth/tokens
 Content-Type: application/json
 
@@ -237,6 +240,70 @@ await fetch('${apiUrl}/api/v1/push/subscriptions', {
 })`}
               caveat="Delivery to a fully-quit browser (not just a closed tab) still depends on the OS/browser waking it for the push — outside any SDK's or server's control."
             />
+          </TabsContent>
+
+          <TabsContent value="advanced" className="mt-0 space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Available identically in every persistently-connected SDK — TypeScript, Python, Rust, Android — once <code className="rounded bg-muted px-1 py-0.5 font-mono">client</code> is
+              constructed as shown in each SDK's own tab. Not available in the lightweight WordPress browser client (<code className="rounded bg-muted px-1 py-0.5 font-mono">mio-client.js</code>/
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-embed.js</code> — deliberately trimmed) or the stateless REST endpoints.
+            </p>
+            <Section
+              title="Wildcard subscribe"
+              description="Subscribe to a whole family of channels with a trailing * — every matching channelId routes to the same handler."
+              language="typescript"
+              code={`client.subscribe('orders:*', (message) => console.log(message.channelId, message.payload))`}
+            />
+            <Section
+              title="Unicast — direct to one user"
+              description="Sends to one connected user instead of a channel's subscribers. userId reuses the frame's channelId field, so it inherits the same 24-byte limit."
+              language="typescript"
+              code={`client.unicast('user-42', 'you have a new order')`}
+            >
+              <p className="text-xs text-muted-foreground">
+                Same method, other SDKs: Python — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.unicast(...)</code>; Rust/Android —{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">client.unicast(...)</code>.
+              </p>
+            </Section>
+            <Section
+              title="Replay — catch up on channel history"
+              description="Requests everything published to a channel since sinceUnixSeconds (0 = all available history). Replayed messages arrive through the same subscribe() handler already registered for that channel — no separate callback."
+              language="typescript"
+              code={`client.subscribe('orders:42', (message) => console.log(message.payload))
+client.replay('orders:42', 0)`}
+              caveat="Not supported on a wildcard pattern (orders:*) — the server silently ignores a REPLAY request for anything but an exact channel ID."
+            >
+              <p className="text-xs text-muted-foreground">
+                Same method, other SDKs: Python — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.replay(...)</code>; Rust/Android —{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">client.replay(...)</code>.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                How much history is available is a deployment detail, not a client-side setting — by default each channel keeps only its most recent 50 messages in memory (gone on a restart). With{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">REDIS_URL</code> set on the server, history is durably persisted to Redis instead, capped at{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">HISTORY_STREAM_MAXLEN</code> (default 1000) and surviving restarts — <code className="rounded bg-muted px-1 py-0.5 font-mono">replay()</code> itself doesn't change.
+              </p>
+            </Section>
+            <Section
+              title="Automatic chunking"
+              description="publish() and unicast() transparently split any payload larger than one 211-byte frame into multiple frames and reassemble them on the receiving end before your subscribe() handler ever sees it — nothing to configure."
+              language="typescript"
+              code={`// No API difference — this just works:
+client.publish('orders:42', veryLongDescription) // > 211 UTF-8 bytes, chunked automatically`}
+              caveat="Only the stateless REST publish endpoint (POST /api/v1/messages, see REST API tab) lacks this and caps at 211 bytes per call."
+            />
+            <Section
+              title="Named events, socket.io-style — client.channel()"
+              description="TypeScript only for now (Python/Rust/Android don't have this yet — their subscribe()/publish() work unchanged). A channel-scoped handle with on(event, handler)/emit(event, data), for a channel that carries more than one type of message."
+              language="typescript"
+              code={`const orders = client.channel('orders:42')
+orders.on('order.created', (data) => console.log(data.orderId))
+orders.emit('order.created', { orderId: 123 })`}
+              caveat="Not a protocol change — emit() is a publish() whose payload encodes {event, data} as JSON; on() filters subscribe() for messages matching that shape and event name, silently ignoring anything else on the channel rather than erroring on it."
+            >
+              <p className="text-xs text-muted-foreground">
+                Same envelope as WordPress/Laravel's <code className="rounded bg-muted px-1 py-0.5 font-mono">Client::emitEvent()</code> — an event emitted server-side is received exactly the same way, cross-SDK.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="typescript" className="mt-0 space-y-4">
@@ -445,8 +512,11 @@ client.publish("orders:42", "order created");`}
 $client = new Client('${apiUrl}', '${tid}', $secret);
 
 $minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
-$client->publish('orders:42', 'order created', $minted->token);`}
-              caveat="Client::publish() does not chunk — payload over 211 UTF-8 bytes throws before any network call. Never return $secret to the browser — only $minted->token should leave PHP."
+$client->publish('orders:42', 'order created', $minted->token);
+
+// Named event, same envelope client.channel(id).on() decodes in the browser:
+$client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);`}
+              caveat="Client::publish()/emitEvent() do not chunk — payload over 211 UTF-8 bytes throws before any network call. Never return $secret to the browser — only $minted->token should leave PHP."
             />
             <Section
               title="WordPress — on the page"
@@ -456,6 +526,81 @@ $client->publish('orders:42', 'order created', $minted->token);`}
             >
               <p className="text-xs text-muted-foreground">
                 Functional starting point, not a themed component — style <code className="rounded bg-muted px-1 py-0.5 font-mono">.mio-realtime-feed</code> yourself.
+              </p>
+            </Section>
+          </TabsContent>
+
+          <TabsContent value="laravel" className="mt-0 space-y-4">
+            <Section
+              title="Laravel"
+              description="Same framework-independent Mio\Realtime\Client PHP class WordPress uses — it calls zero WordPress functions itself — wired into Laravel's service container: a service provider, a facade, and Laravel's own HTTP client in place of wp_remote_post."
+              install={`composer require mio/realtime-laravel\nphp artisan vendor:publish --tag=mio-realtime-config`}
+              language="php"
+              code={`use Mio\\Realtime\\Laravel\\Facades\\MioRealtime;
+
+$minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn }
+MioRealtime::publish('orders:42', 'order created', $minted->token);
+
+// Named event, same envelope client.channel(id).on() decodes:
+MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);`}
+              caveat="Same HTTP-only publish path as WordPress — no persistent WebSocket connection, no chunking. publish() throws before any network call if $payload exceeds 211 UTF-8 bytes."
+            >
+              <CodeBlock
+                label=".env"
+                language="bash"
+                code={`MIO_REALTIME_API_URL=${apiUrl}\nMIO_REALTIME_TENANT_ID=${tid}\nMIO_REALTIME_SECRET=<your-tenant-secret>`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Or resolve <code className="rounded bg-muted px-1 py-0.5 font-mono">Mio\Realtime\Client</code> directly via the container instead of the facade — both reach the same
+                bound singleton. See <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-laravel/README.md</code> for why this package depends on{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">mio/realtime-wordpress</code> (naming leftover, not a functional coupling).
+              </p>
+            </Section>
+          </TabsContent>
+
+          <TabsContent value="embed" className="mt-0 space-y-4">
+            <Section
+              title="mio-embed.js — no plugin, no build step"
+              description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
+              language="markup"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
+  data-host="${host}"
+  data-secure="${secure}"
+  data-tenant-id="${tid}"
+  data-token="…"
+  data-channel="orders:42"
+  data-replay="true"
+></script>`}
+              caveat="Pin the version: @v0.1.1 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
+            >
+              <p className="text-xs text-muted-foreground">
+                No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified <code className="rounded bg-muted px-1 py-0.5 font-mono">.min.js</code> build
+                (<code className="rounded bg-muted px-1 py-0.5 font-mono">npm run build</code> in <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-wordpress/</code>) — plain <code className="rounded bg-muted px-1 py-0.5 font-mono">.js</code> source stays in the repo for reading.
+                The <code className="rounded bg-muted px-1 py-0.5 font-mono">vanilla-client/</code> directory in this repo is a working local test harness for it.
+              </p>
+            </Section>
+            <Section
+              title="mio-protocol.js + mio-client.js — building your own page logic"
+              description="For anything beyond the auto-rendered feed above — custom UI, multiple channels, your own publish form — load the two files mio-embed.js bundles and drive MioRealtimeClient yourself."
+              language="markup"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script>
+  var client = new window.MioRealtimeClient({
+    host: '${host}',
+    secure: ${secure},
+    tenantId: '${tid}',
+    token: '…', // minted server-side, never your tenant secret
+  })
+  client.subscribe('orders:42', function (message) {
+    console.log(message.channelId, message.payload)
+  })
+  client.connect()
+  client.publish('orders:42', 'order created')
+</script>`}
+            >
+              <p className="text-xs text-muted-foreground">
+                Not from this CDN: <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-shortcode.js</code> — it only makes sense wired up by the WordPress plugin itself.
               </p>
             </Section>
           </TabsContent>

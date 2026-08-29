@@ -65,6 +65,7 @@ implémentation précise (tests, environnement exotique).
 | Souscription (motif `orders:*`) | `client.subscribe("orders:*", handler)` |
 | Envoi direct à un utilisateur | `client.unicast(userId, payload)` |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds?)` |
+| Évènements nommés façon socket.io | `client.channel(channelId).on(event, handler)` / `.emit(event, data)` |
 | Évènements de connexion | `client.on("open" \| "close" \| "error" \| "authenticated" \| "message", ...)` |
 | Notification d'onglet en arrière-plan | `attachBackgroundNotifications(client, options?)` |
 | Abonnement Web Push (onglet/navigateur fermé) | `registerPushServiceWorker(url)` + `subscribeToPush(registration, vapidPublicKey)` |
@@ -72,6 +73,53 @@ implémentation précise (tests, environnement exotique).
 Reconnexion automatique (backoff exponentiel + jitter, configurable),
 heartbeat PING périodique, et ré-abonnement transparent à tous les
 canaux actifs après une reconnexion — rien à orchestrer manuellement.
+
+## Évènements nommés façon socket.io — `client.channel()`
+
+`client.publish()`/`.subscribe()` échangent une chaîne brute — suffisant
+pour un canal à un seul type de message, mais un canal qui porte
+plusieurs types d'évènements (`order.created`, `order.cancelled`, ...)
+finit vite par réinventer un petit routage à la main dans le handler.
+`client.channel(channelId)` donne une poignée scoped-à-ce-canal avec
+`.on(event, handler)`/`.emit(event, data)`, dans l'esprit socket.io :
+
+```ts
+const orders = client.channel("orders:42");
+
+orders.on<{ orderId: number }>("order.created", (data) => {
+  console.log("nouvelle commande", data.orderId);
+});
+orders.on("order.cancelled", (data) => {
+  console.log("commande annulée", data);
+});
+
+orders.emit("order.created", { orderId: 123 });
+```
+
+**Pas un changement de protocole** — `.emit(event, data)` est un
+`publish()` classique dont le payload encode `{"event": "...", "data": ...}`
+en JSON ; `.on(event, handler)` filtre les messages reçus sur ce
+`channelId` pour ne livrer que ceux dont l'enveloppe correspond. Hérite
+donc gratuitement du découpage en chunks transparent de `publish()` pour
+un `data` volumineux, et plusieurs `.on()` sur des évènements différents
+du même canal partagent un seul abonnement réseau (`subscribe()`
+dédoublonne déjà le frame SUB par canal).
+
+`client.on()`/`.off()` (sans argument `channelId`) restent réservés aux
+évènements de connexion (`"open"`, `"close"`, `"error"`, `"authenticated"`,
+`"message"`) — volontairement une API séparée, pas une surcharge du même
+nom, pour ne jamais confondre "le canal reçoit tel évènement applicatif"
+et "la connexion elle-même vient de s'ouvrir/fermer". Un `publish()`
+brut (une chaîne quelconque, un autre SDK qui n'utilise pas cette
+convention) sur le même canal n'interfère pas : `.on()` l'ignore
+silencieusement plutôt que de planter sur du JSON inattendu — utilisez
+`client.subscribe()` directement pour voir tout message brut, quelle que
+soit sa forme.
+
+Réception d'un évènement émis côté serveur (PHP `Client::emitEvent()`,
+voir `sdk-wordpress`/`sdk-laravel`) : même enveloppe JSON, donc
+`client.channel(id).on(event, handler)` le reçoit exactement pareil,
+cross-SDK, sans rien à changer ni d'un côté ni de l'autre.
 
 ## Authentification HTTP avant connexion
 

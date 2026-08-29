@@ -23,6 +23,7 @@
  */
 
 import Prism from 'prismjs'
+import 'prismjs/components/prism-markup'
 import 'prismjs/components/prism-markup-templating'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-jsx'
@@ -50,5 +51,6 @@ export type CodeLanguage =
   | 'toml'
   | 'bash'
   | 'http'
+  | 'markup'
 
 export { Prism }

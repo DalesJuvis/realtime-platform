@@ -6,13 +6,16 @@ ce dépôt — API volontairement proche des SDKs
 [TypeScript](../sdk-typescript), [Python](../sdk-python),
 [Rust](../sdk-rust) et [Android](../sdk-android) du même projet : mêmes
 opérations, mêmes limitations documentées, adaptées ici aux contraintes
-propres à WordPress/PHP.
+propres à WordPress/PHP. `includes/Client.php` est aussi la base de
+[sdk-laravel](../sdk-laravel) — même classe, framework-independent, un
+transport HTTP différent en dessous (voir "Pourquoi pas..." plus bas).
 
 > **Statut de validation (précis, pas juste rassurant) :**
-> - `includes/Client.php` (mint de jeton, publication HTTP) — **réellement
->   testé** : 9/9 tests PHPUnit passants (`composer test`), contre un
->   `HttpTransport` factice, sans dépendre de WordPress (voir la doc de
->   tête de `HttpTransport.php` pour pourquoi c'est possible).
+> - `includes/Client.php` (mint de jeton, publication HTTP, évènements
+>   nommés) — **réellement testé** : 12/12 tests PHPUnit passants
+>   (`composer test`), contre un `HttpTransport` factice, sans dépendre de
+>   WordPress (voir la doc de tête de `HttpTransport.php` pour pourquoi
+>   c'est possible).
 > - `assets/js/mio-protocol.js` (codec du frame binaire), `mio-client.js`
 >   (client WebSocket navigateur) et `mio-embed.js` (même logique,
 >   consolidée en un seul fichier — voir plus bas) — **réellement
@@ -54,8 +57,9 @@ via le shortcode `[mio_realtime]`.
 
 ```bash
 composer install    # includes/ + tests/php (phpunit en dev uniquement)
-composer test        # 9 tests
+composer test        # 12 tests
 npm test              # 23 tests (assets/js/)
+npm run build          # produit assets/js/*.min.js (terser) — voir scripts/minify.js
 ```
 
 Puis, dans WordPress : copier ce dossier dans `wp-content/plugins/`,
@@ -74,6 +78,9 @@ $client = new Client('https://realtime.example.com:8090', $tenantId, $secret);
 
 $minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
 $client->publish('orders:42', 'commande créée', $minted->token);
+
+// Évènement nommé, même enveloppe JSON que côté navigateur (voir plus bas) :
+$client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
 ```
 
 Ne jamais renvoyer `$secret` au navigateur — seul `$minted->token` doit en
@@ -97,6 +104,28 @@ seule page ? `assets/js/mio-embed.js` est `mio-protocol.js` +
 coller directement dans WordPress (bloc HTML personnalisé, zone
 "Insérer en-tête et pied de page" du thème, `footer.php`) — aucun PHP,
 aucune étape de build.
+
+Aucun hébergement à mettre en place — ce dépôt est public, donc
+[jsDelivr](https://www.jsdelivr.com/documentation#id-github) sert le
+fichier directement depuis une release taguée, en cache mondial ; utilisez
+la version `.min.js` (build committé, `npm run build`), pas la source
+brute :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
+  data-host="mio.gabonnettoyage.online"
+  data-tenant-id="12345678-9abc-def0-1122-334455667788"
+  data-token="…"
+  data-channel="orders:42"
+  data-limit="20"
+  data-replay="true"
+></script>
+<div id="my-feed"></div> <!-- optionnel : sans data-target, une div est créée automatiquement -->
+```
+
+Auto-hébergement (`https://votre-site.example/mio-embed.js`) reste une
+option si vous préférez ne pas dépendre de jsDelivr — même fichier,
+même usage :
 
 ```html
 <script src="https://votre-site.example/mio-embed.js"
@@ -132,6 +161,7 @@ propre UI.
 |---|---|
 | Mint de jeton (serveur) | `Client::mintToken($sub, $ttlSecs = null)` |
 | Publication (serveur, HTTP) | `Client::publish($channelId, $payload, $token)` |
+| Évènement nommé (serveur, HTTP) | `Client::emitEvent($channelId, $event, $token, $data = null)` — même enveloppe JSON que `sdk-typescript`'s `client.channel(id).on()` |
 | Jeton pour le navigateur | `GET /wp-json/mio/v1/token` (jamais le secret) |
 | Souscription (navigateur) | `client.subscribe(channelId, handler)` (JS, canal exact ou motif `orders:*`) |
 | Publication (navigateur) | `client.publish(channelId, payload)` (JS, un seul frame) |

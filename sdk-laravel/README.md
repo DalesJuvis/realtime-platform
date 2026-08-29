@@ -60,6 +60,10 @@ use Mio\Realtime\Laravel\Facades\MioRealtime;
 
 $minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn }
 MioRealtime::publish('orders:42', 'order created', $minted->token);
+
+// Named event, JSON-serializable data — same envelope a browser client's
+// client.channel(id).on(event, handler) decodes (sdk-typescript), cross-SDK:
+MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
 ```
 
 Or resolve `Mio\Realtime\Client` directly (constructor injection, a
@@ -81,7 +85,8 @@ class MintOrderToken
 ```
 
 > **Caveat:** same HTTP-only publish path as the WordPress plugin — no
-> chunking. `publish()` throws before any network call if `$payload`
+> chunking. `publish()`/`emitEvent()` throw before any network call if
+> the payload (the encoded `{event, data}` JSON, for `emitEvent()`)
 > exceeds 211 UTF-8 bytes; split it into multiple calls or use a
 > connected SDK client (`@mio/realtime-sdk`) instead.
 

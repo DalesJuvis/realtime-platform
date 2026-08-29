@@ -30,6 +30,11 @@ Portal API URL (REST):   https://realtime.example.com:8090
 
 Call this from your own backend only — your tenant secret never leaves
 it. The resulting token is what you hand to an end user's SDK/browser/app.
+`secret` accepts your tenant's primary secret (Settings → API keys) **or**
+any additional, independently-revocable key pair's secret generated at
+API Keys in your tenant portal — either works identically here; generating
+extra pairs is purely so you can hand a different one to each
+server/app/environment and revoke just that one later.
 
 ```http
 POST https://realtime.example.com:8090/api/v1/auth/tokens
@@ -159,6 +164,16 @@ client.replay('orders:42', 0)
 > server silently ignores a REPLAY request for anything but an exact
 > channel ID.
 
+**How much history is actually available is a deployment detail, not a
+client-side setting.** By default (no `REDIS_URL` set on the server)
+each channel keeps only its most recent 50 messages, in memory — gone on
+a restart. Set `REDIS_URL` (the same variable that enables multi-instance
+broadcast) and the server durably persists history to a per-channel
+Redis Stream instead, capped at `HISTORY_STREAM_MAXLEN` (default 1000)
+and surviving restarts — `replay()` on the client needs no changes
+either way, it's the exact same call. See `backend/docker-compose.shared-proxy.yml`'s
+`service-cache` for the deployment side of this.
+
 ### Automatic chunking
 
 `publish()` and `unicast()` transparently split any payload larger than
@@ -172,6 +187,26 @@ Same methods, other SDKs: Python — `await client.unicast(...)` /
 `await client.replay(...)`; Rust — `client.unicast(...)` /
 `client.replay(...)`; Android (Kotlin/Java) — `client.unicast(...)` /
 `client.replay(...)`.
+
+### Named events, socket.io-style — `client.channel()`
+
+**TypeScript only for now** (Python/Rust/Android don't have this yet —
+their `subscribe()`/`publish()` work unchanged in the meantime). A
+channel-scoped handle with `.on(event, handler)`/`.emit(event, data)`,
+for a channel that carries more than one type of message:
+
+```typescript
+const orders = client.channel('orders:42')
+orders.on('order.created', (data) => console.log(data.orderId))
+orders.emit('order.created', { orderId: 123 })
+```
+
+Not a protocol change — `.emit()` is a `publish()` whose payload encodes
+`{"event": ..., "data": ...}` in JSON; `.on()` filters `subscribe()` for
+messages matching that shape and event name, ignoring anything else on
+the channel (a plain-string `publish()`, or an event with a different
+name) rather than erroring on it. See the WordPress/Laravel section
+below for `Client::emitEvent()` — same envelope, server-side.
 
 ## JavaScript / TypeScript
 
@@ -428,6 +463,17 @@ $client->publish('orders:42', 'order created', $minted->token);
 > UTF-8 bytes throws before any network call. Never return `$secret` to
 > the browser — only `$minted->token` should leave PHP.
 
+`Client::emitEvent()` is `publish()` for a named event with
+JSON-serializable data — same envelope `sdk-typescript`'s
+`client.channel(id).on(event, handler)` decodes, so a browser client
+receives exactly this, cross-SDK, no server-side protocol change:
+
+```php
+$client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
+// Received in the browser as:
+// client.channel('orders:42').on('order.created', (data) => ...) // data.orderId === 123
+```
+
 ### On the page
 
 A shortcode renders a live-updating feed, backed by a real WebSocket
@@ -464,6 +510,9 @@ use Mio\Realtime\Laravel\Facades\MioRealtime;
 
 $minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn }
 MioRealtime::publish('orders:42', 'order created', $minted->token);
+
+// Named event, same envelope client.channel(id).on() decodes — see WordPress section above:
+MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
 ```
 
 Or resolve `Mio\Realtime\Client` directly via the container (constructor
