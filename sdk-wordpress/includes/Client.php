@@ -109,6 +109,35 @@ class Client
     }
 
     /**
+     * Publishes a named event with JSON-serializable data — a `publish()`
+     * whose payload encodes `{"event": ..., "data": ...}`, the exact same
+     * envelope `sdk-typescript`'s `ChannelHandle` (`client.channel(id).on()`/
+     * `.emit()`, see that SDK's `channel.ts`) uses — a browser client's
+     * `on($event, $handler)` receives exactly what this emits, cross-SDK,
+     * with no server-side change: it's still one `publish()` under the hood.
+     *
+     * Not a protocol change, so it inherits `publish()`'s own limits
+     * unmodified: the encoded JSON still counts against the 211-byte,
+     * no-chunking cap (see `publish()`'s own doc comment) — a real
+     * WebSocket client (`assets/js/mio-embed.js`, `sdk-typescript`
+     * directly) is the option for events whose data won't fit.
+     *
+     * @param string $channelId
+     * @param string $event
+     * @param string $token From `mintToken()`.
+     * @param mixed $data JSON-serializable. Omit for an event with no data
+     *        (encodes as `{"event": "..."}`, no `data` key at all —
+     *        symmetric with `sdk-typescript`'s `emit(event)` with no `data` argument).
+     * @return bool
+     * @throws ClientException
+     */
+    public function emitEvent($channelId, $event, $token, $data = null)
+    {
+        $envelope = $data === null ? array('event' => $event) : array('event' => $event, 'data' => $data);
+        return $this->publish($channelId, (string) json_encode($envelope), $token);
+    }
+
+    /**
      * @param string $channelId
      * @param string $payload
      * @throws ClientException

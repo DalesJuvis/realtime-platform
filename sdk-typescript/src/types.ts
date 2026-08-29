@@ -31,6 +31,11 @@ export interface RealtimeMessage {
 export type MessageHandler = (message: RealtimeMessage) => void;
 export type Unsubscribe = () => void;
 
+/** Import différé uniquement pour le type — `channel.ts` n'a besoin
+ * d'aucun autre export de ce module, et l'inverse (`channel.ts` important
+ * de `types.ts`) est déjà le sens réel de la dépendance. */
+import type { ChannelHandle } from "./channel.js";
+
 /**
  * Contrat commun à toute implémentation de transport temps réel.
  *
@@ -63,6 +68,16 @@ export interface RealtimeAdapter {
    * strictement équivalents à l'UNICAST serveur natif).
    */
   unicast?(userId: string, payload: string): void | Promise<void>;
+
+  /**
+   * Poignée scoped-à-un-canal façon socket.io (`.on(event, handler)` /
+   * `.emit(event, data)`) — voir `channel.ts`. Optionnel dans l'interface
+   * comme `unicast` ci-dessus : `ChannelHandle` n'a besoin que de
+   * `subscribe`/`publish`, donc rien n'empêche un futur adaptateur de
+   * l'implémenter, mais les adaptateurs Firebase/PubNub actuels (gabarits
+   * non validés, voir leurs propres en-têtes) ne le font pas encore.
+   */
+  channel?(channelId: string): ChannelHandle;
 }
 
 /** Évènements émis par `RealtimeClient` (spécifique au moteur maison). */

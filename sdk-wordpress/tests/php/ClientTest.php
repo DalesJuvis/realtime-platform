@@ -152,4 +152,52 @@ final class ClientTest extends TestCase
         $body = json_decode($transport->requests[0]['body'], true);
         self::assertArrayNotHasKey('ttl_secs', $body);
     }
+
+    public function testEmitEventEncodesEventAndDataAsThePayload()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array(
+            'success' => true,
+            'data' => array('published' => true),
+        )));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        $ok = $client->emitEvent('orders:42', 'order.created', 'a-client-token', array('orderId' => 7));
+
+        self::assertTrue($ok);
+        $req = $transport->requests[0];
+        $body = json_decode($req['body'], true);
+        $payload = json_decode($body['payload'], true);
+        self::assertSame('order.created', $payload['event']);
+        self::assertSame(array('orderId' => 7), $payload['data']);
+    }
+
+    public function testEmitEventWithoutDataOmitsTheDataKeyEntirely()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array(
+            'success' => true,
+            'data' => array('published' => true),
+        )));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        $client->emitEvent('orders:42', 'ping', 'a-client-token');
+
+        $req = $transport->requests[0];
+        $body = json_decode($req['body'], true);
+        $payload = json_decode($body['payload'], true);
+        self::assertSame('ping', $payload['event']);
+        self::assertArrayNotHasKey('data', $payload);
+    }
+
+    public function testEmitEventRejectsAnOversizedEncodedPayloadWithoutAnyNetworkCall()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array('success' => true, 'data' => array())));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        $this->expectException(ClientException::class);
+        try {
+            $client->emitEvent('orders:42', 'big', 'token', array('text' => str_repeat('x', 250)));
+        } finally {
+            self::assertCount(0, $transport->requests, 'must fail before any HTTP call, same as publish() itself');
+        }
+    }
 }

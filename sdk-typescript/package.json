@@ -18,7 +18,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test --loader ts-node/esm src/**/*.test.ts",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js",
     "lint": "tsc --noEmit"
   },
   "keywords": [
@@ -40,7 +40,6 @@
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.0",
-    "ts-node": "^10.9.0",
     "typescript": "^5.5.0"
   }
 }

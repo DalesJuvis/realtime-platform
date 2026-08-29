@@ -19,6 +19,9 @@ export type {
   Unsubscribe,
 } from "./types.js";
 
+export { ChannelHandle } from "./channel.js";
+export type { ChannelTransport, EventEnvelope } from "./channel.js";
+
 export { Opcode, ProtocolError, crc16CcittFalse, globMatch } from "./protocol.js";
 export type { DecodedFrame, FrameFields } from "./protocol.js";
 

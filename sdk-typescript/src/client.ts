@@ -14,6 +14,7 @@
 import { Opcode, decodeFrame, encodeFrame, globMatch, type DecodedFrame } from "./protocol.js";
 import { ChunkReassembler, DEFAULT_MAX_MESSAGE_BYTES, encodeChunks, parseChunk } from "./chunking.js";
 import { TypedEmitter } from "./event-emitter.js";
+import { ChannelHandle } from "./channel.js";
 import type {
   MessageHandler,
   RealtimeAdapter,
@@ -257,6 +258,19 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
    * correspondante côté serveur est réellement arrêtée
    * (`main.rs::process_frame_inner`, bras `Opcode::Unsub`).
    */
+  /**
+   * Poignée scoped-à-un-canal, façon socket.io (`.on(event, handler)` /
+   * `.emit(event, data)`) — voir `channel.ts` pour pourquoi ce n'est pas
+   * juste `this.on()`/`.emit()` (déjà pris par `TypedEmitter`, pour un
+   * axe complètement différent : le cycle de vie de la connexion, pas les
+   * messages applicatifs d'un canal). Chaque appel construit une nouvelle
+   * poignée légère — rien à mettre en cache, `ChannelHandle` ne porte
+   * aucun état propre au-delà de `channelId`.
+   */
+  channel(channelId: string): ChannelHandle {
+    return new ChannelHandle(this, channelId);
+  }
+
   private unsubscribeHandler(channelId: string, handler: MessageHandler): void {
     const handlers = this.subscriptions.get(channelId);
     if (!handlers) return;
