@@ -35,10 +35,16 @@ written.
    already-minted token string and passes it to `connect`/`token:`.
 3. **`tenant_id` is public** — safe to embed in client-side code,
    config files, URLs. It is an identifier, not a credential.
-4. **The fixed frame payload is 211 UTF-8 bytes.** Any SDK's
-   `publish()`/`unicast()`/`emit()` chunk transparently above that; the
-   stateless REST `POST /api/v1/messages` does **not** chunk and returns
-   `400 INVALID_REQUEST` above the limit.
+4. **The fixed frame payload is 211 UTF-8 bytes.** Only TypeScript's
+   `publish()`/`unicast()`/`channel().emit()` chunk transparently above
+   that (no data loss). **Python/Rust/Android silently truncate** an
+   oversized payload instead — no error, no exception, data just
+   disappears — so check the size yourself before calling
+   `publish()`/`unicast()` in those three. The stateless REST
+   `POST /api/v1/messages` and PHP's `Client::publish()`/`emitEvent()`
+   take the safe opposite approach: they reject an oversized payload
+   with an error before any network call. See the feature matrix in §8
+   for the full breakdown.
 5. **`channel_id` is capped at 24 UTF-8 bytes.** Same cap applies to
    `userId` in `unicast()` (it reuses the same wire field).
 6. **There is no AUTH acknowledgement opcode.** A client's
@@ -63,7 +69,7 @@ written.
 | `channel_id` | Routing key for pub/sub, ≤24 UTF-8 bytes. `orders:42` is a plain example convention (colon-delimited namespacing), not a protocol requirement. |
 | wildcard pattern | A subscribe-only channel spec with a trailing `*` (`orders:*`) matching any concrete `channel_id` with that prefix. Cannot be published to or replayed. |
 | frame | The fixed 256-byte binary unit every WS/TCP message is encoded as. See §7. |
-| chunking | SDK-side (never protocol-side) splitting of a payload >211 bytes into multiple PUB/UNICAST frames, reassembled on the receiving end before the app-level handler fires. |
+| chunking | TypeScript-SDK-only (never protocol-side, never in Python/Rust/Android) splitting of a payload >211 bytes into multiple PUB/UNICAST frames, reassembled on the receiving end before the app-level handler fires. See §8's feature matrix. |
 
 ## 3. Auth model
 
@@ -231,10 +237,13 @@ REST endpoints.
   durable via Redis Streams (up to `HISTORY_STREAM_MAXLEN`, default
   1000, survives restarts) if the server has `REDIS_URL` set. The
   client-side call is identical either way.
-- **Automatic chunking**: `publish()`/`unicast()` transparently split
-  payloads >211 bytes across multiple frames and reassemble on receipt —
-  nothing to configure, doesn't apply to REPLAY-based catch-up entries'
-  own original size at publish time. Only `POST /api/v1/messages` lacks this.
+- **Automatic chunking — TypeScript only**: `publish()`/`unicast()`
+  transparently split payloads >211 bytes across multiple frames and
+  reassemble on receipt — nothing to configure. Python/Rust/Android
+  have no equivalent: their `publish()`/`unicast()` silently truncate
+  an oversized payload instead (no error). `POST /api/v1/messages` and
+  PHP's `Client` reject an oversized payload outright rather than
+  truncating or chunking. Full breakdown in §8's feature matrix.
 - **Named events, socket.io-style (`client.channel()`) — TypeScript
   only, as of this writing.** Python/Rust/Android don't have this;
   their `subscribe()`/`publish()` are unaffected.
@@ -251,6 +260,30 @@ REST endpoints.
   compatible with `channel().on()` with zero extra work either side.
 
 ## 8. Per-SDK quick reference
+
+### Cross-SDK feature matrix
+
+| Capability | TypeScript | Python | Rust | Android | `mio-client.js`/`mio-embed.js` (WordPress, lightweight) | PHP `Client` (WordPress/Laravel) |
+|---|---|---|---|---|---|---|
+| Persistent WS connection | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ (HTTP request/response only, no held connection) |
+| `publish(channelId, payload)` | ✅ | ✅ `await` | ✅ | ✅ | ✅ | ✅ HTTP, `mintToken()`'d token required |
+| `subscribe(channelId, handler)` — exact | ✅ returns `Unsubscribe` | ✅ returns `Unsubscribe` | ✅ returns `broadcast::Receiver` | ✅ returns `AutoCloseable` | ✅ | ❌ |
+| `subscribe` — wildcard `orders:*` | ✅ | ✅ | ✅ | ✅ | ❌ (deliberately trimmed) | ❌ |
+| `unicast(userId, payload)` | ✅ | ✅ `await` | ✅ | ✅ | ❌ (deliberately trimmed) | ❌ |
+| `replay(channelId, since?)` | ✅ | ✅ `await` | ✅ | ✅ | ✅ via `data-replay` attr only (embed) | ❌ |
+| Oversized payload (>211 bytes) handling | **transparent multi-frame chunking, no data loss** | **silent truncation, no error, no chunking — data loss** | **silent truncation, no error, no chunking — data loss** | **silent truncation, no error, no chunking — data loss** | throws (no chunking) | throws `ClientException` before any network call |
+| Explicit `unsubscribe`/`off` semantics | per-handler; last handler removed → real `UNSUB` frame | per-handler; last handler removed → real `UNSUB` frame | **not per-handler** — one shared bus per channel; `unsubscribe(channel_id)` kills it for every `Receiver` at once | per-listener; last listener removed → real `UNSUB` frame | n/a | n/a |
+| Named events `channel(id).on()`/`.emit()` | ✅ (only SDK with this) | ❌ | ❌ | ❌ | ❌ | ✅ emit-only, `Client::emitEvent()` (no receive side — PHP has no persistent connection to receive on) |
+| Connection lifecycle events | ✅ `client.on("open"\|"close"\|"error"\|"authenticated")` | not a separate public API (internal only) | not a separate public API (internal only) | ✅ `ConnectionEvent` sealed class via `onConnectionEvent()` | ✅ (event emitter) | n/a |
+| Reconnect (auto, exp. backoff + jitter, resubscribe) | ✅ | ✅ | ✅ | ✅ | ✅ | n/a |
+| Mints its own token | ❌ never — see §1.2 | ❌ never | ❌ never | ❌ never | ❌ never | ✅ `mintToken()` (this is the one SDK that's allowed to — it's server-side) |
+| Compiled/tested by its authors | ✅ | partial (codec only) | ❌ | ❌ | ✅ | ✅ |
+
+The truncation-vs-chunking row is the one most likely to bite a
+generated integration: **do not assume Python/Rust/Android SDKs are
+safe to `publish()`/`unicast()` an arbitrarily long string.** Check
+`len(payload.encode('utf-8')) <= 211` (or the language equivalent)
+yourself first, or split it into multiple calls.
 
 ### TypeScript (`@mio/realtime-sdk`) — browser, Node.js, base for React/RN
 
@@ -273,6 +306,23 @@ client.publish('orders:42', 'order created')
 ```
 No AUTH ack (see §1.6) — watch `close`, not just `authenticated`.
 
+**Full API — `RealtimeClient` / `createRealtimeClient(config): RealtimeAdapter`**
+
+`RealtimeClientConfig` fields: `host` + optional `port` (default 8080) + `secure` (default false) + `path` (default `/ws`) — **or** `url` directly (mutually exclusive with `host`/`port`/`secure`/`path`); `tenantId: string`; `token: string`; `heartbeatIntervalMs?: number` (default 15000); `reconnect?: boolean` (default true); `reconnectBaseDelayMs?: number` (default 500); `reconnectMaxDelayMs?: number` (default 15000); `maxMessageBytes?: number` (default 65536 — a sanity cap on chunked payload size, not a protocol limit); `webSocketImpl?: new (url: string) => WebSocketLike` (test/exotic-runtime escape hatch; auto-detects `globalThis.WebSocket` or dynamically loads `ws` otherwise).
+
+- `connect(): void` — opens the socket; safe to call once, `disconnect()` first to reconnect manually.
+- `disconnect(): void` — closes and cancels any pending reconnect.
+- `publish(channelId: string, payload: string): void` — chunks transparently above 211 bytes.
+- `unicast(userId: string, payload: string): void` — same chunking; `userId` ≤24 UTF-8 bytes.
+- `replay(channelId: string, sinceUnixSeconds?: number): void` — default `0` (all history).
+- `subscribe(channelId: string, handler: MessageHandler): Unsubscribe` — exact channel or `orders:*` wildcard; multiple `subscribe()` calls on the same `channelId` share one underlying SUB frame; last handler removed on a channel → real UNSUB frame.
+- `channel(channelId: string): ChannelHandle` — see §7's named-events section. `ChannelHandle.on<T>(event: string, handler: (data: T, message: RealtimeMessage) => void): Unsubscribe`; `ChannelHandle.emit(event: string, data?: unknown): void`.
+- `on<K extends keyof RealtimeEvents>(event: K, listener): Unsubscribe` / `off(event, listener): void` — **connection lifecycle only**, not channel messages: `"open"` (`undefined`), `"close"` (`{code, reason}`), `"error"` (`Error`), `"authenticated"` (`undefined`, optimistic), `"message"` (`RealtimeMessage`, fires for every frame before per-channel dispatch). Do not confuse this with `channel().on()` — different object, different purpose, see §7.
+
+`RealtimeMessage`: `{ channelId: string, payload: string, tenantId?: string, receivedAt: number }` — `receivedAt` is a client-side `Date.now()` timestamp, **not** server-stamped (the wire frame carries no timestamp field at all).
+
+Also exported: `isNotificationSupported()`, `requestNotificationPermission()`, `attachBackgroundNotifications(client, options)`, `registerPushServiceWorker(url)`, `subscribeToPush(registration, vapidPublicKey)`, `unsubscribeFromPush(subscription)` — see §9.
+
 ### React (`@mio/realtime-sdk-react`)
 
 ```bash
@@ -293,13 +343,45 @@ function OrdersFeed() {
   return <button onClick={() => publish('order created')}>Publish</button>
 }
 ```
-Also: `useSubscription`, `useConnectionState`, `useBackgroundNotifications`, `usePushSubscription`.
+**Full API**
+
+- `<RealtimeProvider client?={RealtimeClient} config?={RealtimeClientConfig} autoConnect?={boolean /* default true */}>` — exactly one of `client`/`config` required. `client`: caller-owned, Provider connects/disconnects around its lifecycle but never constructs it. `config`: Provider builds+owns the client, calls `disconnect()` on unmount.
+- `useRealtimeContext(): { client, connectionState, lastError }` — low-level; throws outside a Provider.
+- `useRealtimeClient(): RealtimeClient` — just the client.
+- `useConnectionState(): { connectionState: "idle"|"connecting"|"open"|"closed"|"error", lastError: Error | null }`.
+- `useSubscription(channelId: string | null | undefined, handler: MessageHandler): void` — effect-only, never re-renders its own component; `handler` need not be stable between renders (kept in a ref); nullish `channelId` disables it.
+- `useChannel(channelId, options?: { limit?: number /* default 50 */, replaySince?: number }): { messages: RealtimeMessage[], publish: (payload: string) => void, clear: () => void }` — accumulates messages in React state (re-renders per message), oldest evicted past `limit`; `clear()` empties the local buffer only, doesn't unsubscribe; if `replaySince` set, calls `replay()` on every (re)subscription and mixes replayed frames into `messages` indistinguishably from live ones.
+- `usePublish(channelId: string): (payload: string) => void` — publish-only, no subscription.
+- `<ChannelSubscriber channelId={...} {...options}>{(state) => ...}</ChannelSubscriber>` — render-prop wrapper over `useChannel`, no extra logic.
+- `<ConnectionIndicator className?={string} labels?={Partial<Record<ConnectionState,string>>} />` — unstyled `<span>`, default label per state, overridable per-state.
+- `useBackgroundNotifications(options?: BackgroundNotificationOptions): void` — wraps core `attachBackgroundNotifications`; `options` reference identity doesn't need to be stable.
+- `usePushSubscription(serviceWorkerUrl: string, vapidPublicKey: string): { status: "idle"|"subscribing"|"subscribed"|"unsubscribing"|"error", subscription: PushSubscriptionInfo | null, error: Error | null, subscribe: () => Promise<PushSubscriptionInfo | null>, unsubscribe: () => Promise<void>, isSupported: boolean }` — does **not** POST anywhere itself; caller sends the resolved `{endpoint, keys}` to their own backend (`POST /api/v1/push/subscriptions`).
+
+Re-exports `RealtimeClient` class + core types so consumers don't need a separate `@mio/realtime-sdk` import alongside these hooks.
 
 ### React Native (`@mio/realtime-sdk-react-native`)
 
-Same hooks as React, plus AppState-aware reconnection. **Notification
-hooks are NOT re-exported** (browser-only `Notification`/`PushManager`
-APIs don't exist in RN — use `@react-native-firebase/messaging` instead).
+Re-exports everything from `@mio/realtime-sdk-react` **except**
+`useBackgroundNotifications`/`usePushSubscription` (browser-only
+`Notification`/`PushManager` APIs don't exist in RN — use
+`@react-native-firebase/messaging` instead) — every other hook/component
+listed above is identical, same import surface, just from
+`@mio/realtime-sdk-react-native`.
+
+**`<RealtimeProvider>` here is a replacement, not a re-export** — same
+props signature, but internally wraps an `AppStateReconnector` (not
+itself exported): on background, it explicitly calls `client.disconnect()`
+rather than letting the OS silently kill the socket (avoids burning the
+reconnect backoff budget on attempts with no foregrounded JS to receive
+them); on foreground, it calls `client.connect()` itself. Rationale: RN
+can fully suspend JS execution in the background, so the core client's
+own in-JS backoff timer would never fire there anyway.
+
+`useNetworkReconnect(): void` — separate opt-in hook, must be used under
+a `<RealtimeProvider>`. Dynamically imports `@react-native-community/netinfo`
+(an **optional** peer dependency, not bundled) — silently becomes a
+no-op if it isn't installed, rather than crashing. When present, calls
+`client.connect()` on a `false→true` network-connectivity transition.
 
 ### Python (`realtime-sdk`, asyncio)
 
@@ -324,6 +406,22 @@ asyncio.run(main())
 authors** — only the pure-stdlib protocol codec has real coverage.
 Verify against a live connection before trusting generated code here.
 
+**Full API**
+
+`ClientConfig` (dataclass): `url: str`; `tenant_id: UUID`; `token: str`; `heartbeat_interval: float = 15.0`; `reconnect: bool = True`; `reconnect_base_delay: float = 0.5`; `reconnect_max_delay: float = 15.0`.
+
+- `async connect() -> None` — starts the background connection task. Does not itself await the socket actually opening — no "connected" future is exposed.
+- `async disconnect() -> None` — cancels heartbeat/connection tasks, closes the socket, disables any pending reconnect.
+- `async __aenter__()` / `__aexit__()` — `async with RealtimeClient(config) as client:` sugar for `connect()`/`disconnect()`.
+- `subscribe(channel_id: str, handler: MessageHandler) -> Unsubscribe` — **sync**, not async, despite the client being asyncio-based; exact channel or `*` wildcard. Last handler removed for a channel schedules a real UNSUB frame via `asyncio.create_task`.
+- `async publish(channel_id: str, payload: str) -> None`.
+- `async unicast(user_id: str, payload: str) -> None` — silently truncates >211 bytes, see §8's matrix.
+- `async replay(channel_id: str, since_unix_secs: int = 0) -> None`.
+
+`RealtimeMessage` (frozen dataclass): `channel_id: str`, `payload: str`, `tenant_id: UUID`. Type aliases: `MessageHandler = Callable[[RealtimeMessage], None]`, `Unsubscribe = Callable[[], None]`.
+
+`realtime_sdk.protocol` (pure stdlib, usable without `websockets` installed): `Opcode` (IntEnum, same 9 values as everywhere else), `encode_frame(opcode, tenant_id, channel_id="", payload="") -> bytes`, `decode_frame(data: bytes) -> DecodedFrame` (raises `ProtocolError`), `crc16_ccitt_false(data: bytes) -> int`, `glob_match(pattern: str, candidate: str) -> bool`.
+
 ### Rust (`realtime-sdk`, Tokio)
 
 ```rust
@@ -347,6 +445,23 @@ async fn main() {
 **Caveat: documented as not yet compiled by its authors.** Treat as a
 first draft; run `cargo build` yourself before trusting it.
 
+**Full API**
+
+`ClientConfig` (struct, `Default`): `url: String = ""`; `tenant_id: Uuid = Uuid::nil()`; `token: String = ""`; `heartbeat_interval: Duration = 15s`; `reconnect: bool = true`; `reconnect_base_delay: Duration = 500ms`; `reconnect_max_delay: Duration = 15s`.
+
+- `RealtimeClient::connect(config: ClientConfig) -> Self` — **associated fn, not a method**; spawns the background task and returns immediately (non-blocking, may still be retrying).
+- `publish(&self, channel_id: &str, payload: &str) -> Result<(), ClientError>`.
+- `unicast(&self, user_id: &str, payload: &str) -> Result<(), ClientError>` — silently truncates >211 bytes, see §8's matrix.
+- `replay(&self, channel_id: &str, since_unix_secs: u64) -> Result<(), ClientError>`.
+- `subscribe(&self, channel_id: impl Into<String>) -> broadcast::Receiver<RealtimeMessage>` — multiple calls on the same `channel_id` share one internal `tokio::sync::broadcast` bus, capacity 256; a lagging receiver gets `RecvError::Lagged` rather than unbounded growth.
+- `unsubscribe(&self, channel_id: &str) -> Result<(), ClientError>` — **not per-`Receiver`**: kills the shared bus for that channel entirely (every outstanding `Receiver` for it gets `RecvError::Closed`) and sends a real UNSUB frame. This is the one SDK where unsubscribe isn't scoped to a single handler — `broadcast::Receiver` has no "last subscriber dropped" hook to hang that off of.
+- `disconnect(self)` — consumes `self`, aborts the background task. **No graceful WS close handshake is sent** (documented simplification). `impl Drop` aborts the task too, as a safety net if `disconnect()` is never called.
+
+`ClientError`: `NotConnected` (the background task's command channel closed).
+`RealtimeMessage` (`Debug, Clone, PartialEq, Eq`): `channel_id: String`, `payload: String`, `tenant_id: Uuid`.
+
+`realtime_sdk::{Opcode, ProtocolError, FrameFields, encode_frame, decode_frame, crc16_ccitt_false, glob_match}` re-exported from `protocol.rs` — `DecodedFrame` here owns its `String` fields (not zero-copy like the server's), a deliberate API-simplicity tradeoff.
+
 ### Android — Kotlin/Java (Gradle module, OkHttp)
 
 ```kotlin
@@ -358,6 +473,27 @@ client.publish("orders:42", "order created")
 **Caveat: documented as not yet compiled by its authors** (no
 `kotlinc`/JDK available when written). Callbacks fire on OkHttp's own
 thread — dispatch to the UI thread yourself. No Maven artifact yet.
+
+**Full API**
+
+**No separate Java-facing class exists** — one Kotlin file made
+Java-friendly via `@JvmOverloads`, `fun interface` (SAM) callbacks, and
+`AutoCloseable` (works with try-with-resources), rather than exposing
+coroutines in the public API. Confirmed identical usage from both
+`examples/JavaUsage.java` and `examples/KotlinUsage.kt`.
+
+`RealtimeClientConfig` (data class, `@JvmOverloads` constructor): `url: String`; `tenantId: UUID`; `token: String`; `heartbeatIntervalMs: Long = 15_000`; `reconnect: Boolean = true`; `reconnectBaseDelayMs: Long = 500`; `reconnectMaxDelayMs: Long = 15_000`; `okHttpClient: OkHttpClient = OkHttpClient()` (pass your own if your app already configures interceptors/timeouts/cert pinning).
+
+- `connect()` / `disconnect()` — the latter closes with standard WS code `1000`, cancels heartbeat, disables auto-reconnect.
+- `onConnectionEvent(listener: ConnectionListener): AutoCloseable` — `ConnectionEvent` sealed class: `Open`, `Closed(code: Int, reason: String)`, `Error(throwable: Throwable)`, `Authenticated` (optimistic — no AUTH ack, see §1.6).
+- `subscribe(channelId: String, listener: MessageListener): AutoCloseable` — exact or `*` wildcard; `.close()` (or Kotlin `.use { }`) sends a real UNSUB once the last listener for that channel is gone.
+- `publish(channelId: String, payload: String)`.
+- `unicast(userId: String, payload: String)` — silently truncates >211 bytes, see §8's matrix.
+- `replay(channelId: String, sinceUnixSeconds: Long = 0)` — `@JvmOverloads` gives Java a zero-arg-suffix overload too.
+
+`fun interface MessageListener { fun onMessage(message: RealtimeMessage) }`, `fun interface ConnectionListener { fun onEvent(event: ConnectionEvent) }` — both SAM, usable as a lambda from Kotlin or Java. `RealtimeMessage` (data class): `channelId: String`, `payload: String`, `tenantId: UUID`.
+
+Heartbeat runs on a daemon `ScheduledExecutorService` (`"realtime-sdk-scheduler"`), not coroutines. `Protocol.kt`: `Opcode` enum with `fromByte(value: Int): Opcode?`, `encodeFrame(opcode, tenantId, channelId = "", payload = "")` (`@JvmOverloads`), `decodeFrame(data: ByteArray): DecodedFrame` (throws `ProtocolException`), `crc16CcittFalse(...)`, `globMatch(...)`.
 
 ### WordPress (PHP `Mio\Realtime\Client`, no persistent connection)
 
@@ -379,6 +515,18 @@ ships `[mio_realtime channel="..."]` shortcode and standalone
 `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`).
 
+**Full API — `Mio\Realtime\Client`**
+
+Constructor: `new Client(string $apiUrl, string $tenantId, string $secret, ?HttpTransport $transport = null)` — `$transport` defaults to `WpHttpTransport` (needs WordPress loaded); inject your own (e.g. `LaravelHttpTransport`, or a test double) to use `Client` outside WordPress entirely — it calls zero WordPress functions itself.
+
+- `mintToken(string $sub, ?int $ttlSecs = null): MintedToken` — `MintedToken { public readonly string $token; public readonly int $expiresIn; }`. `$ttlSecs` omitted uses the server's own default (3600s).
+- `publish(string $channelId, string $payload, string $token): bool` — throws `ClientException` (never a network call) if `$channelId` >24 bytes or `$payload` >211 UTF-8 bytes.
+- `emitEvent(string $channelId, string $event, string $token, mixed $data = null): bool` — `publish()` with a JSON `{event, data}` payload; `$data === null` omits the `data` key entirely from the JSON rather than emitting `null`.
+- `ClientException`: `getMessage(): string`, `getErrorCode(): string`, `getHttpStatus(): ?int` (null for a purely local validation failure, e.g. oversized payload, since no request was ever sent).
+
+**`mio-client.js`/`mio-embed.js` (browser, no PHP, deliberately minimal — no unicast, no wildcard, no chunking, no `channel()`/events):**
+`new MioRealtimeClient({url?, host?, port?, secure?, path?, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)`. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-host`, `data-tenant-id`, `data-token`, `data-channel`, `data-port`, `data-secure`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
+
 ### Laravel (`mio/realtime-laravel`)
 
 Same `Client` class as WordPress, `LaravelHttpTransport` in place of
@@ -396,6 +544,19 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
 Or inject `Mio\Realtime\Client` directly — same bound singleton.
 **Caveat: service provider/facade not verified against a real booted
 Laravel app**; only `LaravelHttpTransport` has real tests.
+
+**Full API**
+
+`MioRealtime` facade forwards every call to the container-bound
+`Mio\Realtime\Client` singleton via Laravel's standard `__callStatic`
+magic — so it has **exactly** `Client`'s method list from the WordPress
+section above (`mintToken`, `publish`, `emitEvent`, same signatures, no
+Laravel-specific renaming or wrapping). `MioRealtimeServiceProvider`
+binds `Client::class` from config keys `mio-realtime.api_url`/`.tenant_id`/`.secret`
+(env vars `MIO_REALTIME_API_URL`/`MIO_REALTIME_TENANT_ID`/`MIO_REALTIME_SECRET`),
+using `LaravelHttpTransport` (constructor-injected `Illuminate\Http\Client\Factory`,
+in place of `WpHttpTransport`'s `wp_remote_post`) — nothing WordPress-specific
+ever loads.
 
 ## 9. Web Push
 

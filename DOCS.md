@@ -174,17 +174,31 @@ and surviving restarts — `replay()` on the client needs no changes
 either way, it's the exact same call. See `backend/docker-compose.shared-proxy.yml`'s
 `service-cache` for the deployment side of this.
 
-### Automatic chunking
+### Automatic chunking — TypeScript only
 
-`publish()` and `unicast()` transparently split any payload larger than
-one 211-byte frame into multiple frames and reassemble them on the
-receiving end before your `subscribe()` handler ever sees it — nothing
-to configure. Only the stateless REST publish endpoint (`POST
-/api/v1/messages`, see REST API above) lacks this and caps at 211
-bytes per call.
+**Correction (this used to say all four connected SDKs behave the
+same — verified against the actual source and that was wrong):** only
+`sdk-typescript`'s `publish()`/`unicast()` transparently split a
+payload larger than one 211-byte frame into multiple frames and
+reassemble them before `subscribe()` fires — nothing to configure.
 
-Same methods, other SDKs: Python — `await client.unicast(...)` /
-`await client.replay(...)`; Rust — `client.unicast(...)` /
+Python/Rust/Android have no chunking module at all (confirmed: no
+`chunking.py`/`chunking.rs`/`Chunking.kt` anywhere in those SDKs) —
+their `publish()`/`unicast()` **silently truncate** any payload over
+211 UTF-8 bytes at encode time (on a valid UTF-8 character boundary,
+so it never panics, but the tail of the message is simply gone — no
+exception, no error return, no signal to the caller at all). This is a
+real footgun: check your payload size yourself before calling
+`publish()`/`unicast()` in those three SDKs, or split it into multiple
+calls. The stateless REST publish endpoint (`POST /api/v1/messages`)
+takes the opposite, safer approach: it rejects an oversized payload
+with `400 INVALID_REQUEST` before any network call, same as PHP's
+`Client::publish()`/`emitEvent()` (`ClientException`, also before any
+network call) — neither of those silently truncates.
+
+`unicast()`/`replay()` themselves (the methods, not chunking) do exist
+identically in every connected SDK: Python — `await client.unicast(...)`
+/ `await client.replay(...)`; Rust — `client.unicast(...)` /
 `client.replay(...)`; Android (Kotlin/Java) — `client.unicast(...)` /
 `client.replay(...)`.
 

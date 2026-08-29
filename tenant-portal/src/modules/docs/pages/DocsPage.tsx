@@ -284,12 +284,15 @@ client.replay('orders:42', 0)`}
               </p>
             </Section>
             <Section
-              title="Automatic chunking"
-              description="publish() and unicast() transparently split any payload larger than one 211-byte frame into multiple frames and reassemble them on the receiving end before your subscribe() handler ever sees it — nothing to configure."
+              title="Automatic chunking — TypeScript only"
+              description="Only sdk-typescript's publish()/unicast() transparently split a payload larger than 211 bytes across multiple frames and reassemble it before subscribe() fires. Python/Rust/Android have no chunking module at all — their publish()/unicast() silently truncate an oversized payload at encode time instead: no exception, no error, the tail of the message is just gone."
               language="typescript"
-              code={`// No API difference — this just works:
-client.publish('orders:42', veryLongDescription) // > 211 UTF-8 bytes, chunked automatically`}
-              caveat="Only the stateless REST publish endpoint (POST /api/v1/messages, see REST API tab) lacks this and caps at 211 bytes per call."
+              code={`// TypeScript only — this just works:
+client.publish('orders:42', veryLongDescription) // > 211 UTF-8 bytes, chunked automatically
+
+// Python/Rust/Android: check the size yourself first, or split it —
+// publish()/unicast() there truncate silently, they don't chunk or throw.`}
+              caveat="POST /api/v1/messages and PHP's Client::publish()/emitEvent() take the opposite, safer approach: they reject an oversized payload with an error before any network call, rather than truncating or chunking."
             />
             <Section
               title="Named events, socket.io-style — client.channel()"
