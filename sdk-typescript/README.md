@@ -309,11 +309,47 @@ l'encodage/décodage.
   d'authentification (jeton invalide ou expiré), le serveur ferme la
   connexion avec un code WS dédié (`4001`) — observez l'évènement
   `authFailed` plutôt qu'un `close` générique pour détecter précisément ce
-  cas. Le client ne retente **jamais** automatiquement après un
-  `authFailed`, même avec `reconnect: true` : retenter avec le même jeton
-  échouerait à nouveau, indéfiniment. Minez un nouveau jeton et
-  reconstruisez un `RealtimeClient` plutôt que de compter sur la
-  reconnexion automatique ici.
+  cas. Sans `getToken` configuré (voir la section dédiée ci-dessous), le
+  client ne retente **jamais** automatiquement après un `authFailed`,
+  même avec `reconnect: true` : retenter avec le même jeton échouerait à
+  nouveau, indéfiniment. Minez un nouveau jeton et reconstruisez un
+  `RealtimeClient` plutôt que de compter sur la reconnexion automatique
+  ici — ou configurez `getToken` pour que ça se fasse tout seul.
+
+## Renouvellement silencieux du jeton — `getToken`
+
+Un jeton expire (1h par défaut, jusqu'à 30 jours si miné avec un
+`ttl_secs` plus long). `config.token` est une valeur statique : une fois
+expirée, sans intervention, la connexion reste fermée (voir `authFailed`
+ci-dessus). Si votre application a son propre backend capable de miner un
+jeton à la demande (lui-même appelant `POST /api/v1/auth/tokens` avec le
+secret tenant — **jamais ce SDK, jamais le navigateur**), remplacez
+`token` par `getToken` :
+
+```ts
+const client = createRealtimeClient({
+  wsUrl: "wss://realtime.example.com/ws", // valeur de repli — le ws_url renvoyé par getToken() prend le dessus
+  tenantId: "<tenant-id>",
+  getToken: async () => {
+    // Appelle VOTRE backend, jamais l'API mio directement depuis ce client.
+    const res = await fetch("/api/realtime-token", { method: "POST" });
+    const { token, wsUrl } = await res.json();
+    return { token, wsUrl }; // wsUrl optionnel — omis, celui déjà configuré est réutilisé
+  },
+});
+```
+
+`getToken()` est appelé avant *chaque* tentative de connexion — le
+premier `connect()`, et automatiquement à chaque reconnexion, y compris
+juste après un `authFailed`. Résultat : le renouvellement est silencieux
+pour le reste du code applicatif une fois configuré ici. Un rejet
+(`getToken()` qui lève) est traité comme n'importe quel autre échec de
+connexion — `error` émis, reconnexion replanifiée avec le même backoff
+exponentiel que le reste, jamais de boucle serrée si votre backend est
+temporairement indisponible.
+
+`token` et `getToken` sont mutuellement exclusifs — le type
+`RealtimeClientConfig` l'impose à la compilation.
 
 *Résolu depuis la v0.1 : `unsubscribe()` envoie désormais un vrai frame
 UNSUB (`Opcode 0x09`) au serveur — ce n'est plus un silence purement

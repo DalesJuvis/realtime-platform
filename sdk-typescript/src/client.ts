@@ -32,7 +32,14 @@ const WS_OPEN = 1;
  * côté backend, seule source de vérité pour cette valeur). */
 const WS_CLOSE_CODE_AUTH_FAILED = 4001;
 
-export type RealtimeClientConfig = {
+/** Ce que `getToken` doit renvoyer — exactement la forme de la réponse de
+ * `POST /api/v1/auth/tokens`/`POST /api/v1/portal/tokens` côté appelant
+ * (votre propre backend, pas ce SDK). `wsUrl` omis réutilise celui déjà
+ * configuré — quasi toujours ce qu'on veut, `ws_url` ne varie pas d'un mint
+ * à l'autre pour un même déploiement. */
+export type TokenRefreshResult = { token: string; wsUrl?: string };
+
+type BaseRealtimeClientConfig = {
   /**
    * L'URL `ws://`/`wss://.../ws` exacte à joindre — **jamais construite à
    * la main côté appelant** (pas de `host`/`port`/`secure`/`path` ici,
@@ -51,13 +58,6 @@ export type RealtimeClientConfig = {
   wsUrl: string;
   /** Tenant ID (UUID) — doit correspondre au tenant du jeton `token`. */
   tenantId: string;
-  /**
-   * Jeton d'authentification émis côté serveur
-   * (`auth.rs::AuthManager::issue_token`). Ce SDK ne le génère jamais
-   * lui-même : un jeton signé HMAC ne doit être émis que côté serveur,
-   * qui seul détient le secret du tenant.
-   */
-  token: string;
   /** Intervalle entre deux PING, en ms. Doit rester bien en-deçà du
    * timeout de présence serveur (30s par défaut) pour laisser de la
    * marge aux aléas réseau. Défaut : 15000. */
@@ -82,6 +82,39 @@ export type RealtimeClientConfig = {
    */
   webSocketImpl?: new (url: string) => WebSocketLike;
 };
+
+export type RealtimeClientConfig = BaseRealtimeClientConfig &
+  (
+    | {
+        /**
+         * Jeton d'authentification émis côté serveur
+         * (`auth.rs::AuthManager::issue_token`). Ce SDK ne le génère jamais
+         * lui-même : un jeton signé HMAC ne doit être émis que côté serveur,
+         * qui seul détient le secret du tenant. Statique — s'il expire,
+         * voir l'évènement `authFailed` (aucune tentative de reconnexion
+         * automatique dans ce cas, contrairement à `getToken` ci-dessous).
+         */
+        token: string;
+        getToken?: never;
+      }
+    | {
+        token?: never;
+        /**
+         * Appelé pour obtenir un jeton frais — **votre propre backend**
+         * (qui détient le secret tenant, jamais ce SDK ni le navigateur/app
+         * appelant), pas directement l'API mio. Appelé avant *chaque*
+         * tentative de connexion : le premier `connect()`, et
+         * automatiquement à chaque reconnexion — y compris après un
+         * `authFailed` (jeton expiré/invalide), ce qui rend le
+         * renouvellement transparent pour le code applicatif une fois
+         * configuré une seule fois ici. Un rejet est traité comme n'importe
+         * quel échec de connexion : `error` est émis et une reconnexion est
+         * replanifiée avec le même backoff exponentiel que le reste (pas de
+         * boucle serrée si votre backend est temporairement indisponible).
+         */
+        getToken: () => Promise<TokenRefreshResult>;
+      }
+  );
 
 /**
  * Résout l'implémentation `WebSocket` à utiliser, sans jamais exiger que
@@ -126,7 +159,10 @@ export interface WebSocketLike {
 interface ResolvedConfig {
   url: string;
   tenantId: string;
-  token: string;
+  /** Absent seulement le temps entre la construction et la toute première
+   * résolution de `getToken()`, s'il est configuré — voir `openSocket()`. */
+  token: string | undefined;
+  getToken: (() => Promise<TokenRefreshResult>) | undefined;
   heartbeatIntervalMs: number;
   reconnect: boolean;
   reconnectBaseDelayMs: number;
@@ -166,6 +202,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
       url: config.wsUrl,
       tenantId: config.tenantId,
       token: config.token,
+      getToken: config.getToken,
       heartbeatIntervalMs: config.heartbeatIntervalMs ?? 15_000,
       reconnect: config.reconnect ?? true,
       reconnectBaseDelayMs: config.reconnectBaseDelayMs ?? 500,
@@ -283,6 +320,27 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   }
 
   private async openSocket(): Promise<void> {
+    // Résout un jeton frais avant *chaque* tentative, si `getToken` est
+    // configuré — le premier `connect()` comme chaque reconnexion,
+    // y compris celles qui suivent un `authFailed` (voir `onclose`
+    // ci-dessous, qui laisse simplement le backoff normal reprogrammer un
+    // appel ici). Un rejet est traité exactement comme n'importe quel
+    // autre échec de connexion : `error`, puis reconnexion replanifiée
+    // avec le même backoff que le reste — jamais de boucle serrée sur un
+    // backend applicatif temporairement en panne.
+    if (this.config.getToken) {
+      try {
+        const fresh = await this.config.getToken();
+        this.config.token = fresh.token;
+        if (fresh.wsUrl) this.config.url = fresh.wsUrl;
+      } catch (err) {
+        this.emit("error", err instanceof Error ? err : new Error(String(err)));
+        if (!this.closedByUser && this.config.reconnect) this.scheduleReconnect();
+        return;
+      }
+      if (this.closedByUser) return;
+    }
+
     if (!this.wsImplPromise) {
       this.wsImplPromise = resolveWebSocketImpl(this.config.webSocketImpl);
     }
@@ -300,6 +358,16 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     // already asked to not have.
     if (this.closedByUser) return;
 
+    const token = this.config.token;
+    if (!token) {
+      // Ne peut arriver que si `getToken` n'est pas configuré et que
+      // `config.token` n'a jamais été fourni — le type `RealtimeClientConfig`
+      // l'empêche normalement à la compilation, mais un appelant JS pur
+      // (pas de vérification de type) pourrait quand même y arriver.
+      this.emit("error", new Error("RealtimeClient: aucun jeton disponible — fournissez `token` ou `getToken`."));
+      return;
+    }
+
     const ws = new Impl(this.config.url);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
@@ -307,7 +375,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     ws.onopen = () => {
       this.reconnectAttempt = 0;
       // AUTH envoyé en premier, systématiquement, avant tout SUB/PUB.
-      this.send(Opcode.Auth, "", this.config.token);
+      this.send(Opcode.Auth, "", token);
       this.resubscribeAll();
       this.flushPendingSends();
       this.startHeartbeat();
@@ -347,13 +415,20 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
       this.ws = null;
       this.emit("close", { code: event.code, reason: event.reason });
 
-      // Retrying with the exact same token the server just rejected would
-      // just fail again, forever, silently — see `authFailed`'s own doc
-      // comment in types.ts for what to do instead. Never auto-reconnect
-      // here, no matter `config.reconnect`.
       if (event.code === WS_CLOSE_CODE_AUTH_FAILED) {
         this.emit("authFailed", { code: event.code, reason: event.reason });
-        return;
+
+        // No `getToken` configured: retrying with the exact same token the
+        // server just rejected would just fail again, forever, silently —
+        // see `authFailed`'s own doc comment in types.ts. Never
+        // auto-reconnect here, no matter `config.reconnect`.
+        if (!this.config.getToken) return;
+
+        // `getToken` *is* configured: fall through to the normal reconnect
+        // path below. `openSocket()` always re-fetches a fresh token before
+        // every attempt, so this reconnection picks up a new one
+        // automatically — the app never has to react to `authFailed`
+        // itself unless it wants to (e.g. to show a "renewing…" indicator).
       }
 
       if (!this.closedByUser && this.config.reconnect) {

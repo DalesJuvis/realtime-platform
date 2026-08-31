@@ -11,7 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { RealtimeClient } from "./client.js";
-import { Opcode, encodeFrame } from "./protocol.js";
+import { Opcode, decodeFrame, encodeFrame } from "./protocol.js";
 import type { WebSocketLike } from "./client.js";
 
 const TENANT_ID = "12345678-9abc-def0-1122-334455667788";
@@ -293,6 +293,136 @@ test("a normal close still reconnects — auth-failure handling doesn't break th
   await new Promise((r) => setTimeout(r, 50));
 
   assert.equal(constructCount(), 2, "a non-auth-failure close must still trigger the normal reconnect");
+
+  client.disconnect();
+});
+
+// getToken — silent renewal via an app-supplied callback (calls the
+// caller's own backend, never mio's; this SDK never mints a token itself).
+
+function makeGetTokenClient(getToken: () => Promise<{ token: string; wsUrl?: string }>): {
+  client: RealtimeClient;
+  nextWs: () => Promise<FakeWebSocket>;
+  constructCount: () => number;
+} {
+  let latestWs: FakeWebSocket | undefined;
+  let count = 0;
+  const WsImpl = class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      count++;
+      latestWs = this;
+    }
+  };
+
+  const client = new RealtimeClient({
+    wsUrl: "ws://example.test/ws",
+    tenantId: TENANT_ID,
+    getToken,
+    reconnect: true,
+    reconnectBaseDelayMs: 5,
+    reconnectMaxDelayMs: 5,
+    webSocketImpl: WsImpl,
+  });
+
+  async function nextWs(): Promise<FakeWebSocket> {
+    await new Promise((r) => setTimeout(r, 0));
+    if (!latestWs) throw new Error("no WebSocket instance created yet");
+    return latestWs;
+  }
+
+  return { client, nextWs, constructCount: () => count };
+}
+
+function authTokenSentOn(ws: FakeWebSocket): string {
+  const authFrame = ws.sent.find((f) => f[2] === Opcode.Auth);
+  if (!authFrame) throw new Error("no AUTH frame was sent");
+  return decodeFrame(authFrame).payload;
+}
+
+test("getToken is called before the first connect and its token is used for AUTH", async () => {
+  const { client, nextWs } = makeGetTokenClient(async () => ({ token: "token-from-my-backend" }));
+
+  client.connect();
+  const ws = await nextWs();
+
+  assert.equal(authTokenSentOn(ws), "token-from-my-backend");
+  client.disconnect();
+});
+
+test("getToken's wsUrl, when returned, overrides the configured one for that connection", async () => {
+  let latestWs: FakeWebSocket | undefined;
+  const WsImpl = class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      latestWs = this;
+    }
+  };
+  const client = new RealtimeClient({
+    wsUrl: "ws://example.test/ws",
+    tenantId: TENANT_ID,
+    getToken: async () => ({ token: "t", wsUrl: "wss://fresh.example.test/ws" }),
+    reconnect: false,
+    webSocketImpl: WsImpl,
+  });
+
+  client.connect();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(latestWs?.url, "wss://fresh.example.test/ws");
+  client.disconnect();
+});
+
+test("authFailed with getToken configured re-fetches a fresh token and reconnects with it — silent to the app", async () => {
+  let call = 0;
+  const { client, nextWs } = makeGetTokenClient(async () => {
+    call++;
+    return { token: `token-v${call}` };
+  });
+
+  client.connect();
+  const firstWs = await nextWs();
+  assert.equal(authTokenSentOn(firstWs), "token-v1");
+
+  const authFailedEvents: unknown[] = [];
+  client.on("authFailed", (e) => authFailedEvents.push(e));
+  firstWs.onclose?.({ code: 4001, reason: "authentication failed" });
+
+  // Long enough for the backoff-scheduled reconnect (5ms) to fire —
+  // nextWs()'s own single-tick wait alone isn't, this is timer-scheduled,
+  // not microtask-driven like the initial connect.
+  await new Promise((r) => setTimeout(r, 50));
+  const secondWs = await nextWs();
+  assert.notEqual(secondWs, firstWs, "must have opened a new socket, not reused the rejected one");
+  assert.equal(authTokenSentOn(secondWs), "token-v2", "must reconnect with a freshly-fetched token, not the stale one");
+  assert.deepEqual(authFailedEvents, [{ code: 4001, reason: "authentication failed" }]);
+
+  client.disconnect();
+});
+
+test("a getToken rejection emits error and still reconnects with backoff — no tight retry loop", async () => {
+  let call = 0;
+  const { client, nextWs, constructCount } = makeGetTokenClient(async () => {
+    call++;
+    if (call === 1) throw new Error("my backend is down");
+    return { token: "token-after-recovery" };
+  });
+
+  const errors: unknown[] = [];
+  client.on("error", (e) => errors.push(e));
+
+  client.connect();
+  // No socket should ever be constructed for the failed first attempt.
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(constructCount(), 0);
+
+  // The retry (reconnectBaseDelayMs: 5) picks it up on the second call —
+  // wait long enough for that timer-scheduled attempt to actually fire.
+  await new Promise((r) => setTimeout(r, 50));
+  const ws = await nextWs();
+  assert.equal(authTokenSentOn(ws), "token-after-recovery");
+  assert.equal(errors.length, 1);
+  assert.match((errors[0] as Error).message, /my backend is down/);
 
   client.disconnect();
 });

@@ -103,13 +103,21 @@ export interface RealtimeEvents {
    * Émis juste après `close` quand la fermeture vient précisément d'un
    * AUTH rejeté (jeton invalide ou expiré — `WsController.rs` envoie un
    * code de fermeture WS dédié, `4001`, pour ce cas précis, distinct de
-   * toute autre raison de déconnexion). Le client **n'essaie jamais de se
-   * reconnecter automatiquement** dans ce cas précis, même avec
-   * `reconnect: true` — retenter avec le même jeton que le serveur vient
-   * de rejeter échouerait à nouveau, indéfiniment et silencieusement.
-   * Réagissez ici (ex : afficher "session expirée", remine un jeton côté
-   * serveur puis reconstruisez un `RealtimeClient` avec) plutôt que de
-   * compter sur un `close`/reconnexion générique pour détecter ce cas.
+   * toute autre raison de déconnexion).
+   *
+   * Sans `config.getToken` : le client **n'essaie jamais de se reconnecter
+   * automatiquement** dans ce cas précis, même avec `reconnect: true` —
+   * retenter avec le même jeton que le serveur vient de rejeter échouerait
+   * à nouveau, indéfiniment et silencieusement. Réagissez ici (ex :
+   * afficher "session expirée", miner un jeton côté serveur puis
+   * reconstruire un `RealtimeClient` avec) plutôt que de compter sur un
+   * `close`/reconnexion générique pour détecter ce cas.
+   *
+   * Avec `config.getToken` configuré : ce n'est plus nécessaire — le
+   * client rappelle `getToken()` automatiquement avant la prochaine
+   * tentative et se reconnecte avec le jeton frais tout seul. `authFailed`
+   * reste émis (utile pour un indicateur "renouvellement…" par exemple),
+   * mais rien à faire pour que la connexion reprenne.
    */
   authFailed: { code: number; reason: string };
   /** Tout frame reçu, avant dispatch vers les handlers de souscription. */
