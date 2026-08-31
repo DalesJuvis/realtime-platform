@@ -107,3 +107,64 @@ test("client.channel().emit() actually sends a real SUB then PUB frame over the 
 
   client.disconnect();
 });
+
+/** Unlike `FakeWebSocket` above (which starts `readyState = WS_OPEN` for
+ * every other test's convenience), a real `WebSocket` starts CONNECTING
+ * (0) and only becomes OPEN once `onopen` actually fires — this is what
+ * reproduces the race a caller hits doing `client.connect(); client.replay(...)`
+ * back to back, the exact pattern `mio-embed.js`'s autoInit uses. */
+class SlowOpeningFakeWebSocket implements WebSocketLike {
+  binaryType = "";
+  readyState = 0;
+  onopen: ((event: unknown) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  readonly sent: Uint8Array[] = [];
+
+  constructor(public readonly url: string) {
+    queueMicrotask(() => {
+      this.readyState = WS_OPEN;
+      this.onopen?.(undefined);
+    });
+  }
+
+  send(data: Uint8Array): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.readyState = 3;
+  }
+}
+
+test("replay() called synchronously right after connect() doesn't throw, and is sent once the socket actually opens", async () => {
+  let ws: SlowOpeningFakeWebSocket | undefined;
+  const WsImpl = class extends SlowOpeningFakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      ws = this;
+    }
+  };
+
+  const client = new RealtimeClient({
+    wsUrl: "ws://example.test/ws",
+    tenantId: TENANT_ID,
+    token: "fake-token",
+    reconnect: false,
+    webSocketImpl: WsImpl,
+  });
+
+  client.connect();
+  // Same call pattern mio-embed.js's autoInit uses — must not throw even
+  // though the fake socket is still CONNECTING at this exact point.
+  assert.doesNotThrow(() => client.replay("orders:42", 0));
+
+  await new Promise((r) => setTimeout(r, 0));
+  if (!ws) throw new Error("no WebSocket instance created yet");
+
+  const opcodes = ws.sent.map((frame) => frame[2]);
+  assert.deepEqual(opcodes, [Opcode.Auth, Opcode.Replay]);
+
+  client.disconnect();
+});

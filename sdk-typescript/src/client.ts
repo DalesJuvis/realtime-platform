@@ -145,6 +145,12 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   /** Clé = channelId exact ou motif (`orders:*`) → handlers enregistrés. */
   private readonly subscriptions = new Map<string, Set<MessageHandler>>();
   private readonly reassembler = new ChunkReassembler();
+  /** `replay()` appelé avant que le socket ne soit ouvert (ex: juste après
+   * `connect()`) — mis en attente ici plutôt que de lever, et rejoué une
+   * seule fois à l'ouverture (voir `onopen`). Contrairement aux
+   * souscriptions, pas rejoué à chaque reconnexion : un replay est une
+   * demande ponctuelle, pas un état à maintenir. */
+  private readonly pendingReplays: Array<[channelId: string, sinceUnixSeconds: string]> = [];
 
   constructor(config: RealtimeClientConfig) {
     super();
@@ -200,9 +206,16 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
    * vers les handlers de `channelId` déjà enregistrés — pas de callback
    * séparé. Non supporté sur un motif (`orders:*`) : le serveur les
    * rejette silencieusement (cf. `main.rs`, bras `Opcode::Replay`).
+   * Appelé avant que la connexion ne soit ouverte (ex: juste après
+   * `connect()`) — mis en attente et rejoué une seule fois à l'ouverture,
+   * plutôt que de lever une exception.
    */
   replay(channelId: string, sinceUnixSeconds = 0): void {
-    this.send(Opcode.Replay, channelId, String(sinceUnixSeconds));
+    if (this.ws?.readyState === WS_OPEN) {
+      this.send(Opcode.Replay, channelId, String(sinceUnixSeconds));
+    } else {
+      this.pendingReplays.push([channelId, String(sinceUnixSeconds)]);
+    }
   }
 
   /**
@@ -287,6 +300,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
       // AUTH envoyé en premier, systématiquement, avant tout SUB/PUB.
       this.send(Opcode.Auth, "", this.config.token);
       this.resubscribeAll();
+      this.flushPendingReplays();
       this.startHeartbeat();
       this.emit("open", undefined);
       // Optimiste — cf. doc de `RealtimeEvents.authenticated` dans types.ts.
@@ -346,6 +360,13 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   private resubscribeAll(): void {
     for (const channelId of this.subscriptions.keys()) {
       this.send(Opcode.Subscribe, channelId, "");
+    }
+  }
+
+  private flushPendingReplays(): void {
+    const pending = this.pendingReplays.splice(0, this.pendingReplays.length);
+    for (const [channelId, sinceUnixSeconds] of pending) {
+      this.send(Opcode.Replay, channelId, sinceUnixSeconds);
     }
   }
 
