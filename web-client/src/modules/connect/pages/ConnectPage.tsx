@@ -9,10 +9,13 @@
 
 import { type FormEvent, type ReactNode, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { isNotificationSupported, requestNotificationPermission } from '@mio/realtime-sdk'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@components/ui/card'
 import { useConnection } from '@hooks/connection/useConnection'
+import { registerPushSubscriptionAction } from '@actions/realtime/registerPushSubscription.action'
+import type { ConnectionCredentials } from '@entities/Connection.entity'
 import { env } from '@lib/env'
 
 export function ConnectPage() {
@@ -26,10 +29,30 @@ export function ConnectPage() {
 
   const isConnecting = status === 'connecting'
 
+  /** Fired synchronously from the submit handler below — the actual user
+   * gesture browsers require to show the native permission prompt at all.
+   * `PushNotificationToggle` still exists for re-enabling/disabling later,
+   * but leaving discovery of that button as the *only* way to ever be
+   * asked meant most people never got prompted in the first place. Only
+   * fires while permission is still "default": once the user has made an
+   * explicit choice (via this prompt or the toggle), reconnecting never
+   * re-asks. Errors (denied, unsupported, network) are swallowed — this is
+   * a best-effort nicety, not something that should block connecting. */
+  function requestNotificationsOnConnect(creds: ConnectionCredentials): void {
+    if (!isNotificationSupported() || Notification.permission !== 'default') return
+    if (env.vapidPublicKey) {
+      void registerPushSubscriptionAction(creds, env.vapidPublicKey).catch(() => {})
+    } else {
+      void requestNotificationPermission()
+    }
+  }
+
   function handleSubmit(event: FormEvent): void {
     event.preventDefault()
     if (!wsUrl.trim() || !tenantId.trim() || !token.trim() || !displayName.trim()) return
-    connect({ wsUrl: wsUrl.trim(), tenantId: tenantId.trim(), token: token.trim(), displayName: displayName.trim() })
+    const creds = { wsUrl: wsUrl.trim(), tenantId: tenantId.trim(), token: token.trim(), displayName: displayName.trim() }
+    connect(creds)
+    requestNotificationsOnConnect(creds)
     navigate('/chat')
   }
 
