@@ -138,12 +138,12 @@ class SlowOpeningFakeWebSocket implements WebSocketLike {
   }
 }
 
-test("replay() called synchronously right after connect() doesn't throw, and is sent once the socket actually opens", async () => {
-  let ws: SlowOpeningFakeWebSocket | undefined;
+function makeSlowOpeningClient(): { client: RealtimeClient; nextWs: () => Promise<SlowOpeningFakeWebSocket> } {
+  let latestWs: SlowOpeningFakeWebSocket | undefined;
   const WsImpl = class extends SlowOpeningFakeWebSocket {
     constructor(url: string) {
       super(url);
-      ws = this;
+      latestWs = this;
     }
   };
 
@@ -155,16 +155,69 @@ test("replay() called synchronously right after connect() doesn't throw, and is 
     webSocketImpl: WsImpl,
   });
 
+  async function nextWs(): Promise<SlowOpeningFakeWebSocket> {
+    await new Promise((r) => setTimeout(r, 0));
+    if (!latestWs) throw new Error("no WebSocket instance created yet");
+    return latestWs;
+  }
+
+  return { client, nextWs };
+}
+
+test("replay() called synchronously right after connect() doesn't throw, and is sent once the socket actually opens", async () => {
+  const { client, nextWs } = makeSlowOpeningClient();
+
   client.connect();
   // Same call pattern mio-embed.js's autoInit uses — must not throw even
   // though the fake socket is still CONNECTING at this exact point.
   assert.doesNotThrow(() => client.replay("orders:42", 0));
 
-  await new Promise((r) => setTimeout(r, 0));
-  if (!ws) throw new Error("no WebSocket instance created yet");
-
+  const ws = await nextWs();
   const opcodes = ws.sent.map((frame) => frame[2]);
   assert.deepEqual(opcodes, [Opcode.Auth, Opcode.Replay]);
+
+  client.disconnect();
+});
+
+test("publish() called synchronously right after connect() doesn't throw, and is sent once the socket actually opens", async () => {
+  const { client, nextWs } = makeSlowOpeningClient();
+
+  client.connect();
+  // The exact pattern every quick-start snippet in this project's own
+  // docs shows (DOCS.md, LLMS.md, sdk-typescript/README.md) — must not
+  // throw even though the fake socket is still CONNECTING here.
+  assert.doesNotThrow(() => client.publish("orders:42", "order created"));
+
+  const ws = await nextWs();
+  const opcodes = ws.sent.map((frame) => frame[2]);
+  assert.deepEqual(opcodes, [Opcode.Auth, Opcode.Publish]);
+
+  client.disconnect();
+});
+
+test("unicast() called synchronously right after connect() doesn't throw, and is sent once the socket actually opens", async () => {
+  const { client, nextWs } = makeSlowOpeningClient();
+
+  client.connect();
+  assert.doesNotThrow(() => client.unicast("user-42", "you have a new order"));
+
+  const ws = await nextWs();
+  const opcodes = ws.sent.map((frame) => frame[2]);
+  assert.deepEqual(opcodes, [Opcode.Auth, Opcode.Unicast]);
+
+  client.disconnect();
+});
+
+test("publish() then replay() called before open are flushed in call order", async () => {
+  const { client, nextWs } = makeSlowOpeningClient();
+
+  client.connect();
+  client.publish("orders:42", "order created");
+  client.replay("orders:42", 0);
+
+  const ws = await nextWs();
+  const opcodes = ws.sent.map((frame) => frame[2]);
+  assert.deepEqual(opcodes, [Opcode.Auth, Opcode.Publish, Opcode.Replay]);
 
   client.disconnect();
 });

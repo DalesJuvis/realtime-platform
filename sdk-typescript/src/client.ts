@@ -145,12 +145,15 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   /** Clé = channelId exact ou motif (`orders:*`) → handlers enregistrés. */
   private readonly subscriptions = new Map<string, Set<MessageHandler>>();
   private readonly reassembler = new ChunkReassembler();
-  /** `replay()` appelé avant que le socket ne soit ouvert (ex: juste après
-   * `connect()`) — mis en attente ici plutôt que de lever, et rejoué une
-   * seule fois à l'ouverture (voir `onopen`). Contrairement aux
-   * souscriptions, pas rejoué à chaque reconnexion : un replay est une
-   * demande ponctuelle, pas un état à maintenir. */
-  private readonly pendingReplays: Array<[channelId: string, sinceUnixSeconds: string]> = [];
+  /** `publish()`/`unicast()`/`replay()` appelés avant que le socket ne
+   * soit ouvert (ex: juste après `connect()` — le cas courant, puisque
+   * `connect()` ouvre le socket de façon asynchrone) — mis en file ici
+   * plutôt que de lever, et vidée une seule fois à l'ouverture (voir
+   * `onopen`), dans l'ordre d'appel d'origine. Contrairement aux
+   * souscriptions (rejouées à CHAQUE reconnexion via `resubscribeAll`),
+   * cette file n'est vidée qu'une fois : chacun de ces trois appels est
+   * une action ponctuelle, pas un état à maintenir indéfiniment. */
+  private readonly pendingSends: Array<[opcode: Opcode, channelId: string, payload: string]> = [];
 
   constructor(config: RealtimeClientConfig) {
     super();
@@ -185,17 +188,22 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
    * découpé en plusieurs frames PUB successifs (voir `chunking.ts`) et
    * réassemblé côté récepteur avant d'atteindre les handlers `subscribe` —
    * transparent des deux côtés, rien à changer dans le code applicatif.
+   * Appelé avant que la connexion ne soit ouverte (le cas courant d'un
+   * `connect()` suivi immédiatement de `publish()`, puisque `connect()`
+   * ouvre le socket de façon asynchrone) — mis en attente et envoyé dès
+   * l'ouverture, plutôt que de lever une exception.
    */
   publish(channelId: string, payload: string): void {
     for (const chunk of encodeChunks(payload, this.config.maxMessageBytes)) {
-      this.send(Opcode.Publish, channelId, chunk);
+      this.sendOrQueue(Opcode.Publish, channelId, chunk);
     }
   }
 
-  /** Même découpage transparent que `publish()` — voir sa doc. */
+  /** Même découpage transparent, et même mise en attente si appelé avant
+   * l'ouverture de la connexion, que `publish()` — voir sa doc. */
   unicast(userId: string, payload: string): void {
     for (const chunk of encodeChunks(payload, this.config.maxMessageBytes)) {
-      this.send(Opcode.Unicast, userId, chunk);
+      this.sendOrQueue(Opcode.Unicast, userId, chunk);
     }
   }
 
@@ -211,11 +219,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
    * plutôt que de lever une exception.
    */
   replay(channelId: string, sinceUnixSeconds = 0): void {
-    if (this.ws?.readyState === WS_OPEN) {
-      this.send(Opcode.Replay, channelId, String(sinceUnixSeconds));
-    } else {
-      this.pendingReplays.push([channelId, String(sinceUnixSeconds)]);
-    }
+    this.sendOrQueue(Opcode.Replay, channelId, String(sinceUnixSeconds));
   }
 
   /**
@@ -300,7 +304,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
       // AUTH envoyé en premier, systématiquement, avant tout SUB/PUB.
       this.send(Opcode.Auth, "", this.config.token);
       this.resubscribeAll();
-      this.flushPendingReplays();
+      this.flushPendingSends();
       this.startHeartbeat();
       this.emit("open", undefined);
       // Optimiste — cf. doc de `RealtimeEvents.authenticated` dans types.ts.
@@ -363,10 +367,20 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
     }
   }
 
-  private flushPendingReplays(): void {
-    const pending = this.pendingReplays.splice(0, this.pendingReplays.length);
-    for (const [channelId, sinceUnixSeconds] of pending) {
-      this.send(Opcode.Replay, channelId, sinceUnixSeconds);
+  /** Envoie immédiatement si le socket est ouvert, sinon met en file pour
+   * `flushPendingSends()` — voir la doc de `pendingSends`. */
+  private sendOrQueue(opcode: Opcode, channelId: string, payload: string): void {
+    if (this.ws?.readyState === WS_OPEN) {
+      this.send(opcode, channelId, payload);
+    } else {
+      this.pendingSends.push([opcode, channelId, payload]);
+    }
+  }
+
+  private flushPendingSends(): void {
+    const pending = this.pendingSends.splice(0, this.pendingSends.length);
+    for (const [opcode, channelId, payload] of pending) {
+      this.send(opcode, channelId, payload);
     }
   }
 
