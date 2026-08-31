@@ -79,7 +79,11 @@ pub async fn handle_connection(socket: TcpStream, ctx: RealtimeContext) -> std::
                             }
                         }
                     }
-                    FrameCommand::Close => break,
+                    // No WS-style close code concept over raw TCP — the
+                    // stream just closes. See WsController for the WS side,
+                    // which does send one so browser/SDK clients can tell
+                    // an auth failure apart from every other disconnect.
+                    FrameCommand::CloseAuthFailed => break,
                     FrameCommand::None => {
                         // Echo an application-level PONG in reply to PING,
                         // so the TCP client can measure its RTT.

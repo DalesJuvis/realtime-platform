@@ -268,6 +268,37 @@ mod tests {
         assert_eq!(minted.ws_url, "wss://mio.example.com/ws");
     }
 
+    /// The portal UI's own TTL picker (tenant-portal's `MintTokenCard`)
+    /// never asks for more than 30 days, but a direct API call could ask
+    /// for anything — clamped rather than rejected, see
+    /// `MintClientTokenUseCase::MAX_TTL_SECS`'s own doc comment for why.
+    #[tokio::test]
+    async fn mint_token_clamps_an_excessive_ttl_to_the_server_maximum() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "mint-ttl-clamp@example.com").await;
+
+        #[derive(Deserialize, Default)]
+        struct MintedToken {
+            expires_in: u64,
+        }
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/tokens",
+                &signup_data.access_token,
+                json!({ "sub": "user-42", "ttl_secs": 999_999_999_u64 }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let minted: MintedToken = body_json(resp).await;
+        assert_eq!(minted.expires_in, 30 * 24 * 3600);
+    }
+
     #[tokio::test]
     async fn rotating_the_secret_changes_it() {
         let (ctx, _) = test_ctx().await;

@@ -26,6 +26,13 @@ pub enum FrameCommand {
     /// Nothing to do at the transport level (handled internally: AUTH,
     /// PING, PUB, or an ignored/rejected frame).
     None,
-    /// The connection must be closed (invalid AUTH, explicit close).
-    Close,
+    /// AUTH was rejected (bad signature, unknown tenant, or an expired
+    /// token — `TokenService::validate`'s own distinct `AuthError`
+    /// variants, not preserved past this point since the client-side
+    /// remedy is identical either way: mint a fresh token). The only
+    /// producer of this variant today — see its own module doc comment
+    /// before adding a second one with a different meaning. `WsController`
+    /// sends a WS close code for this (`4001`); `TcpController` has no
+    /// such concept and just closes the stream.
+    CloseAuthFailed,
 }

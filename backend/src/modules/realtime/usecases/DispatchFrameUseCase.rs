@@ -64,7 +64,7 @@ async fn execute_inner(
                 *authenticated_tenant = Some(tenant_id);
                 command
             }
-            AuthOutcome::Rejected => FrameCommand::Close,
+            AuthOutcome::Rejected => FrameCommand::CloseAuthFailed,
         },
         Opcode::Ping => HeartbeatUseCase::execute(ctx, session_id, *authenticated_tenant),
         Opcode::Subscribe => SubscribeChannelUseCase::execute(ctx, session_id, *authenticated_tenant, frame),
