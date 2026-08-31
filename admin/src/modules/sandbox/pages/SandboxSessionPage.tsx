@@ -64,7 +64,14 @@ export default function SandboxSessionPage() {
         const token = await mintTenantTokenAction(tenantId, agentSub)
         if (cancelled) return
 
-        const client = new RealtimeClient({ host: deriveWsHost(apiUrl!), port: WS_PORT, tenantId, token })
+        // No ws_url from the server here (the Admin API's own mint-token
+        // endpoint deliberately doesn't derive one — see its own doc
+        // comment: it's reached over an SSH tunnel, where header-derivation
+        // would produce a wrong URL). This tool always runs WS on 8080
+        // alongside Admin on 9090 for the same engine instance instead.
+        const scheme = apiUrl!.startsWith('https:') ? 'wss' : 'ws'
+        const wsUrl = `${scheme}://${deriveWsHost(apiUrl!)}:${WS_PORT}/ws`
+        const client = new RealtimeClient({ wsUrl, tenantId, token })
         clientRef.current = client
 
         client.on('open', () => setStatus('connected'))
