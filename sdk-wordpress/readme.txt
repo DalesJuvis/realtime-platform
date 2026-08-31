@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -44,7 +44,8 @@ app to self-serve one, or your platform operator.
    the zip through the WordPress admin.
 2. Activate the plugin.
 3. Go to **Settings > mio Realtime** and fill in your Portal API URL,
-   tenant ID, tenant secret, and WebSocket host/port.
+   tenant ID, and tenant secret. No WebSocket host/port to configure —
+   the backend derives that itself for every minted token.
 4. Add `[mio_realtime channel="your-channel"]` to any page or post.
 
 == Frequently Asked Questions ==
@@ -70,6 +71,19 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.2 =
+* **Breaking:** the WebSocket URL is no longer configured by hand. The
+  backend now derives and returns it (`ws_url`) with every minted token,
+  so the "WebSocket host"/"WebSocket port" fields on Settings > mio
+  Realtime are gone, and `mio-client.js`/`mio-embed.js` now take a single
+  `wsUrl` in their config instead of `host`/`port`/`secure`. If you embed
+  `mio-embed.js` directly on a page (not through this plugin), replace
+  its `data-host`/`data-port`/`data-secure` attributes with a single
+  `data-ws-url="wss://your-domain/ws"`.
+* Fixes a real bug in the removed settings: the WebSocket port defaulted
+  to 8080, which is wrong for any production deployment where the
+  WebSocket endpoint shares the REST API's domain with no port.
 
 = 0.1.1 =
 * JS assets are now minified for production (`assets/js/*.min.js`,

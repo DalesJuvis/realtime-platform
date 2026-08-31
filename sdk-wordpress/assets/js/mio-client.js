@@ -24,22 +24,16 @@
   var Opcode = MioProtocol.Opcode;
   var WS_OPEN = 1;
 
-  function resolveUrl(config) {
-    if (config.url) return config.url;
-    var scheme = config.secure ? 'wss' : 'ws';
-    var port = config.port || 8080;
-    var path = config.path || '/ws';
-    if (path.charAt(0) !== '/') path = '/' + path;
-    return scheme + '://' + config.host + ':' + port + path;
-  }
-
   /**
    * @param {object} config
-   * @param {string} [config.url]
-   * @param {string} [config.host]
-   * @param {number} [config.port]
-   * @param {boolean} [config.secure]
-   * @param {string} [config.path]
+   * @param {string} config.wsUrl The exact `ws://`/`wss://.../ws` URL to
+   *        connect to — never assembled here from a host/port/secure
+   *        shorthand (an earlier version did exactly that, defaulting to
+   *        port 8080, which was simply wrong behind a reverse proxy in
+   *        production — see `WsUrlService::derive_ws_url` on the backend).
+   *        Use the `ws_url` returned alongside your token by
+   *        `POST /api/v1/auth/tokens`, `Client::mintToken()`, or
+   *        `GET /wp-json/mio/v1/token`.
    * @param {string} config.tenantId
    * @param {string} config.token
    * @param {number} [config.heartbeatIntervalMs] default 15000
@@ -49,7 +43,7 @@
    */
   function MioRealtimeClient(config) {
     this._config = {
-      url: resolveUrl(config),
+      url: config.wsUrl,
       tenantId: config.tenantId,
       token: config.token,
       heartbeatIntervalMs: config.heartbeatIntervalMs || 15000,

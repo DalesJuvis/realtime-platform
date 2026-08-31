@@ -73,8 +73,12 @@ class RestController
             'token' => $minted->token,
             'expires_in' => $minted->expiresIn,
             'tenant_id' => $this->settings->getTenantId(),
-            'ws_host' => $this->settings->getWsHost(),
-            'ws_port' => $this->settings->getWsPort(),
+            // The backend's own derived URL (WsUrlService::derive_ws_url),
+            // not the WP-admin-configured ws_host/ws_port fields this used
+            // to return — those had to be kept in sync by hand, and a
+            // hardcoded port default further up this same chain was
+            // simply wrong in production behind a reverse proxy.
+            'ws_url' => $minted->wsUrl,
         ), 200);
     }
 }

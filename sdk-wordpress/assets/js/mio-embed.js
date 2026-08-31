@@ -26,7 +26,7 @@
  * ## Usage — auto-rendered feed, zero JS to write
  * ```html
  * <script src="https://your-site.example/mio-embed.js"
- *   data-host="mio.gabonnettoyage.online"
+ *   data-ws-url="wss://mio.gabonnettoyage.online/ws"
  *   data-tenant-id="12345678-9abc-def0-1122-334455667788"
  *   data-token="…"
  *   data-channel="orders:42"
@@ -35,10 +35,14 @@
  * ></script>
  * <div id="my-feed"></div> <!-- optional: omit and one is created for you -->
  * ```
- * `data-target` (a CSS selector) points it at that `<div>` instead of
- * auto-creating one. Omit `data-token`/`data-channel` entirely to just
- * load `window.MioEmbedClient` (the constructor) without any auto-render,
- * for building your own UI — see the doc comment on it below.
+ * `data-ws-url` is the exact URL returned alongside your token (never a
+ * host/port you assemble by hand — an earlier version took `data-host`/
+ * `data-port`/`data-secure` and defaulted to port 8080, which was simply
+ * wrong behind a reverse proxy in production). `data-target` (a CSS
+ * selector) points the feed at that `<div>` instead of auto-creating one.
+ * Omit `data-token`/`data-channel` entirely to just load
+ * `window.MioEmbedClient` (the constructor) without any auto-render, for
+ * building your own UI — see the doc comment on it below.
  */
 (function (global) {
   'use strict';
@@ -232,18 +236,9 @@
   // ===========================================================================
   var WS_OPEN = 1;
 
-  function resolveUrl(config) {
-    if (config.url) return config.url;
-    var scheme = config.secure ? 'wss' : 'ws';
-    var port = config.port || 8080;
-    var path = config.path || '/ws';
-    if (path.charAt(0) !== '/') path = '/' + path;
-    return scheme + '://' + config.host + ':' + port + path;
-  }
-
   function MioEmbedClient(config) {
     this._config = {
-      url: resolveUrl(config),
+      url: config.wsUrl,
       tenantId: config.tenantId,
       token: config.token,
       heartbeatIntervalMs: config.heartbeatIntervalMs || 15000,
@@ -451,7 +446,7 @@
     if (typeof document === 'undefined' || !document.currentScript) return;
     var script = document.currentScript;
     var ds = script.dataset || {};
-    if (!ds.host || !ds.tenantId || !ds.token || !ds.channel) return;
+    if (!ds.wsUrl || !ds.tenantId || !ds.token || !ds.channel) return;
 
     var container = ds.target ? document.querySelector(ds.target) : null;
     if (!container) {
@@ -466,9 +461,7 @@
     var limit = parseInt(ds.limit, 10) || 20;
 
     var client = new MioEmbedClient({
-      host: ds.host,
-      port: ds.port ? parseInt(ds.port, 10) : undefined,
-      secure: ds.secure !== 'false',
+      wsUrl: ds.wsUrl,
       tenantId: ds.tenantId,
       token: ds.token,
     });

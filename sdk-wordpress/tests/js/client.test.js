@@ -38,12 +38,12 @@ test('encodeUtf8Length matches TextEncoder for 4-byte characters (surrogate pair
 test('the module can be constructed without a WebSocket implementation present', () => {
   // require()ing/instantiating must not touch the `WebSocket` global —
   // only `.connect()` does, which this test deliberately never calls.
-  const client = new MioRealtimeClient({ host: 'example.com', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+  const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
   assert.equal(typeof client.connect, 'function');
   assert.equal(typeof client.subscribe, 'function');
 });
 
 test('publish() rejects an oversized payload without needing an open socket', () => {
-  const client = new MioRealtimeClient({ host: 'example.com', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+  const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
   assert.throws(() => client.publish('room-1', 'x'.repeat(212)), /exceeds 211 bytes/);
 });

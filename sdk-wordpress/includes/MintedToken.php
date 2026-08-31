@@ -16,9 +16,20 @@ class MintedToken
     /** @var int */
     public $expiresIn;
 
-    public function __construct($token, $expiresIn)
+    /**
+     * The exact `ws://`/`wss://.../ws` URL a browser client should
+     * connect to — derived server-side (`WsUrlService::derive_ws_url`)
+     * from the very request that minted this token, never assembled here
+     * from a host/port you'd have to keep in sync yourself.
+     *
+     * @var string
+     */
+    public $wsUrl;
+
+    public function __construct($token, $expiresIn, $wsUrl)
     {
         $this->token = $token;
         $this->expiresIn = $expiresIn;
+        $this->wsUrl = $wsUrl;
     }
 }

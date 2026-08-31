@@ -32,13 +32,13 @@ test('globMatch — trailing wildcard', () => {
 });
 
 test('the exported Client can be constructed without a WebSocket implementation present', () => {
-  const client = new Client({ host: 'example.com', tenantId: SAMPLE_TENANT, token: 't' });
+  const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
   assert.equal(typeof client.connect, 'function');
   assert.equal(typeof client.subscribe, 'function');
 });
 
 test('publish() rejects an oversized payload without needing an open socket', () => {
-  const client = new Client({ host: 'example.com', tenantId: SAMPLE_TENANT, token: 't' });
+  const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
   assert.throws(() => client.publish('room-1', 'x'.repeat(212)), /exceeds 211 bytes/);
 });
 

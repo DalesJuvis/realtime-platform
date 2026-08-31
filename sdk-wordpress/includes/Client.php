@@ -75,7 +75,7 @@ class Client
         }
 
         $data = $this->request('/api/v1/auth/tokens', $body);
-        return new MintedToken($data['token'], (int) $data['expires_in']);
+        return new MintedToken($data['token'], (int) $data['expires_in'], $data['ws_url']);
     }
 
     /**

@@ -47,8 +47,7 @@
     fetchToken()
       .then(function (data) {
         var client = new window.MioRealtimeClient({
-          host: data.ws_host,
-          port: data.ws_port,
+          wsUrl: data.ws_url,
           tenantId: data.tenant_id,
           token: data.token,
         });

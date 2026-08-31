@@ -64,8 +64,11 @@ npm run build          # produit assets/js/*.min.js (terser) — voir scripts/mi
 
 Puis, dans WordPress : copier ce dossier dans `wp-content/plugins/`,
 activer l'extension, et renseigner **Réglages > mio Realtime** (URL de
-l'API Portal, tenant ID, secret, host/port WebSocket — tout se trouve dans
-le portail tenant de ce projet, `tenant-portal/`, sous Settings > API keys).
+l'API Portal, tenant ID, secret — tout se trouve dans le portail tenant de
+ce projet, `tenant-portal/`, sous Settings > API keys). Il n'y a plus de
+réglage "host/port WebSocket" à renseigner : l'URL WebSocket vient
+directement du `ws_url` renvoyé par le serveur à chaque mint de jeton, et
+n'est plus jamais assemblée à la main côté extension.
 
 ## Démarrage rapide
 
@@ -76,7 +79,7 @@ use Mio\Realtime\Client;
 
 $client = new Client('https://realtime.example.com:8090', $tenantId, $secret);
 
-$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
+$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn, wsUrl }
 $client->publish('orders:42', 'commande créée', $minted->token);
 
 // Évènement nommé, même enveloppe JSON que côté navigateur (voir plus bas) :
@@ -113,7 +116,7 @@ brute :
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
-  data-host="mio.gabonnettoyage.online"
+  data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
   data-channel="orders:42"
@@ -123,13 +126,16 @@ brute :
 <div id="my-feed"></div> <!-- optionnel : sans data-target, une div est créée automatiquement -->
 ```
 
+`data-ws-url` est le `ws_url` renvoyé par `mintToken()`/`/api/v1/auth/tokens`
+— à reporter tel quel, jamais reconstruit depuis un host/port séparé.
+
 Auto-hébergement (`https://votre-site.example/mio-embed.js`) reste une
 option si vous préférez ne pas dépendre de jsDelivr — même fichier,
 même usage :
 
 ```html
 <script src="https://votre-site.example/mio-embed.js"
-  data-host="mio.gabonnettoyage.online"
+  data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
   data-channel="orders:42"

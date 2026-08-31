@@ -1,10 +1,11 @@
 <?php
 /**
- * AdminPage — Settings > mio Realtime: the four values `Settings` reads
- * (API URL, tenant ID, secret, WS host/port). Standard Settings API
- * (`register_setting`/`add_settings_field`) rather than a hand-rolled
- * form, so WordPress handles the nonce/capability check and the save
- * round-trip itself.
+ * AdminPage — Settings > mio Realtime: the three values `Settings` reads
+ * (API URL, tenant ID, secret). No WS host/port fields — see `Settings`'s
+ * own doc comment for why the backend now derives that itself. Standard
+ * Settings API (`register_setting`/`add_settings_field`) rather than a
+ * hand-rolled form, so WordPress handles the nonce/capability check and
+ * the save round-trip itself.
  */
 
 namespace Mio\Realtime;
@@ -38,15 +39,13 @@ class AdminPage
         register_setting(self::OPTION_GROUP, Settings::OPTION_API_URL, array('sanitize_callback' => 'esc_url_raw'));
         register_setting(self::OPTION_GROUP, Settings::OPTION_TENANT_ID, array('sanitize_callback' => 'sanitize_text_field'));
         register_setting(self::OPTION_GROUP, Settings::OPTION_SECRET, array('sanitize_callback' => 'sanitize_text_field'));
-        register_setting(self::OPTION_GROUP, Settings::OPTION_WS_HOST, array('sanitize_callback' => 'sanitize_text_field'));
-        register_setting(self::OPTION_GROUP, Settings::OPTION_WS_PORT, array('sanitize_callback' => 'absint'));
 
         add_settings_section(
             'mio_realtime_main',
             __('Connection', 'mio-realtime'),
             function () {
                 echo '<p>' . esc_html__(
-                    'From your realtime-platform tenant portal: Settings > API keys for the tenant ID and secret, and your engine deployment for the Portal API URL / WebSocket host.',
+                    'From your realtime-platform tenant portal: Settings > API keys for the tenant ID and secret, and your engine deployment for the Portal API URL. The WebSocket URL is derived by the backend itself for every minted token — nothing to configure here.',
                     'mio-realtime'
                 ) . '</p>';
             },
@@ -56,8 +55,6 @@ class AdminPage
         $this->addField(Settings::OPTION_API_URL, __('Portal API URL', 'mio-realtime'), 'https://realtime.example.com:8090');
         $this->addField(Settings::OPTION_TENANT_ID, __('Tenant ID', 'mio-realtime'), '12345678-9abc-def0-1122-334455667788');
         $this->addField(Settings::OPTION_SECRET, __('Tenant secret', 'mio-realtime'), '', 'password');
-        $this->addField(Settings::OPTION_WS_HOST, __('WebSocket host', 'mio-realtime'), 'realtime.example.com');
-        $this->addField(Settings::OPTION_WS_PORT, __('WebSocket port', 'mio-realtime'), '8080', 'number');
     }
 
     private function addField($option, $label, $placeholder, $type = 'text')

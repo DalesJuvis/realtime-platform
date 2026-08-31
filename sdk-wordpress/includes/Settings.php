@@ -1,7 +1,13 @@
 <?php
 /**
  * Settings — thin wrapper around the WordPress Options API for this
- * plugin's four config values (API URL, tenant ID, secret, WS host/port).
+ * plugin's three config values (API URL, tenant ID, secret). No WS
+ * host/port setting: the backend derives and returns the exact
+ * `ws_url` to connect to alongside every minted token
+ * (`WsUrlService::derive_ws_url`) — an earlier version asked the site
+ * admin to configure host/port by hand here instead, defaulting the
+ * port to 8080, which was simply wrong in production behind a reverse
+ * proxy and needlessly duplicated a value the backend already knows.
  * The secret is stored via `update_option()` like the rest — WordPress
  * has no built-in secrets vault, and encrypting it locally with a key
  * that then has to live *somewhere* in the same `wp-config.php`/DB
@@ -17,8 +23,6 @@ class Settings
     const OPTION_API_URL = 'mio_realtime_api_url';
     const OPTION_TENANT_ID = 'mio_realtime_tenant_id';
     const OPTION_SECRET = 'mio_realtime_secret';
-    const OPTION_WS_HOST = 'mio_realtime_ws_host';
-    const OPTION_WS_PORT = 'mio_realtime_ws_port';
 
     /** @return string */
     public function getApiUrl()
@@ -36,19 +40,6 @@ class Settings
     public function getSecret()
     {
         return (string) get_option(self::OPTION_SECRET, '');
-    }
-
-    /** @return string */
-    public function getWsHost()
-    {
-        return (string) get_option(self::OPTION_WS_HOST, '');
-    }
-
-    /** @return int */
-    public function getWsPort()
-    {
-        $port = get_option(self::OPTION_WS_PORT, 8080);
-        return (int) $port;
     }
 
     /** @return bool true once the values `Client`/the REST route need are all set. */

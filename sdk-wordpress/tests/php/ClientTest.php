@@ -27,7 +27,7 @@ final class ClientTest extends TestCase
     {
         $transport = new FakeHttpTransport($this->jsonResponse(200, array(
             'success' => true,
-            'data' => array('token' => 'signed.token.value', 'expires_in' => 3600),
+            'data' => array('token' => 'signed.token.value', 'expires_in' => 3600, 'ws_url' => 'wss://realtime.example.com/ws'),
             'trace_id' => 'abc',
         )));
         $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'super-secret', $transport);
@@ -36,13 +36,14 @@ final class ClientTest extends TestCase
 
         self::assertSame('signed.token.value', $minted->token);
         self::assertSame(3600, $minted->expiresIn);
+        self::assertSame('wss://realtime.example.com/ws', $minted->wsUrl);
     }
 
     public function testMintTokenSendsSecretOnlyToAuthEndpointNeverAgain()
     {
         $transport = new FakeHttpTransport($this->jsonResponse(200, array(
             'success' => true,
-            'data' => array('token' => 't', 'expires_in' => 3600),
+            'data' => array('token' => 't', 'expires_in' => 3600, 'ws_url' => 'wss://realtime.example.com/ws'),
         )));
         $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'super-secret', $transport);
         $client->mintToken('user-42', 900);
@@ -82,7 +83,7 @@ final class ClientTest extends TestCase
     {
         $transport = new FakeHttpTransport($this->jsonResponse(200, array(
             'success' => true,
-            'data' => array('token' => 't', 'expires_in' => 3600),
+            'data' => array('token' => 't', 'expires_in' => 3600, 'ws_url' => 'wss://realtime.example.com/ws'),
         )));
         $client = new Client('https://realtime.example.com:8090/', 'tenant-1', 'secret', $transport);
         $client->mintToken('user-1');
@@ -144,7 +145,7 @@ final class ClientTest extends TestCase
     {
         $transport = new FakeHttpTransport($this->jsonResponse(200, array(
             'success' => true,
-            'data' => array('token' => 't', 'expires_in' => 3600),
+            'data' => array('token' => 't', 'expires_in' => 3600, 'ws_url' => 'wss://realtime.example.com/ws'),
         )));
         $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
         $client->mintToken('user-1');
