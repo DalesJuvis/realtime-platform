@@ -361,16 +361,20 @@ client.connect()
 client.publish('orders:42', 'order created')
 
 client.on('authFailed', ({ code, reason }) => {
-  // Invalid or expired token — the client never auto-reconnects after
-  // this, even with reconnect: true. Mint a fresh token and construct a
-  // new client rather than retrying this one.
+  // Invalid or expired token. Without getToken configured (see below),
+  // the client never auto-reconnects after this, even with reconnect:
+  // true — mint a fresh token and construct a new client instead.
 })
 
 // later:
 unsubscribe()
 client.disconnect()`}
               caveat="No AUTH acknowledgement in the protocol — the 'authenticated' event fires optimistically right after sending. Watch 'authFailed' to detect an auth failure specifically (the server sends a dedicated close code, 4001, for exactly this) rather than inferring it from a generic 'close'."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                For silent renewal instead of handling <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code> yourself, replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">getToken: async () =&gt; ({'{'} token, wsUrl {'}'})</code> — called before every connection attempt (including automatically after an <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code>), calling <b>your own backend</b>, never mio's API directly.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="react" className="mt-0 space-y-4">
@@ -519,7 +523,11 @@ client.publish("orders:42", "order created")
 subscription.close()
 client.disconnect()`}
               caveat="Not yet compiled by its authors (no kotlinc/full JDK available when written) — run ./gradlew build test yourself. Callbacks fire on OkHttp's own thread, not the Android main thread — dispatch to the UI thread yourself."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                Watch <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code> for an invalid/expired token — without <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code>, the client never auto-reconnects after this. Replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider = TokenProvider {'{'} ... {'}'}</code> for silent renewal — called synchronously on the client's own background thread (safe to block on your backend call) before every connection attempt.
+              </p>
+            </Section>
             <Section
               title="Android — Java"
               description="Same client, Java-friendly surface (SAM interfaces, @JvmOverloads)."
@@ -536,7 +544,11 @@ AutoCloseable subscription = client.subscribe("orders:42",
 
 client.connect();
 client.publish("orders:42", "order created");`}
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                Same <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> silent-renewal story as Kotlin above — Java has no named/optional arguments, so pass <code className="rounded bg-muted px-1 py-0.5 font-mono">null</code> for <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> and fill in every parameter through <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> explicitly (see the README for the full example).
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="wordpress" className="mt-0 space-y-4">

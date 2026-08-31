@@ -304,10 +304,8 @@ client.disconnect()
 > the `authFailed` event to detect an auth failure instead (an invalid or
 > expired token). The server sends a dedicated WS close code (`4001`) for
 > exactly this, so the SDK never confuses it with a network drop or a
-> server restart — and never keeps retrying with the same now-invalid
-> token, even with `reconnect: true`. Handle it by minting a fresh token
-> and constructing a new client; there's no in-place way to swap a
-> client's token today.
+> server restart — and without `getToken` configured (below), never keeps
+> retrying with the same now-invalid token, even with `reconnect: true`.
 
 ```typescript
 client.on('authFailed', ({ code, reason }) => {
@@ -315,6 +313,33 @@ client.on('authFailed', ({ code, reason }) => {
   // reconnect with a brand-new RealtimeClient once you have it.
 })
 ```
+
+### Silent token renewal — `getToken`
+
+If your app has its own backend that can mint a token on demand (calling
+`POST /api/v1/auth/tokens` itself, with the tenant secret — **never this
+SDK, never the browser**), replace `token` with `getToken` and renewal
+happens automatically:
+
+```typescript
+const client = createRealtimeClient({
+  wsUrl: 'wss://realtime.example.com/ws', // fallback — a wsUrl returned by getToken() below takes over
+  tenantId: '<your-tenant-id>',
+  getToken: async () => {
+    const res = await fetch('/api/realtime-token', { method: 'POST' })
+    const { token, wsUrl } = await res.json()
+    return { token, wsUrl } // wsUrl optional — omit it to reuse the one already configured
+  },
+})
+```
+
+`getToken()` is called before *every* connection attempt — the first
+`connect()`, and automatically on every reconnect, including right after
+an `authFailed`. A rejected `getToken()` is treated like any other
+connection failure: `error` is emitted and a reconnect is scheduled with
+the same exponential backoff as everything else, never a tight retry
+loop against a temporarily-down backend. `token` and `getToken` are
+mutually exclusive — the config type enforces exactly one at compile time.
 
 ## React
 
@@ -491,6 +516,25 @@ client.disconnect()
 > Callbacks fire on OkHttp's own thread, not the Android main thread —
 > dispatch to the UI thread yourself.
 
+Watch `ConnectionEvent.AuthFailed` to detect an invalid/expired token
+(same dedicated WS close code as the other SDKs, `4001`) — without a
+`tokenProvider` (below), the client never auto-reconnects after this,
+even with `reconnect = true`. For silent renewal, replace `token` with
+`tokenProvider`, called synchronously on the client's own background
+thread (safe to block on your backend's HTTP call there) before every
+connection attempt, including automatically after an `AuthFailed`:
+
+```kotlin
+val config = RealtimeClientConfig(
+    url = "wss://realtime.example.com/ws", // fallback — a wsUrl from tokenProvider takes over
+    tenantId = UUID.fromString("<your-tenant-id>"),
+    tokenProvider = TokenProvider {
+        val minted = myBackend.mintRealtimeToken() // your own backend call, not mio's API directly
+        TokenRefreshResult(token = minted.token, wsUrl = minted.wsUrl)
+    },
+)
+```
+
 ### Java
 
 Same client, Java-friendly surface (SAM interfaces, `@JvmOverloads`).
@@ -508,6 +552,24 @@ AutoCloseable subscription = client.subscribe("orders:42",
 
 client.connect();
 client.publish("orders:42", "order created");
+```
+
+Same `ConnectionEvent.AuthFailed`/`tokenProvider` story as Kotlin above —
+Java has no named/optional arguments, so pass `null` for `token` and fill
+in every parameter through `tokenProvider` explicitly:
+
+```java
+TokenProvider tokenProvider = () -> {
+    MintedToken minted = myBackend.mintRealtimeToken(); // your own backend call
+    return new TokenRefreshResult(minted.getToken(), minted.getWsUrl());
+};
+RealtimeClientConfig config = new RealtimeClientConfig(
+    "wss://realtime.example.com/ws", // fallback — a wsUrl from tokenProvider takes over
+    UUID.fromString("<your-tenant-id>"),
+    null, // token
+    tokenProvider,
+    15_000L, true, 500L, 15_000L, new OkHttpClient() // defaults, spelled out
+);
 ```
 
 ## WordPress
