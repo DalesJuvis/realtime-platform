@@ -20,9 +20,15 @@ Every SDK needs two things:
   browser/mobile app.
 
 ```text
-WebSocket host (SDKs):   realtime.example.com (secure: true|false — matches your deployment)
 Portal API URL (REST):   https://realtime.example.com:8090
 ```
+
+You do **not** configure a WebSocket URL yourself — every SDK receives it
+from the server, as `ws_url` on the mint-token response below, and
+connects to exactly that. This is deliberate: in production the WS
+endpoint shares your API's domain with no port (`wss://realtime.example.com/ws`,
+behind the same reverse proxy as the REST API), which is not guessable
+from a `host`/`port` pair an SDK would otherwise have to be given.
 
 ## REST API
 
@@ -44,8 +50,14 @@ Content-Type: application/json
 ```
 
 ```json
-{ "success": true, "data": { "token": "…", "expires_in": 3600 }, "trace_id": "…" }
+{ "success": true, "data": { "token": "…", "expires_in": 3600, "ws_url": "wss://realtime.example.com/ws" }, "trace_id": "…" }
 ```
+
+`ws_url` is the exact address to connect to — the server derives it from
+this request's own domain (or an operator-configured override), never
+from anything the SDK supplies. Pass it straight into the SDK's config
+below. Full request/derivation/response sequence:
+[`diagrams/auth/issue-client-token/version.md`](diagrams/auth/issue-client-token/version.md).
 
 ### Publish over HTTP
 
@@ -235,9 +247,10 @@ npm install ws
 ```typescript
 import { createRealtimeClient } from '@mio/realtime-sdk'
 
+// wsUrl comes from the mint-token response above (data.ws_url) — never
+// assembled from a host/port/secure config, see "Getting started".
 const client = createRealtimeClient({
-  host: 'realtime.example.com',
-  secure: true,
+  wsUrl: wsUrlFromMintToken,
   tenantId: '<your-tenant-id>',
   token: myTokenFromMintToken,
 })
@@ -273,7 +286,7 @@ import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react'
 function App() {
   return (
     <RealtimeProvider
-      config={{ host: 'realtime.example.com', secure: true, tenantId: '<your-tenant-id>', token: myTokenFromMintToken }}
+      config={{ wsUrl: wsUrlFromMintToken, tenantId: '<your-tenant-id>', token: myTokenFromMintToken }}
     >
       <OrdersFeed />
     </RealtimeProvider>
@@ -310,7 +323,7 @@ import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react-native'
 function App() {
   return (
     <RealtimeProvider
-      config={{ host: 'realtime.example.com', secure: true, tenantId: '<your-tenant-id>', token: myTokenFromMintToken }}
+      config={{ wsUrl: wsUrlFromMintToken, tenantId: '<your-tenant-id>', token: myTokenFromMintToken }}
     >
       <OrdersFeed />
     </RealtimeProvider>
@@ -469,7 +482,7 @@ use Mio\Realtime\Client;
 
 $client = new Client('https://realtime.example.com:8090', '<your-tenant-id>', $secret);
 
-$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
+$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn, wsUrl }
 $client->publish('orders:42', 'order created', $minted->token);
 ```
 
@@ -559,13 +572,16 @@ source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
-  data-host="realtime.example.com"
+  data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
   data-channel="orders:42"
   data-replay="true"
 ></script>
 ```
+
+`data-ws-url` is the `ws_url` from the mint-token response — hand it
+through as-is, never assemble it from a host/port.
 
 > **Pin the version.** `@v0.1.1` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
@@ -587,8 +603,7 @@ CDN, same tag, minified builds, loaded in dependency order:
 <script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
-    host: 'realtime.example.com',
-    secure: true,
+    wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand
     tenantId: '<your-tenant-id>',
     token: '…', // minted server-side, never your tenant secret
   })

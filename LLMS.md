@@ -55,6 +55,13 @@ written.
 7. **REPLAY only works on an exact `channel_id`, never a wildcard
    pattern** (`orders:*`) — the server silently no-ops a REPLAY on a
    pattern rather than erroring.
+8. **No SDK assembles its own WebSocket URL.** Every mint-token response
+   carries a `ws_url` the server derives itself (from the request's own
+   domain, or an operator-set override) — pass it straight into the
+   SDK's `wsUrl`/`url` config field. Never construct one from a
+   `host`/`port`/`secure` triple: production puts the WS endpoint on the
+   same domain as the REST API with no port at all
+   (`wss://example.com/ws`), which a client-supplied default can't know.
 
 ## 2. Core concepts (glossary)
 
@@ -77,11 +84,17 @@ written.
 1. Your own backend holds a tenant secret (primary or an extra key pair).
 2. Your backend calls POST /api/v1/auth/tokens with {tenant_id, secret, sub, ttl_secs}.
 3. The server verifies `secret` against ANY of the tenant's currently-active
-   secrets (primary + extra pairs), and returns a signed token.
-4. Your backend hands ONLY the token to the end user (browser/app).
-5. The end user's SDK connects/authenticates with {tenantId, token} — never
-   sees tenant_id+secret together, never sees the secret at all.
+   secrets (primary + extra pairs), and returns a signed token PLUS a
+   ws_url it derives itself from this request's own domain (or an
+   operator-configured override) — never something the caller supplies.
+4. Your backend hands the token and ws_url to the end user (browser/app).
+5. The end user's SDK connects/authenticates with {wsUrl, tenantId, token} —
+   never sees tenant_id+secret together, never sees the secret at all, and
+   never assembles wsUrl itself.
 ```
+
+Full sequence, including the `ws_url` derivation logic itself:
+[`diagrams/auth/issue-client-token/version.md`](diagrams/auth/issue-client-token/version.md).
 
 Token format (not a JWT, deliberately simpler to avoid `"alg":"none"`-style
 attacks): `base64url(payload_json) + "." + base64url(HMAC_SHA256(payload_json, secret))`,
@@ -124,7 +137,7 @@ response is JSON-parseable as the error shape above.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/v1/auth/tokens` | secret in body | Mint a client token. `{tenant_id, secret, sub, ttl_secs?}` → `{token, expires_in}`. Server-to-server only. |
+| POST | `/api/v1/auth/tokens` | secret in body | Mint a client token. `{tenant_id, secret, sub, ttl_secs?}` → `{token, expires_in, ws_url}`. Server-to-server only. |
 | POST | `/api/v1/portal/auth/signup` | none | Self-serve: create a brand-new tenant + primary key pair + login account from `{email, password}`. `201`, returns `{access_token, token_type, expires_in, keys: {tenant_id, secret_key}}`. |
 | POST | `/api/v1/portal/auth/register` | tenant secret in body | Create a portal login for a tenant an admin already provisioned, proving ownership via its real secret. `201`, logs in. |
 | POST | `/api/v1/portal/auth/login` | none | Email/password login → portal session token. |
@@ -295,7 +308,7 @@ npm install ws   # Node.js only, pre-v22 (no global WebSocket)
 import { createRealtimeClient } from '@mio/realtime-sdk'
 
 const client = createRealtimeClient({
-  host: 'realtime.example.com', secure: true,
+  wsUrl: wsUrlFromMintToken, // ws_url from the mint-token response, never assembled by hand
   tenantId: '<tenant-id>', token: myTokenFromMintToken,
 })
 const unsubscribe = client.subscribe('orders:42', (message) => {
@@ -308,7 +321,7 @@ No AUTH ack (see §1.6) — watch `close`, not just `authenticated`.
 
 **Full API — `RealtimeClient` / `createRealtimeClient(config): RealtimeAdapter`**
 
-`RealtimeClientConfig` fields: `host` + optional `port` (default 8080) + `secure` (default false) + `path` (default `/ws`) — **or** `url` directly (mutually exclusive with `host`/`port`/`secure`/`path`); `tenantId: string`; `token: string`; `heartbeatIntervalMs?: number` (default 15000); `reconnect?: boolean` (default true); `reconnectBaseDelayMs?: number` (default 500); `reconnectMaxDelayMs?: number` (default 15000); `maxMessageBytes?: number` (default 65536 — a sanity cap on chunked payload size, not a protocol limit); `webSocketImpl?: new (url: string) => WebSocketLike` (test/exotic-runtime escape hatch; auto-detects `globalThis.WebSocket` or dynamically loads `ws` otherwise).
+`RealtimeClientConfig` fields: `wsUrl: string` — the exact `ws_url` the mint-token response returns, connected to as-is (see §1 rule 8: the SDK never assembles a URL from a host/port/secure/path); `tenantId: string`; `token: string`; `heartbeatIntervalMs?: number` (default 15000); `reconnect?: boolean` (default true); `reconnectBaseDelayMs?: number` (default 500); `reconnectMaxDelayMs?: number` (default 15000); `maxMessageBytes?: number` (default 65536 — a sanity cap on chunked payload size, not a protocol limit); `webSocketImpl?: new (url: string) => WebSocketLike` (test/exotic-runtime escape hatch; auto-detects `globalThis.WebSocket` or dynamically loads `ws` otherwise).
 
 - `connect(): void` — opens the socket; safe to call once, `disconnect()` first to reconnect manually.
 - `disconnect(): void` — closes and cancels any pending reconnect.
@@ -333,7 +346,7 @@ import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react'
 
 function App() {
   return (
-    <RealtimeProvider config={{ host: 'realtime.example.com', secure: true, tenantId: '<tenant-id>', token }}>
+    <RealtimeProvider config={{ wsUrl: wsUrlFromMintToken, tenantId: '<tenant-id>', token }}>
       <OrdersFeed />
     </RealtimeProvider>
   )
@@ -503,7 +516,7 @@ composer require mio/realtime-wordpress
 ```php
 use Mio\Realtime\Client;
 $client = new Client('https://realtime.example.com:8090', '<tenant-id>', $secret);
-$minted = $client->mintToken('user-42'); // MintedToken { token, expiresIn }
+$minted = $client->mintToken('user-42'); // MintedToken { token, expiresIn, wsUrl }
 $client->publish('orders:42', 'order created', $minted->token);
 $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
 ```
@@ -519,13 +532,13 @@ pin the tag, never `@master`).
 
 Constructor: `new Client(string $apiUrl, string $tenantId, string $secret, ?HttpTransport $transport = null)` — `$transport` defaults to `WpHttpTransport` (needs WordPress loaded); inject your own (e.g. `LaravelHttpTransport`, or a test double) to use `Client` outside WordPress entirely — it calls zero WordPress functions itself.
 
-- `mintToken(string $sub, ?int $ttlSecs = null): MintedToken` — `MintedToken { public readonly string $token; public readonly int $expiresIn; }`. `$ttlSecs` omitted uses the server's own default (3600s).
+- `mintToken(string $sub, ?int $ttlSecs = null): MintedToken` — `MintedToken { public readonly string $token; public readonly int $expiresIn; public readonly string $wsUrl; }`. `$ttlSecs` omitted uses the server's own default (3600s). `$wsUrl` is server-derived (§1 rule 8) — never assembled from a host/port yourself.
 - `publish(string $channelId, string $payload, string $token): bool` — throws `ClientException` (never a network call) if `$channelId` >24 bytes or `$payload` >211 UTF-8 bytes.
 - `emitEvent(string $channelId, string $event, string $token, mixed $data = null): bool` — `publish()` with a JSON `{event, data}` payload; `$data === null` omits the `data` key entirely from the JSON rather than emitting `null`.
 - `ClientException`: `getMessage(): string`, `getErrorCode(): string`, `getHttpStatus(): ?int` (null for a purely local validation failure, e.g. oversized payload, since no request was ever sent).
 
 **`mio-client.js`/`mio-embed.js` (browser, no PHP, deliberately minimal — no unicast, no wildcard, no chunking, no `channel()`/events):**
-`new MioRealtimeClient({url?, host?, port?, secure?, path?, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)`. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-host`, `data-tenant-id`, `data-token`, `data-channel`, `data-port`, `data-secure`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
+`new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)`. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
 
 ### Laravel (`mio/realtime-laravel`)
 
