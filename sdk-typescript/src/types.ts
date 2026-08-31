@@ -93,12 +93,25 @@ export interface RealtimeEvents {
   error: Error;
   /**
    * Émis juste après l'envoi du frame AUTH. Optimiste : le protocole
-   * actuel n'a pas d'opcode d'accusé de réception — en cas d'échec
-   * d'authentification, le serveur ferme simplement la connexion
-   * (cf. `main.rs::process_frame_inner`, bras `Opcode::Auth`), ce qui se
-   * traduit par un évènement `close` suivi d'une tentative de reconnexion.
+   * actuel n'a pas d'opcode d'accusé de réception explicite — un échec
+   * d'authentification se traduit par un `close` (immédiatement suivi de
+   * `authFailed`, voir ci-dessous), pas par un rejet directement associé à
+   * ce AUTH.
    */
   authenticated: undefined;
+  /**
+   * Émis juste après `close` quand la fermeture vient précisément d'un
+   * AUTH rejeté (jeton invalide ou expiré — `WsController.rs` envoie un
+   * code de fermeture WS dédié, `4001`, pour ce cas précis, distinct de
+   * toute autre raison de déconnexion). Le client **n'essaie jamais de se
+   * reconnecter automatiquement** dans ce cas précis, même avec
+   * `reconnect: true` — retenter avec le même jeton que le serveur vient
+   * de rejeter échouerait à nouveau, indéfiniment et silencieusement.
+   * Réagissez ici (ex : afficher "session expirée", remine un jeton côté
+   * serveur puis reconstruisez un `RealtimeClient` avec) plutôt que de
+   * compter sur un `close`/reconnexion générique pour détecter ce cas.
+   */
+  authFailed: { code: number; reason: string };
   /** Tout frame reçu, avant dispatch vers les handlers de souscription. */
   message: RealtimeMessage;
 }

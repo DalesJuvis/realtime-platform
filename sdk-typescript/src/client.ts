@@ -27,6 +27,11 @@ import type {
  * pour cette seule constante quand une implémentation custom est injectée. */
 const WS_OPEN = 1;
 
+/** Code de fermeture WS envoyé par le serveur quand AUTH est rejeté (jeton
+ * invalide ou expiré — voir `WsController.rs::WS_CLOSE_CODE_AUTH_FAILED`
+ * côté backend, seule source de vérité pour cette valeur). */
+const WS_CLOSE_CODE_AUTH_FAILED = 4001;
+
 export type RealtimeClientConfig = {
   /**
    * L'URL `ws://`/`wss://.../ws` exacte à joindre — **jamais construite à
@@ -341,6 +346,16 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
       this.stopHeartbeat();
       this.ws = null;
       this.emit("close", { code: event.code, reason: event.reason });
+
+      // Retrying with the exact same token the server just rejected would
+      // just fail again, forever, silently — see `authFailed`'s own doc
+      // comment in types.ts for what to do instead. Never auto-reconnect
+      // here, no matter `config.reconnect`.
+      if (event.code === WS_CLOSE_CODE_AUTH_FAILED) {
+        this.emit("authFailed", { code: event.code, reason: event.reason });
+        return;
+      }
+
       if (!this.closedByUser && this.config.reconnect) {
         this.scheduleReconnect();
       }

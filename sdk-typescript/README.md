@@ -68,7 +68,7 @@ implémentation précise (tests, environnement exotique).
 | Envoi direct à un utilisateur | `client.unicast(userId, payload)` |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds?)` |
 | Évènements nommés façon socket.io | `client.channel(channelId).on(event, handler)` / `.emit(event, data)` |
-| Évènements de connexion | `client.on("open" \| "close" \| "error" \| "authenticated" \| "message", ...)` |
+| Évènements de connexion | `client.on("open" \| "close" \| "error" \| "authenticated" \| "authFailed" \| "message", ...)` |
 | Notification d'onglet en arrière-plan | `attachBackgroundNotifications(client, options?)` |
 | Abonnement Web Push (onglet/navigateur fermé) | `registerPushServiceWorker(url)` + `subscribeToPush(registration, vapidPublicKey)` |
 
@@ -109,7 +109,7 @@ dédoublonne déjà le frame SUB par canal).
 
 `client.on()`/`.off()` (sans argument `channelId`) restent réservés aux
 évènements de connexion (`"open"`, `"close"`, `"error"`, `"authenticated"`,
-`"message"`) — volontairement une API séparée, pas une surcharge du même
+`"authFailed"`, `"message"`) — volontairement une API séparée, pas une surcharge du même
 nom, pour ne jamais confondre "le canal reçoit tel évènement applicatif"
 et "la connexion elle-même vient de s'ouvrir/fermer". Un `publish()`
 brut (une chaîne quelconque, un autre SDK qui n'utilise pas cette
@@ -306,8 +306,14 @@ l'encodage/décodage.
 - **Pas d'accusé de réception AUTH.** Le protocole actuel n'a pas
   d'opcode d'ACK explicite : l'évènement `authenticated` est émis de
   façon optimiste juste après l'envoi du frame AUTH. En cas d'échec
-  d'authentification, le serveur ferme simplement la connexion — observez
-  plutôt l'évènement `close` pour détecter ce cas.
+  d'authentification (jeton invalide ou expiré), le serveur ferme la
+  connexion avec un code WS dédié (`4001`) — observez l'évènement
+  `authFailed` plutôt qu'un `close` générique pour détecter précisément ce
+  cas. Le client ne retente **jamais** automatiquement après un
+  `authFailed`, même avec `reconnect: true` : retenter avec le même jeton
+  échouerait à nouveau, indéfiniment. Minez un nouveau jeton et
+  reconstruisez un `RealtimeClient` plutôt que de compter sur la
+  reconnexion automatique ici.
 
 *Résolu depuis la v0.1 : `unsubscribe()` envoie désormais un vrai frame
 UNSUB (`Opcode 0x09`) au serveur — ce n'est plus un silence purement

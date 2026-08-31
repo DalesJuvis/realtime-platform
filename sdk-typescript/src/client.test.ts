@@ -221,3 +221,78 @@ test("publish() then replay() called before open are flushed in call order", asy
 
   client.disconnect();
 });
+
+/** Like `makeClient()`, but with reconnection actually enabled (a short,
+ * fixed delay) and a construction counter — everything the two tests
+ * below need to tell "reconnected" from "didn't". */
+function makeReconnectingClient(): {
+  client: RealtimeClient;
+  nextWs: () => Promise<FakeWebSocket>;
+  constructCount: () => number;
+} {
+  let latestWs: FakeWebSocket | undefined;
+  let count = 0;
+  const WsImpl = class extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      count++;
+      latestWs = this;
+    }
+  };
+
+  const client = new RealtimeClient({
+    wsUrl: "ws://example.test/ws",
+    tenantId: TENANT_ID,
+    token: "fake-token",
+    reconnect: true,
+    reconnectBaseDelayMs: 5,
+    reconnectMaxDelayMs: 5,
+    webSocketImpl: WsImpl,
+  });
+
+  async function nextWs(): Promise<FakeWebSocket> {
+    await new Promise((r) => setTimeout(r, 0));
+    if (!latestWs) throw new Error("no WebSocket instance created yet");
+    return latestWs;
+  }
+
+  return { client, nextWs, constructCount: () => count };
+}
+
+test("authFailed fires and no reconnect is attempted on the server's auth-failure close code", async () => {
+  const { client, nextWs, constructCount } = makeReconnectingClient();
+  const authFailedEvents: unknown[] = [];
+  client.on("authFailed", (e) => authFailedEvents.push(e));
+
+  client.connect();
+  const ws = await nextWs();
+  assert.equal(constructCount(), 1);
+
+  // The exact code/reason WsController.rs sends when AUTH is rejected.
+  ws.onclose?.({ code: 4001, reason: "authentication failed" });
+
+  // Long enough for a real reconnect attempt to have fired if one had
+  // been scheduled (reconnectBaseDelayMs is 5 above).
+  await new Promise((r) => setTimeout(r, 50));
+
+  assert.deepEqual(authFailedEvents, [{ code: 4001, reason: "authentication failed" }]);
+  assert.equal(constructCount(), 1, "must not reconnect after an auth-failure close — same token would just fail again");
+
+  client.disconnect();
+});
+
+test("a normal close still reconnects — auth-failure handling doesn't break the general case", async () => {
+  const { client, nextWs, constructCount } = makeReconnectingClient();
+
+  client.connect();
+  const ws = await nextWs();
+  assert.equal(constructCount(), 1);
+
+  ws.onclose?.({ code: 1006, reason: "" }); // abnormal closure, e.g. a network drop
+
+  await new Promise((r) => setTimeout(r, 50));
+
+  assert.equal(constructCount(), 2, "a non-auth-failure close must still trigger the normal reconnect");
+
+  client.disconnect();
+});
