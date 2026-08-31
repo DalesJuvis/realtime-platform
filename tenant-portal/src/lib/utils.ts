@@ -47,6 +47,29 @@ export function deriveWsHost(portalApiUrl: string): string {
   }
 }
 
+/**
+ * Human-friendly duration for a `ttl_secs`-shaped value — a minted token
+ * can now run from the 1-hour default up to the backend's 30-day cap
+ * (`MintClientTokenUseCase::MAX_TTL_SECS`), where "Expires in 43200 min"
+ * would be unreadable. Picks the single largest whole unit that fits
+ * rather than a full breakdown (e.g. "2 days", not "2 days 3 hours") —
+ * this is a rough "how long do I have" glance, not a precise countdown.
+ */
+export function formatDuration(totalSeconds: number): string {
+  const units: { label: string; secs: number }[] = [
+    { label: 'day', secs: 86400 },
+    { label: 'hour', secs: 3600 },
+    { label: 'minute', secs: 60 },
+  ]
+  for (const { label, secs } of units) {
+    if (totalSeconds >= secs) {
+      const count = Math.round(totalSeconds / secs)
+      return `${count} ${label}${count === 1 ? '' : 's'}`
+    }
+  }
+  return `${Math.max(0, Math.round(totalSeconds))} second${totalSeconds === 1 ? '' : 's'}`
+}
+
 /** Triggers a browser download of an already-fetched blob (e.g. a CSV export). */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
