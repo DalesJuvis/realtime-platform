@@ -525,7 +525,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js` (dependency-free
 `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.2/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`).
 
 **Full API — `Mio\Realtime\Client`**

@@ -584,7 +584,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-embed.js — no plugin, no build step"
               description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.2/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
@@ -603,8 +603,8 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-protocol.js + mio-client.js — building your own page logic"
               description="For anything beyond the auto-rendered feed above — custom UI, multiple channels, your own publish form — load the two files mio-embed.js bundles and drive MioRealtimeClient yourself."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-client.min.js"></script>
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.2/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.2/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: '${wsUrl}', // the ws_url from your mint-token response
