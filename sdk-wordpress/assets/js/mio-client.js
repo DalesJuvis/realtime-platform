@@ -57,7 +57,12 @@
     this._reconnectAttempt = 0;
     this._closedByUser = true;
     this._subscriptions = {}; // channelId/pattern -> [handler, ...]
-    this._pendingReplays = [];
+    // publish()/replay() called before the socket is open (e.g. right
+    // after connect(), which opens it asynchronously) — queued here
+    // instead of throwing, flushed once, in order, on the next open. See
+    // subscribe() for the separate (and different: rejoined on *every*
+    // reconnect) mechanism that already handled this correctly.
+    this._pendingSends = []; // [opcode, channelId, payload][]
     this._listeners = { open: [], close: [], error: [], message: [] };
   }
 
@@ -122,22 +127,26 @@
     };
   };
 
-  /** No chunking — see this file's doc comment. Throws if `payload` exceeds one frame (211 UTF-8 bytes). */
+  /** No chunking — see this file's doc comment. Throws if `payload` exceeds one frame (211 UTF-8 bytes). Deferred until the socket is open if called right after connect(), rather than throwing "not open". */
   MioRealtimeClient.prototype.publish = function (channelId, payload) {
     if (encodeUtf8Length(payload) > MioProtocol.LEN_PAYLOAD) {
       throw new Error(
         'mio-client.js: publish() payload exceeds ' + MioProtocol.LEN_PAYLOAD + ' bytes (no chunking in this lightweight client)'
       );
     }
-    this._send(Opcode.Publish, channelId, payload);
+    this._sendOrQueue(Opcode.Publish, channelId, payload);
   };
 
-  /** Requests history since `sinceUnixSeconds` (0 = everything available) — arrives as normal messages on `channelId`'s handlers. Not supported on a wildcard pattern (server ignores it silently). Deferred until the socket is open if called right after connect() (same one-shot deferral subscribe() already does), rather than throwing. */
+  /** Requests history since `sinceUnixSeconds` (0 = everything available) — arrives as normal messages on `channelId`'s handlers. Not supported on a wildcard pattern (server ignores it silently). Deferred until the socket is open if called right after connect(), rather than throwing. */
   MioRealtimeClient.prototype.replay = function (channelId, sinceUnixSeconds) {
+    this._sendOrQueue(Opcode.Replay, channelId, String(sinceUnixSeconds || 0));
+  };
+
+  MioRealtimeClient.prototype._sendOrQueue = function (opcode, channelId, payload) {
     if (this._ws && this._ws.readyState === WS_OPEN) {
-      this._send(Opcode.Replay, channelId, String(sinceUnixSeconds || 0));
+      this._send(opcode, channelId, payload);
     } else {
-      this._pendingReplays.push([channelId, String(sinceUnixSeconds || 0)]);
+      this._pendingSends.push([opcode, channelId, payload]);
     }
   };
 
@@ -153,10 +162,10 @@
       Object.keys(self._subscriptions).forEach(function (channelId) {
         self._send(Opcode.Subscribe, channelId, '');
       });
-      var pendingReplays = self._pendingReplays;
-      self._pendingReplays = [];
-      pendingReplays.forEach(function (args) {
-        self._send(Opcode.Replay, args[0], args[1]);
+      var pendingSends = self._pendingSends;
+      self._pendingSends = [];
+      pendingSends.forEach(function (args) {
+        self._send(args[0], args[1], args[2]);
       });
       self._startHeartbeat();
       self._emit('open', undefined);

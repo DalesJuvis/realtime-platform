@@ -92,3 +92,23 @@ test('replay() called synchronously right after connect() does not throw, and is
     global.WebSocket = realWebSocket;
   }
 });
+
+test('publish() called synchronously right after connect() does not throw, and is sent once the socket actually opens', async () => {
+  const realWebSocket = global.WebSocket;
+  global.WebSocket = SlowOpeningFakeWebSocket;
+  try {
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    client.connect();
+    // The exact bug reported live: mio-protocol.js + mio-client.js loaded
+    // as separate <script> tags, then connect() immediately followed by
+    // publish() — the pattern this package's own docs show.
+    assert.doesNotThrow(() => client.publish('orders:42', 'order created'));
+
+    await new Promise((r) => setTimeout(r, 0));
+    const opcodes = client._ws.sent.map((frame) => frame[2]);
+    assert.deepEqual(opcodes, [Protocol.Opcode.Auth, Protocol.Opcode.Publish]);
+    client.disconnect();
+  } finally {
+    global.WebSocket = realWebSocket;
+  }
+});

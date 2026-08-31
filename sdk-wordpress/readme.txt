@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.3
+Stable tag: 0.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,16 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.4 =
+* Fixes the same class of bug as 0.1.3, but in `publish()` this time:
+  calling it right after `connect()` — exactly what this plugin's own
+  quick-start examples show — threw `"cannot send, WebSocket is not
+  open"`, because the socket is still connecting at that exact point.
+  0.1.3 only fixed `replay()`; `publish()` (and `unicast()` in the full
+  SDKs) had the identical unguarded send and is now fixed the same way,
+  generalized so nothing in this send path can hit it again. No config
+  or markup changes needed — update the CDN tag to `@v0.1.4`.
 
 = 0.1.3 =
 * Fixes a real bug: `replay()` (`data-replay="true"` on `mio-embed.js`, or
