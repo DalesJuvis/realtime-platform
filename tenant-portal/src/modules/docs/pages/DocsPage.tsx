@@ -201,6 +201,13 @@ Content-Type: application/json
                 </a>
                 .
               </p>
+              <p className="text-xs text-muted-foreground">
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">ttl_secs</code> defaults to 3600 and is
+                capped at 2,592,000 (30 days) — a higher value is silently clamped, never rejected. There's no
+                automated renewal once a token expires; for a token hand-pasted into a static site with no backend
+                of its own, mint a longer-lived one from Overview's "Mint token" instead of relying on the 1-hour
+                default.
+              </p>
             </Section>
             <Section
               title="Publish over HTTP"
@@ -353,10 +360,16 @@ const unsubscribe = client.subscribe('orders:42', (message) => {
 client.connect()
 client.publish('orders:42', 'order created')
 
+client.on('authFailed', ({ code, reason }) => {
+  // Invalid or expired token — the client never auto-reconnects after
+  // this, even with reconnect: true. Mint a fresh token and construct a
+  // new client rather than retrying this one.
+})
+
 // later:
 unsubscribe()
 client.disconnect()`}
-              caveat="No AUTH acknowledgement in the protocol — the 'authenticated' event fires optimistically right after sending; watch the 'close' event to detect an auth failure instead."
+              caveat="No AUTH acknowledgement in the protocol — the 'authenticated' event fires optimistically right after sending. Watch 'authFailed' to detect an auth failure specifically (the server sends a dedicated close code, 4001, for exactly this) rather than inferring it from a generic 'close'."
             />
           </TabsContent>
 

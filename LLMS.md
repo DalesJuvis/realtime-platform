@@ -49,9 +49,13 @@ written.
    `userId` in `unicast()` (it reuses the same wire field).
 6. **There is no AUTH acknowledgement opcode.** A client's
    `authenticated`/`open` event fires optimistically right after sending
-   AUTH; a failed auth surfaces only as the server closing the
-   connection (a `close` event, then reconnect if enabled). Never write
-   code that assumes a synchronous "auth succeeded" signal exists.
+   AUTH; a failed auth surfaces as the server closing the connection with
+   a dedicated WS close code (`4001` — `WsController.rs::WS_CLOSE_CODE_AUTH_FAILED`),
+   which every SDK (TypeScript, the WordPress family, Python) turns into
+   an `authFailed` event/log instead of blindly reconnecting with the same
+   now-invalid token. Never write code that assumes a synchronous "auth
+   succeeded" signal exists, and never assume a generic `close` handler
+   alone tells you *why* — check for `authFailed` specifically.
 7. **REPLAY only works on an exact `channel_id`, never a wildcard
    pattern** (`orders:*`) — the server silently no-ops a REPLAY on a
    pattern rather than erroring.
@@ -137,7 +141,7 @@ response is JSON-parseable as the error shape above.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/api/v1/auth/tokens` | secret in body | Mint a client token. `{tenant_id, secret, sub, ttl_secs?}` → `{token, expires_in, ws_url}`. Server-to-server only. |
+| POST | `/api/v1/auth/tokens` | secret in body | Mint a client token. `{tenant_id, secret, sub, ttl_secs?}` → `{token, expires_in, ws_url}`. Server-to-server only. `ttl_secs` defaults to 3600 (1h), silently clamped to 2,592,000 (30d) if higher — never rejected. |
 | POST | `/api/v1/portal/auth/signup` | none | Self-serve: create a brand-new tenant + primary key pair + login account from `{email, password}`. `201`, returns `{access_token, token_type, expires_in, keys: {tenant_id, secret_key}}`. |
 | POST | `/api/v1/portal/auth/register` | tenant secret in body | Create a portal login for a tenant an admin already provisioned, proving ownership via its real secret. `201`, logs in. |
 | POST | `/api/v1/portal/auth/login` | none | Email/password login → portal session token. |
@@ -157,7 +161,7 @@ response is JSON-parseable as the error shape above.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/v1/portal/sessions` | Live WS/TCP connections for this tenant ("devices"). |
-| POST | `/api/v1/portal/tokens` | Mint a client token from an already-authenticated portal session (no secret needed in the request). |
+| POST | `/api/v1/portal/tokens` | Mint a client token from an already-authenticated portal session (no secret needed in the request). Same `ttl_secs` default/cap as `/api/v1/auth/tokens` above. |
 | GET | `/api/v1/portal/overview` | Active session count + aggregated tenant metrics. |
 | GET | `/api/v1/portal/keys` | This tenant's primary `{tenant_id, secret_key}`. |
 | POST | `/api/v1/portal/keys/rotate` | Rotate the primary secret in place. Returns the new secret once. |
@@ -330,7 +334,7 @@ No AUTH ack (see §1.6) — watch `close`, not just `authenticated`.
 - `replay(channelId: string, sinceUnixSeconds?: number): void` — default `0` (all history).
 - `subscribe(channelId: string, handler: MessageHandler): Unsubscribe` — exact channel or `orders:*` wildcard; multiple `subscribe()` calls on the same `channelId` share one underlying SUB frame; last handler removed on a channel → real UNSUB frame.
 - `channel(channelId: string): ChannelHandle` — see §7's named-events section. `ChannelHandle.on<T>(event: string, handler: (data: T, message: RealtimeMessage) => void): Unsubscribe`; `ChannelHandle.emit(event: string, data?: unknown): void`.
-- `on<K extends keyof RealtimeEvents>(event: K, listener): Unsubscribe` / `off(event, listener): void` — **connection lifecycle only**, not channel messages: `"open"` (`undefined`), `"close"` (`{code, reason}`), `"error"` (`Error`), `"authenticated"` (`undefined`, optimistic), `"message"` (`RealtimeMessage`, fires for every frame before per-channel dispatch). Do not confuse this with `channel().on()` — different object, different purpose, see §7.
+- `on<K extends keyof RealtimeEvents>(event: K, listener): Unsubscribe` / `off(event, listener): void` — **connection lifecycle only**, not channel messages: `"open"` (`undefined`), `"close"` (`{code, reason}`), `"error"` (`Error`), `"authenticated"` (`undefined`, optimistic), `"authFailed"` (`{code, reason}`, fires right after `close` specifically when `code === 4001` — an invalid or expired token; the client does **not** auto-reconnect after this one, even with `reconnect: true`, since retrying with the same token would just fail again), `"message"` (`RealtimeMessage`, fires for every frame before per-channel dispatch). Do not confuse this with `channel().on()` — different object, different purpose, see §7.
 
 `RealtimeMessage`: `{ channelId: string, payload: string, tenantId?: string, receivedAt: number }` — `receivedAt` is a client-side `Date.now()` timestamp, **not** server-stamped (the wire frame carries no timestamp field at all).
 
@@ -430,6 +434,7 @@ Verify against a live connection before trusting generated code here.
 - `async publish(channel_id: str, payload: str) -> None`.
 - `async unicast(user_id: str, payload: str) -> None` — silently truncates >211 bytes, see §8's matrix.
 - `async replay(channel_id: str, since_unix_secs: int = 0) -> None`.
+- No event/callback API for connection lifecycle (unlike TypeScript's `on()` or the WordPress clients' `.on()`) — on an auth failure (close code `4001`), this SDK logs `logger.error(...)` and stops the reconnect loop rather than retrying with the same dead token, but there's nothing to subscribe to from application code today.
 
 `RealtimeMessage` (frozen dataclass): `channel_id: str`, `payload: str`, `tenant_id: UUID`. Type aliases: `MessageHandler = Callable[[RealtimeMessage], None]`, `Unsubscribe = Callable[[], None]`.
 
@@ -538,7 +543,7 @@ Constructor: `new Client(string $apiUrl, string $tenantId, string $secret, ?Http
 - `ClientException`: `getMessage(): string`, `getErrorCode(): string`, `getHttpStatus(): ?int` (null for a purely local validation failure, e.g. oversized payload, since no request was ever sent).
 
 **`mio-client.js`/`mio-embed.js` (browser, no PHP, deliberately minimal — no unicast, no wildcard, no chunking, no `channel()`/events):**
-`new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)` — the last two queue and send once, in call order, if invoked before the socket is actually open (e.g. right after `connect()`), rather than throwing. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
+`new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)` — the last two queue and send once, in call order, if invoked before the socket is actually open (e.g. right after `connect()`), rather than throwing. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`. `.on('authFailed', handler)` fires `{code: 4001, reason}` when the server rejects AUTH (invalid/expired token) — same close-code detection as the TypeScript SDK, and the client likewise never auto-reconnects after this specific close, even with `reconnect: true`.
 
 Static, on the constructor itself (`MioRealtimeClient.*` / `MioEmbedClient.*`, same on both files): `isNotificationSupported(): boolean`, `requestNotificationPermission(): Promise<string>` (call from a click), `showBackgroundNotification(message, options?): void` — shows one notification for `message`, callable directly from any handler (e.g. a `subscribe()` callback) for per-channel control, and `attachBackgroundNotifications(client, options?): () => void` — the same logic wired to the client's own `'message'` event instead, covering every subscribed channel at once. Native `Notification` API only, tab hidden/unfocused, no server setup; mirrors `@mio/realtime-sdk`'s `showBackgroundNotification`/`attachBackgroundNotifications` (§9), ported to this file's zero-dependency constraints. `options`: `filter?`, `title?`, `body?`, `icon?`, `onClick?`, same shape as the TypeScript SDK's `BackgroundNotificationOptions`.
 

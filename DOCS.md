@@ -59,6 +59,17 @@ from anything the SDK supplies. Pass it straight into the SDK's config
 below. Full request/derivation/response sequence:
 [`diagrams/auth/issue-client-token/version.md`](diagrams/auth/issue-client-token/version.md).
 
+> **`ttl_secs` defaults to 3600 (1 hour) and is capped at 2,592,000 (30
+> days)** — a caller-supplied value beyond that is silently clamped to the
+> cap rather than rejected. Once a token expires, there's no automated
+> renewal: the client's connection closes and it has to be minted again
+> and handed to the app fresh (see the `authFailed` event under each
+> connected SDK's own section). For a backend that mints per-request or
+> per-session, the 1-hour default is usually right; for a token
+> hand-pasted into a static site with no backend of its own, mint a
+> longer-lived one instead — tenant-portal's "Mint token" has presets up
+> to the 30-day cap.
+
 ### Publish over HTTP
 
 For a backend with no persistent connection open — a cron job, a webhook
@@ -290,7 +301,20 @@ client.disconnect()
 
 > **Caveat:** no AUTH acknowledgement in the protocol — the
 > `authenticated` event fires optimistically right after sending; watch
-> the `close` event to detect an auth failure instead.
+> the `authFailed` event to detect an auth failure instead (an invalid or
+> expired token). The server sends a dedicated WS close code (`4001`) for
+> exactly this, so the SDK never confuses it with a network drop or a
+> server restart — and never keeps retrying with the same now-invalid
+> token, even with `reconnect: true`. Handle it by minting a fresh token
+> and constructing a new client; there's no in-place way to swap a
+> client's token today.
+
+```typescript
+client.on('authFailed', ({ code, reason }) => {
+  // e.g. show "session expired", mint a fresh token server-side, then
+  // reconnect with a brand-new RealtimeClient once you have it.
+})
+```
 
 ## React
 
