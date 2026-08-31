@@ -1,0 +1,17 @@
+# SPA fallback for react-router's createBrowserRouter (clean URLs via the
+# History API) — without this, a reload or direct link to any route other
+# than "/" gets Hostinger/Apache's own 404 instead of index.html, since
+# the static host finds no real file at that path and never lets the
+# SPA's own router take over client-side.
+#
+# Assumes this app is deployed at its domain/subdomain root. If deployed
+# under a subpath instead (e.g. example.com/chat/), change RewriteBase
+# to match (e.g. "/chat/").
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
