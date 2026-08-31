@@ -74,6 +74,12 @@ class RealtimeClient:
         self._config = config
         self._ws: "websockets.WebSocketClientProtocol | None" = None
         self._subscriptions: Dict[str, Set[MessageHandler]] = {}
+        # `replay()` appelé avant que la connexion ne soit établie (la race
+        # que son propre docstring documente) — mis en attente ici plutôt
+        # que de lever, rejoué une seule fois à la connexion (pas à chaque
+        # reconnexion, contrairement aux souscriptions : une demande
+        # ponctuelle, pas un état à maintenir).
+        self._pending_replays: list[tuple[str, str]] = []
         self._connection_task: "asyncio.Task | None" = None
         self._heartbeat_task: "asyncio.Task | None" = None
         self._closed_by_user = True
@@ -158,8 +164,14 @@ class RealtimeClient:
     async def replay(self, channel_id: str, since_unix_secs: int = 0) -> None:
         """Demande le rattrapage de l'historique depuis ``since_unix_secs``
         (0 = tout l'historique disponible). Non supporté sur un motif
-        (``orders:*``) — le serveur ignore silencieusement la demande."""
-        await self._send(Opcode.REPLAY, channel_id, str(since_unix_secs))
+        (``orders:*``) — le serveur ignore silencieusement la demande.
+        Appelé avant que la connexion ne soit établie (ex: juste après
+        ``connect()``) — mis en attente et rejoué dès la connexion,
+        plutôt que de lever ``ConnectionError``."""
+        if self._ws is not None:
+            await self._send(Opcode.REPLAY, channel_id, str(since_unix_secs))
+        else:
+            self._pending_replays.append((channel_id, str(since_unix_secs)))
 
     async def _send(self, opcode: Opcode, channel_id: str, payload: str) -> None:
         if self._ws is None:
@@ -185,6 +197,10 @@ class RealtimeClient:
                     # essentiel pour qu'une reconnexion soit transparente.
                     for channel_id in list(self._subscriptions.keys()):
                         await self._send(Opcode.SUBSCRIBE, channel_id, "")
+
+                    pending_replays, self._pending_replays = self._pending_replays, []
+                    for channel_id, since_unix_secs in pending_replays:
+                        await self._send(Opcode.REPLAY, channel_id, since_unix_secs)
 
                     self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
                     try:
