@@ -74,12 +74,14 @@ class RealtimeClient:
         self._config = config
         self._ws: "websockets.WebSocketClientProtocol | None" = None
         self._subscriptions: Dict[str, Set[MessageHandler]] = {}
-        # `replay()` appelé avant que la connexion ne soit établie (la race
-        # que son propre docstring documente) — mis en attente ici plutôt
-        # que de lever, rejoué une seule fois à la connexion (pas à chaque
-        # reconnexion, contrairement aux souscriptions : une demande
-        # ponctuelle, pas un état à maintenir).
-        self._pending_replays: list[tuple[str, str]] = []
+        # `publish()`/`unicast()`/`replay()` appelés avant que la connexion
+        # ne soit établie (la race que `connect()`'s propre docstring
+        # documente) — mis en file ici plutôt que de lever, vidée une
+        # seule fois à la connexion, dans l'ordre d'appel d'origine (pas à
+        # chaque reconnexion, contrairement aux souscriptions : chacun de
+        # ces trois appels est une action ponctuelle, pas un état à
+        # maintenir indéfiniment).
+        self._pending_sends: list[tuple[Opcode, str, str]] = []
         self._connection_task: "asyncio.Task | None" = None
         self._heartbeat_task: "asyncio.Task | None" = None
         self._closed_by_user = True
@@ -154,24 +156,33 @@ class RealtimeClient:
         return _unsubscribe
 
     async def publish(self, channel_id: str, payload: str) -> None:
-        await self._send(Opcode.PUBLISH, channel_id, payload)
+        """Appelé avant que la connexion ne soit établie (ex: juste après
+        ``connect()`` — la race que son propre docstring documente) — mis
+        en file et envoyé dès la connexion, plutôt que de lever
+        ``ConnectionError``."""
+        await self._send_or_queue(Opcode.PUBLISH, channel_id, payload)
 
     async def unicast(self, user_id: str, payload: str) -> None:
         """Envoi direct à un utilisateur. ⚠️ ``user_id`` doit tenir dans 24
-        octets UTF-8 (contrainte du frame fixe, champ ``channel_id`` repurposé)."""
-        await self._send(Opcode.UNICAST, user_id, payload)
+        octets UTF-8 (contrainte du frame fixe, champ ``channel_id``
+        repurposé). Même mise en file que ``publish()`` si appelé avant la
+        connexion — voir sa doc."""
+        await self._send_or_queue(Opcode.UNICAST, user_id, payload)
 
     async def replay(self, channel_id: str, since_unix_secs: int = 0) -> None:
         """Demande le rattrapage de l'historique depuis ``since_unix_secs``
         (0 = tout l'historique disponible). Non supporté sur un motif
         (``orders:*``) — le serveur ignore silencieusement la demande.
         Appelé avant que la connexion ne soit établie (ex: juste après
-        ``connect()``) — mis en attente et rejoué dès la connexion,
+        ``connect()``) — mis en file et rejoué dès la connexion,
         plutôt que de lever ``ConnectionError``."""
+        await self._send_or_queue(Opcode.REPLAY, channel_id, str(since_unix_secs))
+
+    async def _send_or_queue(self, opcode: Opcode, channel_id: str, payload: str) -> None:
         if self._ws is not None:
-            await self._send(Opcode.REPLAY, channel_id, str(since_unix_secs))
+            await self._send(opcode, channel_id, payload)
         else:
-            self._pending_replays.append((channel_id, str(since_unix_secs)))
+            self._pending_sends.append((opcode, channel_id, payload))
 
     async def _send(self, opcode: Opcode, channel_id: str, payload: str) -> None:
         if self._ws is None:
@@ -198,9 +209,9 @@ class RealtimeClient:
                     for channel_id in list(self._subscriptions.keys()):
                         await self._send(Opcode.SUBSCRIBE, channel_id, "")
 
-                    pending_replays, self._pending_replays = self._pending_replays, []
-                    for channel_id, since_unix_secs in pending_replays:
-                        await self._send(Opcode.REPLAY, channel_id, since_unix_secs)
+                    pending_sends, self._pending_sends = self._pending_sends, []
+                    for opcode, channel_id, payload in pending_sends:
+                        await self._send(opcode, channel_id, payload)
 
                     self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
                     try:
