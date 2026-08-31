@@ -66,6 +66,18 @@ pub struct Settings {
     /// misbehaving. Defaults to a placeholder if VAPID keys are set but
     /// this isn't: still valid, just worth setting for real.
     pub vapid_subject: String,
+    /// Explicit override for the `ws_url` returned alongside every minted
+    /// client token (`services::WsUrlService::derive_ws_url`) — only
+    /// needed when the WebSocket port isn't reachable at the same
+    /// host+scheme the token-minting HTTP request itself arrived on
+    /// (e.g. local dev / docker-compose, where the Portal API and the WS
+    /// server listen on two different ports with no reverse proxy
+    /// unifying them under one public URL). Unset in production behind
+    /// Caddy/`docker-compose.shared-proxy.yml`: there, `/api/*` and `/ws`
+    /// are proxied under the exact same `{$DOMAIN}` (see `Caddyfile`), so
+    /// the request's own `Host`/`X-Forwarded-Proto` headers already say
+    /// the right thing — nothing to configure.
+    pub public_ws_url: Option<String>,
 }
 
 impl Settings {
@@ -91,6 +103,7 @@ impl Settings {
             vapid_public_key: std::env::var("VAPID_PUBLIC_KEY").ok(),
             vapid_private_key: std::env::var("VAPID_PRIVATE_KEY").ok(),
             vapid_subject: std::env::var("VAPID_SUBJECT").unwrap_or_else(|_| "mailto:ops@example.com".to_string()),
+            public_ws_url: std::env::var("PUBLIC_WS_URL").ok(),
         }
     }
 }

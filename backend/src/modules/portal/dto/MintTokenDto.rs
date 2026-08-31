@@ -21,4 +21,8 @@ pub struct ClientTokenResponseDto {
     /// never has to duplicate that default to know when its own token
     /// expires (e.g. `tenant-portal`'s downloadable credentials file).
     pub expires_in: u64,
+    /// The `ws://`/`wss://.../ws` URL to actually connect to — see
+    /// `IssueTokenDto::TokenResponseDto::ws_url`'s doc comment, same
+    /// derivation, same reasoning.
+    pub ws_url: String,
 }

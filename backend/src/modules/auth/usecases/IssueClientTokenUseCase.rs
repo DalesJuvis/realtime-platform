@@ -20,7 +20,11 @@ pub enum IssueTokenError {
     InvalidTenantSecret,
 }
 
-pub fn execute(token_service: &TokenService, dto: IssueTokenDto) -> Result<TokenResponseDto, IssueTokenError> {
+pub fn execute(
+    token_service: &TokenService,
+    dto: IssueTokenDto,
+    ws_url: String,
+) -> Result<TokenResponseDto, IssueTokenError> {
     if !token_service.verify_tenant_secret(dto.tenant_id, dto.secret.as_bytes()) {
         return Err(IssueTokenError::InvalidTenantSecret);
     }
@@ -31,5 +35,5 @@ pub fn execute(token_service: &TokenService, dto: IssueTokenDto) -> Result<Token
         .map_err(|_| IssueTokenError::InvalidTenantSecret)?;
 
     tracing::info!(tenant_id = %dto.tenant_id, sub = %dto.sub, "client token issued via the public HTTP auth endpoint");
-    Ok(TokenResponseDto { token, expires_in: ttl })
+    Ok(TokenResponseDto { token, expires_in: ttl, ws_url })
 }

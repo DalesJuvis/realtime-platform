@@ -152,6 +152,7 @@ mod tests {
             channel_router: channel_router.clone(),
             push_fallback,
             rate_limiter: Arc::new(RateLimitService::new(Default::default())),
+            public_ws_url: None,
         };
         (ctx, channel_router)
     }
@@ -230,6 +231,41 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let keys: Keys = body_json(resp).await;
         assert_eq!(keys.secret_key, signup_data.keys.secret_key);
+    }
+
+    #[tokio::test]
+    async fn mint_token_returns_a_ws_url_derived_from_the_requests_own_host() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+
+        let signup_data = signup(&app, "mint-ws-url@example.com").await;
+
+        #[derive(Deserialize, Default)]
+        struct MintedToken {
+            token: String,
+            ws_url: String,
+        }
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/portal/tokens")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {}", signup_data.access_token))
+                    .header("host", "mio.example.com")
+                    .header("x-forwarded-proto", "https")
+                    .body(Body::from(json!({ "sub": "user-42" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let minted: MintedToken = body_json(resp).await;
+        assert!(!minted.token.is_empty());
+        assert_eq!(minted.ws_url, "wss://mio.example.com/ws");
     }
 
     #[tokio::test]

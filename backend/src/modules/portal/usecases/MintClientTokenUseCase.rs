@@ -19,6 +19,7 @@ pub fn execute(
     ctx: &PortalContext,
     tenant_id: TenantId,
     dto: MintTokenDto,
+    ws_url: String,
 ) -> Result<ClientTokenResponseDto, PortalError> {
     let ttl = dto.ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
     let token = ctx
@@ -27,5 +28,5 @@ pub fn execute(
         .map_err(|_| PortalError::InvalidTenantSecret)?;
 
     tracing::info!(%tenant_id, sub = %dto.sub, "client token minted via the portal");
-    Ok(ClientTokenResponseDto { token, expires_in: ttl })
+    Ok(ClientTokenResponseDto { token, expires_in: ttl, ws_url })
 }

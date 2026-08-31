@@ -23,4 +23,10 @@ pub struct IssueTokenDto {
 pub struct TokenResponseDto {
     pub token: String,
     pub expires_in: u64,
+    /// The `ws://`/`wss://.../ws` URL to actually connect to — derived
+    /// server-side (`services::WsUrlService::derive_ws_url`) from the
+    /// very request that minted this token, so no SDK ever needs a
+    /// host/port/secure config of its own. Hand this straight to your
+    /// SDK's connect call alongside `token`.
+    pub ws_url: String,
 }

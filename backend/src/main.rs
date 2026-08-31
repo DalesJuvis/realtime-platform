@@ -277,6 +277,8 @@ async fn main() {
         generated
     });
 
+    let public_ws_url: Option<Arc<str>> = settings.public_ws_url.clone().map(Arc::from);
+
     let portal_ctx = modules::portal::PortalContext::PortalContext {
         token_service: auth.clone(),
         presence: presence.clone(),
@@ -294,11 +296,15 @@ async fn main() {
         channel_router: channel_router.clone(),
         push_fallback: realtime_ctx.push_fallback.clone(),
         rate_limiter: realtime_ctx.rate_limiter.clone(),
+        public_ws_url: public_ws_url.clone(),
     };
     // Public HTTP token-issuance ("auth before connect") — merged onto the
     // same listener as the Portal API: both are meant to be reachable by a
     // tenant's own backend, unlike the internal-only Admin API.
-    let auth_api_ctx = modules::auth::AuthApiContext::AuthApiContext { token_service: auth.clone() };
+    let auth_api_ctx = modules::auth::AuthApiContext::AuthApiContext {
+        token_service: auth.clone(),
+        public_ws_url,
+    };
 
     let portal_listener = TcpListener::bind(settings.portal_bind_addr)
         .await

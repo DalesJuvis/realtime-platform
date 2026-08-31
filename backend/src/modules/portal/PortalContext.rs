@@ -42,4 +42,7 @@ pub struct PortalContext {
     pub channel_router: Arc<ChannelRouterService>,
     pub push_fallback: Arc<PushFallbackService>,
     pub rate_limiter: Arc<RateLimitService>,
+    /// `Settings::public_ws_url` — see `auth::services::WsUrlService`'s
+    /// doc comment.
+    pub public_ws_url: Option<Arc<str>>,
 }
