@@ -299,39 +299,59 @@
   };
 
   /**
-   * Shows a native `Notification` for every message `client` receives
-   * (any channel — subscribes to the client's own `'message'` event,
-   * fired before per-channel dispatch) while the page is hidden or
-   * unfocused. Silently does nothing if permission was never granted —
-   * call `requestNotificationPermission()` first, typically on a click.
+   * Shows a native `Notification` for `message`, if the page is hidden or
+   * unfocused (no-op otherwise — doesn't double what's already visible on
+   * screen). Same logic `attachBackgroundNotifications` uses internally,
+   * but callable directly from anywhere — a `subscribe()` callback,
+   * for example — not just the client's own `'message'` event. Silently
+   * does nothing if permission was never granted — call
+   * `requestNotificationPermission()` first, typically on a click.
    *
-   * @param {MioRealtimeClient} client
+   * @param {object} message
    * @param {object} [options]
    * @param {(message: object) => boolean} [options.filter] Only notify for messages that pass this — default: all.
    * @param {(message: object) => string} [options.title] Default: the channel ID.
    * @param {(message: object) => string} [options.body] Default: the raw payload.
    * @param {string} [options.icon]
    * @param {(message: object) => void} [options.onClick] Called on notification click (window is focused first).
+   */
+  MioRealtimeClient.showBackgroundNotification = function (message, options) {
+    if (!MioRealtimeClient.isNotificationSupported()) return;
+    options = options || {};
+
+    if (Notification.permission !== 'granted') return;
+    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+    if (options.filter && !options.filter(message)) return;
+
+    var title = options.title ? options.title(message) : message.channelId;
+    var body = options.body ? options.body(message) : message.payload;
+    var notificationOptions = { body: body };
+    if (options.icon !== undefined) notificationOptions.icon = options.icon;
+    var notification = new Notification(title, notificationOptions);
+    notification.onclick = function () {
+      window.focus();
+      if (options.onClick) options.onClick(message);
+    };
+  };
+
+  /**
+   * Shows a native `Notification` for every message `client` receives
+   * (any channel — subscribes to the client's own `'message'` event,
+   * fired before per-channel dispatch) while the page is hidden or
+   * unfocused, without having to call `showBackgroundNotification`
+   * yourself in every `subscribe()`. Silently does nothing if permission
+   * was never granted — call `requestNotificationPermission()` first,
+   * typically on a click.
+   *
+   * @param {MioRealtimeClient} client
+   * @param {object} [options] Same shape as `showBackgroundNotification`'s.
    * @returns {() => void} Unsubscribe.
    */
   MioRealtimeClient.attachBackgroundNotifications = function (client, options) {
     if (!MioRealtimeClient.isNotificationSupported()) return function () {};
-    options = options || {};
 
     return client.on('message', function (message) {
-      if (Notification.permission !== 'granted') return;
-      if (document.visibilityState === 'visible' && document.hasFocus()) return;
-      if (options.filter && !options.filter(message)) return;
-
-      var title = options.title ? options.title(message) : message.channelId;
-      var body = options.body ? options.body(message) : message.payload;
-      var notificationOptions = { body: body };
-      if (options.icon !== undefined) notificationOptions.icon = options.icon;
-      var notification = new Notification(title, notificationOptions);
-      notification.onclick = function () {
-        window.focus();
-        if (options.onClick) options.onClick(message);
-      };
+      MioRealtimeClient.showBackgroundNotification(message, options);
     });
   };
 

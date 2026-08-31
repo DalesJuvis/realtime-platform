@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.5
+Stable tag: 0.1.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,14 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.6 =
+* New: `MioRealtimeClient.showBackgroundNotification(message, options)` —
+  the same logic 0.1.5's `attachBackgroundNotifications` uses internally,
+  but callable directly from a `subscribe()` callback for per-channel
+  control instead of covering every subscribed channel at once via the
+  client's `'message'` event. `attachBackgroundNotifications` unchanged,
+  now implemented on top of this.
 
 = 0.1.5 =
 * New: background browser notifications for `mio-client.js`/`mio-embed.js`

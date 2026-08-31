@@ -205,3 +205,23 @@ test('attachBackgroundNotifications does not notify without granted permission',
     assert.equal(created.length, 0);
   });
 });
+
+test('showBackgroundNotification called directly from a subscribe() callback shows a notification', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    const unsubscribe = client.subscribe('orders:42', (message) => {
+      Client.showBackgroundNotification(message);
+    });
+
+    client._dispatch({ channelId: 'orders:42', payload: 'order created', tenantId: SAMPLE_TENANT });
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'orders:42');
+    assert.equal(created[0].body, 'order created');
+    unsubscribe();
+  });
+});
+
+test('showBackgroundNotification is a no-op when unsupported (no window/Notification global)', () => {
+  assert.doesNotThrow(() => Client.showBackgroundNotification({ channelId: 'orders:42', payload: 'order created' }));
+});

@@ -237,3 +237,31 @@ test('attachBackgroundNotifications does not notify without granted permission',
     assert.equal(created.length, 0);
   });
 });
+
+// showBackgroundNotification — the standalone function, callable directly
+// from a subscribe() callback instead of only through the client-wide
+// attachBackgroundNotifications() wrapper above.
+
+test('showBackgroundNotification called directly from a subscribe() callback shows a notification', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+    // The exact pattern requested: notify from inside subscribe()'s own
+    // callback, not the separate client-wide 'message' event.
+    const unsubscribe = client.subscribe('orders:42', (message) => {
+      MioRealtimeClient.showBackgroundNotification(message);
+    });
+
+    client._dispatch({ channelId: 'orders:42', payload: 'order created', tenantId: 't' });
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'orders:42');
+    assert.equal(created[0].body, 'order created');
+    unsubscribe();
+  });
+});
+
+test('showBackgroundNotification is a no-op when unsupported (no window/Notification global)', () => {
+  const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+  assert.doesNotThrow(() => MioRealtimeClient.showBackgroundNotification({ channelId: 'orders:42', payload: 'order created' }));
+  void client;
+});
