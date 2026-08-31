@@ -95,6 +95,10 @@ export default function DocsPage() {
     }
   })()
   const apiUrl = env.defaultApiUrl
+  // Illustrative only — every SDK actually receives this as `ws_url` on
+  // the mint-token response (server-derived, see LLMS.md §1 rule 8), it
+  // is never assembled from a host/port/secure config by the SDK itself.
+  const wsUrl = `${secure ? 'wss' : 'ws'}://${host}/ws`
 
   return (
     <div className="space-y-6">
@@ -160,8 +164,11 @@ export default function DocsPage() {
                 <CardDescription>What every SDK snippet below connects to.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <CodeBlock label="WebSocket host (SDKs)" code={`${host}${secure ? ' (secure: true)' : ' (secure: false)'}`} />
+                <CodeBlock label="WebSocket URL (SDKs)" code={wsUrl} />
                 <CodeBlock label="Portal API URL (REST)" code={apiUrl} />
+                <p className="text-xs text-muted-foreground">
+                  You never set this yourself — every mint-token call below returns it as <code className="rounded bg-muted px-1 py-0.5 font-mono">ws_url</code>, pass it straight into the SDK.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -180,8 +187,20 @@ Content-Type: application/json
               <CodeBlock
                 label="Response"
                 language="json"
-                code={`{ "success": true, "data": { "token": "…", "expires_in": 3600 }, "trace_id": "…" }`}
+                code={`{ "success": true, "data": { "token": "…", "expires_in": 3600, "ws_url": "${wsUrl}" }, "trace_id": "…" }`}
               />
+              <p className="text-xs text-muted-foreground">
+                Full request/derivation/response sequence:{' '}
+                <a
+                  href="https://github.com/DalesJuvis/realtime-platform/blob/master/diagrams/auth/issue-client-token/version.md"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  diagrams/auth/issue-client-token
+                </a>
+                .
+              </p>
             </Section>
             <Section
               title="Publish over HTTP"
@@ -318,8 +337,7 @@ orders.emit('order.created', { orderId: 123 })`}
               code={`import { createRealtimeClient } from '@mio/realtime-sdk'
 
 const client = createRealtimeClient({
-  host: '${host}',
-  secure: ${secure},
+  wsUrl: '${wsUrl}', // from your mint-token response's ws_url — never assembled by hand
   tenantId: '${tid}',
   token: myTokenFromMintToken,
 })
@@ -349,7 +367,7 @@ client.disconnect()`}
 function App() {
   return (
     <RealtimeProvider
-      config={{ host: '${host}', secure: ${secure}, tenantId: '${tid}', token: myTokenFromMintToken }}
+      config={{ wsUrl: '${wsUrl}', tenantId: '${tid}', token: myTokenFromMintToken }}
     >
       <OrdersFeed />
     </RealtimeProvider>
@@ -386,7 +404,7 @@ function OrdersFeed() {
 function App() {
   return (
     <RealtimeProvider
-      config={{ host: '${host}', secure: ${secure}, tenantId: '${tid}', token: myTokenFromMintToken }}
+      config={{ wsUrl: '${wsUrl}', tenantId: '${tid}', token: myTokenFromMintToken }}
     >
       <OrdersFeed />
     </RealtimeProvider>
@@ -413,7 +431,7 @@ from realtime_sdk import ClientConfig, RealtimeClient
 
 async def main():
     config = ClientConfig(
-        url="${secure ? 'wss' : 'ws'}://${host}/ws",
+        url="${wsUrl}", # from your mint-token response's ws_url
         tenant_id=UUID("${tid}"),
         token=my_token_from_mint_token,
     )
@@ -441,7 +459,7 @@ use uuid::Uuid;
 #[tokio::main]
 async fn main() {
     let client = RealtimeClient::connect(ClientConfig {
-        url: "${secure ? 'wss' : 'ws'}://${host}/ws".to_string(),
+        url: "${wsUrl}".to_string(), // from your mint-token response's ws_url
         tenant_id: Uuid::parse_str("${tid}").unwrap(),
         token: my_token_from_mint_token,
         ..Default::default()
@@ -467,7 +485,7 @@ async fn main() {
               language="kotlin"
               code={`val client = RealtimeClient(
     RealtimeClientConfig(
-        url = "${secure ? 'wss' : 'ws'}://${host}/ws",
+        url = "${wsUrl}", // from your mint-token response's ws_url
         tenantId = UUID.fromString("${tid}"),
         token = myTokenFromMintToken,
     )
@@ -490,7 +508,7 @@ client.disconnect()`}
               description="Same client, Java-friendly surface (SAM interfaces, @JvmOverloads)."
               language="java"
               code={`RealtimeClientConfig config = new RealtimeClientConfig(
-    "${secure ? 'wss' : 'ws'}://${host}/ws",
+    "${wsUrl}", // from your mint-token response's ws_url
     UUID.fromString("${tid}"),
     myTokenFromMintToken
 );
@@ -514,7 +532,7 @@ client.publish("orders:42", "order created");`}
 
 $client = new Client('${apiUrl}', '${tid}', $secret);
 
-$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn }
+$minted = $client->mintToken('user-42'); // -> MintedToken { token, expiresIn, wsUrl }
 $client->publish('orders:42', 'order created', $minted->token);
 
 // Named event, same envelope client.channel(id).on() decodes in the browser:
@@ -541,7 +559,7 @@ $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 1
               language="php"
               code={`use Mio\\Realtime\\Laravel\\Facades\\MioRealtime;
 
-$minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn }
+$minted = MioRealtime::mintToken('user-42'); // -> MintedToken { token, expiresIn, wsUrl }
 MioRealtime::publish('orders:42', 'order created', $minted->token);
 
 // Named event, same envelope client.channel(id).on() decodes:
@@ -567,8 +585,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
               language="markup"
               code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-embed.min.js"
-  data-host="${host}"
-  data-secure="${secure}"
+  data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
   data-channel="orders:42"
@@ -590,8 +607,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
 <script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.1/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
-    host: '${host}',
-    secure: ${secure},
+    wsUrl: '${wsUrl}', // the ws_url from your mint-token response
     tenantId: '${tid}',
     token: '…', // minted server-side, never your tenant secret
   })

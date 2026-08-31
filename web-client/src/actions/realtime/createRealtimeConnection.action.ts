@@ -19,7 +19,7 @@ import type { ConnectionCredentials } from '@entities/Connection.entity'
  */
 export function createRealtimeConnectionAction(creds: ConnectionCredentials): RealtimeClient {
   return new RealtimeClient({
-    url: creds.wsUrl,
+    wsUrl: creds.wsUrl,
     tenantId: creds.tenantId,
     token: creds.token,
   })

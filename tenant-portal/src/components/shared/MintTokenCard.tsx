@@ -44,6 +44,7 @@ export function MintTokenCard() {
       setCredentials({
         token: minted.token,
         expiresIn: minted.expiresIn,
+        wsUrl: minted.wsUrl,
         tenantId: keys.tenantId,
         sub: effectiveSub,
         issuedAt: new Date().toISOString(),

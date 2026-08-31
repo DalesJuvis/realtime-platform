@@ -15,10 +15,16 @@
  * bug (two credential-looking fields holding an identical value, with no
  * actual secret anywhere in sight), not a convenience. `tenant_id` is the
  * platform's only public identifier; nothing else to alias it as.
+ *
+ * Also deliberately no `connection: {host, port, secure}` block anymore —
+ * an earlier version assembled one here with a hardcoded `port: 8080`,
+ * which was simply wrong for a production deployment behind a reverse
+ * proxy (no port at all — see `Caddyfile`). `ws_url` below is the exact
+ * string the backend itself derived when this token was minted
+ * (`WsUrlService::derive_ws_url`) — nothing left to assemble or get wrong
+ * client-side.
  */
 
-import { env } from '@lib/env'
-import { deriveWsHost } from '@lib/utils'
 import type { MintedCredentials } from '@entities/MintedCredentials.entity'
 
 export function buildCredentialsFile(creds: MintedCredentials) {
@@ -29,11 +35,7 @@ export function buildCredentialsFile(creds: MintedCredentials) {
     token: creds.token,
     expires_in: creds.expiresIn,
     issued_at: creds.issuedAt,
-    connection: {
-      host: deriveWsHost(env.defaultApiUrl),
-      port: 8080,
-      secure: new URL(env.defaultApiUrl).protocol === 'https:',
-    },
+    ws_url: creds.wsUrl,
   }
 }
 

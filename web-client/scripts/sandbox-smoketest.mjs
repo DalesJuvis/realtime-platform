@@ -3,8 +3,7 @@ import WebSocket from 'ws'
 
 const token = process.argv[2]
 const client = new RealtimeClient({
-  host: 'localhost',
-  port: 8080,
+  wsUrl: 'ws://localhost:8080/ws',
   tenantId: '00000000-0000-0000-0000-000000000001',
   token,
   webSocketImpl: WebSocket,

@@ -14,4 +14,9 @@ export interface MintedCredentials {
   readonly tenantId: string
   readonly sub: string
   readonly issuedAt: string
+  /** The exact `ws://`/`wss://.../ws` URL to connect to, as returned by
+   * `POST /api/v1/portal/tokens` alongside the token itself — derived
+   * server-side from the minting request's own host, never guessed or
+   * assembled client-side (no more hardcoded port). */
+  readonly wsUrl: string
 }
