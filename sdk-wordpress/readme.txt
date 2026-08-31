@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.4
+Stable tag: 0.1.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,16 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.5 =
+* New: background browser notifications for `mio-client.js`/`mio-embed.js`
+  — `MioRealtimeClient.isNotificationSupported()`,
+  `.requestNotificationPermission()`, and
+  `.attachBackgroundNotifications(client, options)`. Native `Notification`
+  API only (no Service Worker, no VAPID keys, no server setup) — shows a
+  notification for messages received while the tab is hidden or
+  unfocused. Mirrors `@mio/realtime-sdk`'s `attachBackgroundNotifications`.
+  See README's "Notifications en arrière-plan".
 
 = 0.1.4 =
 * Fixes the same class of bug as 0.1.3, but in `publish()` this time:

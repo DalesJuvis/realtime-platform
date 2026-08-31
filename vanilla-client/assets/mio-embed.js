@@ -451,6 +451,67 @@
   }
 
   // ===========================================================================
+  // Background notifications — tab open, hidden/unfocused. Native browser
+  // `Notification` API only, no server setup, no Service Worker, no VAPID
+  // keys: the message already arrives over the WS connection this client
+  // holds open, this just decides whether to also surface it as a system
+  // notification. Mirrors @mio/realtime-sdk's `attachBackgroundNotifications`
+  // (see notifications.ts) — same semantics, ported to this file's
+  // zero-dependency, no-build-step constraints. For notifications that also
+  // work with the tab or browser fully closed, that needs real Web Push
+  // (a Service Worker + VAPID keys + `POST /api/v1/push/subscriptions`) —
+  // out of scope for this lightweight client, use `@mio/realtime-sdk`'s
+  // `registerPushServiceWorker`/`subscribeToPush` instead.
+  // ===========================================================================
+
+  MioEmbedClient.isNotificationSupported = function () {
+    return typeof window !== 'undefined' && typeof Notification !== 'undefined';
+  };
+
+  /** Must be called from a user gesture (a click) in most browsers. */
+  MioEmbedClient.requestNotificationPermission = function () {
+    if (!MioEmbedClient.isNotificationSupported()) return Promise.resolve('denied');
+    return Notification.requestPermission();
+  };
+
+  /**
+   * Shows a native `Notification` for every message `client` receives
+   * (any channel — subscribes to the client's own `'message'` event,
+   * fired before per-channel dispatch) while the page is hidden or
+   * unfocused. Silently does nothing if permission was never granted —
+   * call `requestNotificationPermission()` first, typically on a click.
+   *
+   * @param {MioEmbedClient} client
+   * @param {object} [options]
+   * @param {(message: object) => boolean} [options.filter] Only notify for messages that pass this — default: all.
+   * @param {(message: object) => string} [options.title] Default: the channel ID.
+   * @param {(message: object) => string} [options.body] Default: the raw payload.
+   * @param {string} [options.icon]
+   * @param {(message: object) => void} [options.onClick] Called on notification click (window is focused first).
+   * @returns {() => void} Unsubscribe.
+   */
+  MioEmbedClient.attachBackgroundNotifications = function (client, options) {
+    if (!MioEmbedClient.isNotificationSupported()) return function () {};
+    options = options || {};
+
+    return client.on('message', function (message) {
+      if (Notification.permission !== 'granted') return;
+      if (document.visibilityState === 'visible' && document.hasFocus()) return;
+      if (options.filter && !options.filter(message)) return;
+
+      var title = options.title ? options.title(message) : message.channelId;
+      var body = options.body ? options.body(message) : message.payload;
+      var notificationOptions = { body: body };
+      if (options.icon !== undefined) notificationOptions.icon = options.icon;
+      var notification = new Notification(title, notificationOptions);
+      notification.onclick = function () {
+        window.focus();
+        if (options.onClick) options.onClick(message);
+      };
+    });
+  };
+
+  // ===========================================================================
   // Auto-init — reads this <script> tag's own data-* attributes and, if a
   // token/channel were provided, renders a minimal live feed with zero
   // additional JS. Never runs outside a browser (no `document`), and never

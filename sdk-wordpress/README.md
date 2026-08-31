@@ -19,11 +19,12 @@ transport HTTP différent en dessous (voir "Pourquoi pas..." plus bas).
 > - `assets/js/mio-protocol.js` (codec du frame binaire), `mio-client.js`
 >   (client WebSocket navigateur) et `mio-embed.js` (même logique,
 >   consolidée en un seul fichier — voir plus bas) — **réellement
->   testés** : 23/23 tests `node --test` passants (`npm test`), y compris
+>   testés** : 40/40 tests `node --test` passants (`npm test`), y compris
 >   un test dédié au découpage UTF-8 sur une frontière de caractère valide
->   (piège classique d'un port naïf) et un test garantissant que
->   `mio-embed.js` reste une copie fidèle du reste (mêmes cas, deux
->   fichiers).
+>   (piège classique d'un port naïf), la race `connect()`/`publish()`/
+>   `replay()` corrigée en 0.1.3-0.1.4, `attachBackgroundNotifications()`,
+>   et un test garantissant que `mio-embed.js` reste une copie fidèle du
+>   reste (mêmes cas, deux fichiers).
 > - `includes/RestController.php`, `Shortcode.php`, `AdminPage.php`
 >   (l'intégration WordPress proprement dite : routes REST, shortcode,
 >   page de réglages) — **non testées au runtime**, faute d'installation
@@ -161,6 +162,50 @@ Omettre `data-token`/`data-channel` charge juste `window.MioEmbedClient`
 (le constructeur) sans rendu automatique, pour qui préfère construire sa
 propre UI.
 
+### Notifications en arrière-plan — onglet ouvert, caché ou sans focus
+
+`mio-client.js` et `mio-embed.js` exposent tous deux
+`isNotificationSupported()`, `requestNotificationPermission()` et
+`attachBackgroundNotifications(client, options?)` — l'API `Notification`
+native du navigateur uniquement, aucune infrastructure serveur (pas de
+Service Worker, pas de clé VAPID), même logique que `@mio/realtime-sdk`'s
+`attachBackgroundNotifications` (voir son README). Fonctionne dès
+aujourd'hui : le message arrive déjà sur la connexion WS ouverte, ceci
+décide juste s'il faut aussi l'afficher comme notification système
+pendant que l'onglet est caché ou sans focus.
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script>
+  var client = new window.MioRealtimeClient({ wsUrl: '…', tenantId: '…', token: '…' })
+
+  // Sur un clic utilisateur — jamais au chargement de la page :
+  document.getElementById('enable-notifs').addEventListener('click', function () {
+    window.MioRealtimeClient.requestNotificationPermission()
+  })
+
+  window.MioRealtimeClient.attachBackgroundNotifications(client, {
+    title: function (m) { return 'Nouveau sur ' + m.channelId },
+    onClick: function (m) { console.log('cliqué :', m.payload) },
+  })
+
+  client.subscribe('orders:42', function (message) { /* ... */ })
+  client.connect()
+</script>
+```
+
+`window.MioEmbedClient` (le fichier consolidé) expose la même API.
+**Ne demande jamais la permission elle-même** — appelez
+`requestNotificationPermission()` sur un vrai clic utilisateur, sinon la
+plupart des navigateurs l'ignorent silencieusement ; sans permission
+accordée, `attachBackgroundNotifications` ne fait simplement rien plutôt
+que d'échouer. Pour des notifications qui fonctionnent aussi onglet/
+navigateur fermé, il faut du vrai Web Push (Service Worker + clés VAPID +
+`POST /api/v1/push/subscriptions`) — hors de portée de ce fichier
+volontairement minimal, voir `registerPushServiceWorker`/`subscribeToPush`
+dans le README de `sdk-typescript`.
+
 ## Fonctionnalités
 
 | Fonctionnalité | API |
@@ -172,6 +217,7 @@ propre UI.
 | Souscription (navigateur) | `client.subscribe(channelId, handler)` (JS, canal exact ou motif `orders:*`) |
 | Publication (navigateur) | `client.publish(channelId, payload)` (JS, un seul frame) |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds)` (JS) |
+| Notifications en arrière-plan | `MioRealtimeClient.attachBackgroundNotifications(client, options?)` (JS, onglet caché/sans focus, aucun serveur) |
 | Widget prêt à l'emploi | `[mio_realtime channel="..."]` |
 
 ## Limitations connues (documentées, pas cachées)

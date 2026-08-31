@@ -112,3 +112,96 @@ test('publish() called synchronously right after connect() does not throw, and i
     global.WebSocket = realWebSocket;
   }
 });
+
+// Background notifications — same cases as client.test.js, run against the
+// consolidated file (this suite's whole purpose, see its own doc comment).
+
+test('isNotificationSupported is false in a plain Node environment', () => {
+  assert.equal(Client.isNotificationSupported(), false);
+});
+
+test('requestNotificationPermission resolves to "denied" without touching a global Notification', async () => {
+  const permission = await Client.requestNotificationPermission();
+  assert.equal(permission, 'denied');
+});
+
+test('attachBackgroundNotifications is a no-op (returns an unsubscribe that does nothing) when unsupported', () => {
+  const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+  const unsubscribe = Client.attachBackgroundNotifications(client, {});
+  assert.equal(typeof unsubscribe, 'function');
+  assert.doesNotThrow(() => unsubscribe());
+});
+
+function withFakeNotificationGlobals(fn) {
+  const created = [];
+  class FakeNotification {
+    constructor(title, options) {
+      this.title = title;
+      this.body = options && options.body;
+      this.icon = options && options.icon;
+      this.onclick = null;
+      created.push(this);
+    }
+  }
+  FakeNotification.permission = 'granted';
+
+  const realWindow = global.window;
+  const realDocument = global.document;
+  const realNotification = global.Notification;
+  global.window = { focus: () => {} };
+  global.document = { visibilityState: 'hidden', hasFocus: () => false };
+  global.Notification = FakeNotification;
+  try {
+    return fn(created, FakeNotification);
+  } finally {
+    global.window = realWindow;
+    global.document = realDocument;
+    global.Notification = realNotification;
+  }
+}
+
+test('attachBackgroundNotifications shows a notification (title/body defaults) for a message while hidden and permission granted', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    Client.attachBackgroundNotifications(client);
+
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'orders:42');
+    assert.equal(created[0].body, 'order created');
+  });
+});
+
+test('attachBackgroundNotifications respects custom title/body/filter and stops notifying after unsubscribe', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    const unsubscribe = Client.attachBackgroundNotifications(client, {
+      filter: (m) => m.channelId === 'orders:42',
+      title: (m) => 'New on ' + m.channelId,
+      body: (m) => m.payload.toUpperCase(),
+    });
+
+    client._emit('message', { channelId: 'invoices:1', payload: 'ignored' });
+    assert.equal(created.length, 0, 'filtered out, no notification');
+
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'New on orders:42');
+    assert.equal(created[0].body, 'ORDER CREATED');
+
+    unsubscribe();
+    client._emit('message', { channelId: 'orders:42', payload: 'order shipped' });
+    assert.equal(created.length, 1, 'unsubscribed, no further notifications');
+  });
+});
+
+test('attachBackgroundNotifications does not notify without granted permission', () => {
+  withFakeNotificationGlobals((created, FakeNotification) => {
+    FakeNotification.permission = 'default';
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    Client.attachBackgroundNotifications(client);
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+    assert.equal(created.length, 0);
+  });
+});

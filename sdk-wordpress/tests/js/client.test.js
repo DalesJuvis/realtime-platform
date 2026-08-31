@@ -111,3 +111,129 @@ test('publish() called synchronously right after connect() does not throw, and i
     global.WebSocket = realWebSocket;
   }
 });
+
+// Background notifications: no `window`/`Notification`/`document` in plain
+// Node, so what's testable here (same boundary as the rest of this file —
+// see its own doc comment) is the unsupported-environment behavior: these
+// must degrade to safe no-ops rather than throwing "Notification is not
+// defined" just because the module was required outside a browser.
+
+test('isNotificationSupported is false in a plain Node environment', () => {
+  assert.equal(MioRealtimeClient.isNotificationSupported(), false);
+});
+
+test('requestNotificationPermission resolves to "denied" without touching a global Notification', async () => {
+  const permission = await MioRealtimeClient.requestNotificationPermission();
+  assert.equal(permission, 'denied');
+});
+
+test('attachBackgroundNotifications is a no-op (returns an unsubscribe that does nothing) when unsupported', () => {
+  const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+  const unsubscribe = MioRealtimeClient.attachBackgroundNotifications(client, {});
+  assert.equal(typeof unsubscribe, 'function');
+  assert.doesNotThrow(() => unsubscribe());
+});
+
+/** Minimal fake `Notification`/`window`/`document` — just enough surface
+ * for attachBackgroundNotifications()'s actual logic (permission check,
+ * visibility/focus gate, title/body defaults, onclick) to run for real,
+ * rather than only exercising the unsupported-environment fallback above. */
+function withFakeNotificationGlobals(fn) {
+  const created = [];
+  class FakeNotification {
+    constructor(title, options) {
+      this.title = title;
+      this.body = options && options.body;
+      this.icon = options && options.icon;
+      this.onclick = null;
+      created.push(this);
+    }
+  }
+  FakeNotification.permission = 'granted';
+
+  const realWindow = global.window;
+  const realDocument = global.document;
+  const realNotification = global.Notification;
+  global.window = { focus: () => {} };
+  global.document = { visibilityState: 'hidden', hasFocus: () => false };
+  global.Notification = FakeNotification;
+  try {
+    return fn(created, FakeNotification);
+  } finally {
+    global.window = realWindow;
+    global.document = realDocument;
+    global.Notification = realNotification;
+  }
+}
+
+test('attachBackgroundNotifications shows a notification (title/body defaults) for a message while hidden and permission granted', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+    MioRealtimeClient.attachBackgroundNotifications(client);
+
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'orders:42');
+    assert.equal(created[0].body, 'order created');
+  });
+});
+
+test('attachBackgroundNotifications respects custom title/body/filter and stops notifying after unsubscribe', () => {
+  withFakeNotificationGlobals((created) => {
+    const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+    const unsubscribe = MioRealtimeClient.attachBackgroundNotifications(client, {
+      filter: (m) => m.channelId === 'orders:42',
+      title: (m) => 'New on ' + m.channelId,
+      body: (m) => m.payload.toUpperCase(),
+    });
+
+    client._emit('message', { channelId: 'invoices:1', payload: 'ignored' });
+    assert.equal(created.length, 0, 'filtered out, no notification');
+
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+    assert.equal(created.length, 1);
+    assert.equal(created[0].title, 'New on orders:42');
+    assert.equal(created[0].body, 'ORDER CREATED');
+
+    unsubscribe();
+    client._emit('message', { channelId: 'orders:42', payload: 'order shipped' });
+    assert.equal(created.length, 1, 'unsubscribed, no further notifications');
+  });
+});
+
+test('attachBackgroundNotifications does not notify when the tab is visible and focused', () => {
+  const created = [];
+  class FakeNotification {
+    constructor() {
+      created.push(this);
+    }
+  }
+  FakeNotification.permission = 'granted';
+  const realWindow = global.window;
+  const realDocument = global.document;
+  const realNotification = global.Notification;
+  global.window = { focus: () => {} };
+  global.document = { visibilityState: 'visible', hasFocus: () => true };
+  global.Notification = FakeNotification;
+  try {
+    const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+    MioRealtimeClient.attachBackgroundNotifications(client);
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+    assert.equal(created.length, 0);
+  } finally {
+    global.window = realWindow;
+    global.document = realDocument;
+    global.Notification = realNotification;
+  }
+});
+
+test('attachBackgroundNotifications does not notify without granted permission', () => {
+  withFakeNotificationGlobals((created, FakeNotification) => {
+    FakeNotification.permission = 'default';
+    const client = new MioRealtimeClient({ wsUrl: 'wss://example.com/ws', tenantId: '12345678-9abc-def0-1122-334455667788', token: 't' });
+    MioRealtimeClient.attachBackgroundNotifications(client);
+    client._emit('message', { channelId: 'orders:42', payload: 'order created' });
+    assert.equal(created.length, 0);
+  });
+});
