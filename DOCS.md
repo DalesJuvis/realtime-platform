@@ -616,7 +616,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -628,7 +628,7 @@ source — the plain `.js` files stay in the repo purely for reading:
 `data-ws-url` is the `ws_url` from the mint-token response — hand it
 through as-is, never assemble it from a host/port.
 
-> **Pin the version.** `@v0.1.6` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.7` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
@@ -644,8 +644,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand
