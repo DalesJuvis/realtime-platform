@@ -584,14 +584,14 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-embed.js — no plugin, no build step"
               description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-embed.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
   data-channel="orders:42"
   data-replay="true"
 ></script>`}
-              caveat="Pin the version: @v0.1.1 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
+              caveat="Pin the version: @v0.1.5 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
             >
               <p className="text-xs text-muted-foreground">
                 No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified <code className="rounded bg-muted px-1 py-0.5 font-mono">.min.js</code> build
@@ -603,8 +603,8 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-protocol.js + mio-client.js — building your own page logic"
               description="For anything beyond the auto-rendered feed above — custom UI, multiple channels, your own publish form — load the two files mio-embed.js bundles and drive MioRealtimeClient yourself."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-client.min.js"></script>
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: '${wsUrl}', // the ws_url from your mint-token response
@@ -620,6 +620,25 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
             >
               <p className="text-xs text-muted-foreground">
                 Not from this CDN: <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-shortcode.js</code> — it only makes sense wired up by the WordPress plugin itself.
+              </p>
+            </Section>
+            <Section
+              title="Background notifications — tab hidden or unfocused"
+              description="Two more calls on the same client — native browser Notification API only, no server setup, no Service Worker, no VAPID keys. Same window.MioEmbedClient API if you're using mio-embed.js instead."
+              language="markup"
+              code={`<script>
+  document.getElementById('enable-notifs').addEventListener('click', function () {
+    // On a user gesture (a click) — never auto-request on load:
+    window.MioRealtimeClient.requestNotificationPermission()
+  })
+
+  window.MioRealtimeClient.attachBackgroundNotifications(client, {
+    title: function (m) { return '#' + m.channelId },
+  })
+</script>`}
+            >
+              <p className="text-xs text-muted-foreground">
+                For notifications that also work with the tab or browser fully closed, that needs real Web Push (Service Worker + VAPID keys) — see this page's Web Push tab for the full <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk</code> version.
               </p>
             </Section>
           </TabsContent>

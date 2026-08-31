@@ -525,7 +525,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js` (dependency-free
 `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`).
 
 **Full API — `Mio\Realtime\Client`**
@@ -538,7 +538,9 @@ Constructor: `new Client(string $apiUrl, string $tenantId, string $secret, ?Http
 - `ClientException`: `getMessage(): string`, `getErrorCode(): string`, `getHttpStatus(): ?int` (null for a purely local validation failure, e.g. oversized payload, since no request was ever sent).
 
 **`mio-client.js`/`mio-embed.js` (browser, no PHP, deliberately minimal — no unicast, no wildcard, no chunking, no `channel()`/events):**
-`new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)`. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
+`new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)` — the last two queue and send once, in call order, if invoked before the socket is actually open (e.g. right after `connect()`), rather than throwing. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
+
+Static, on the constructor itself (`MioRealtimeClient.*` / `MioEmbedClient.*`, same on both files): `isNotificationSupported(): boolean`, `requestNotificationPermission(): Promise<string>` (call from a click), `attachBackgroundNotifications(client, options?): () => void` — native `Notification` API only, tab hidden/unfocused, no server setup; mirrors `@mio/realtime-sdk`'s `attachBackgroundNotifications` (§9), ported to this file's zero-dependency constraints. `options`: `filter?`, `title?`, `body?`, `icon?`, `onClick?`, same shape as the TypeScript SDK's `BackgroundNotificationOptions`.
 
 ### Laravel (`mio/realtime-laravel`)
 
