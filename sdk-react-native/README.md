@@ -55,7 +55,7 @@ function App() {
   return (
     <RealtimeProvider
       config={{
-        host: "realtime.example.com",
+        wsUrl: monWsUrlEmisParLeServeur, // le `ws_url` de la réponse de mint-token
         tenantId: "12345678-9abc-def0-1122-334455667788",
         token: monJetonEmisParLeServeur,
       }}

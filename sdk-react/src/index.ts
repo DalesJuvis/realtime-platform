@@ -18,4 +18,4 @@ export type { PushSubscriptionStatus, UsePushSubscriptionResult } from "./notifi
 // séparé vers `@mio/realtime-sdk` juste pour ces types/cette classe
 // couramment utilisés à côté des hooks ci-dessus.
 export { RealtimeClient } from "@mio/realtime-sdk";
-export type { RealtimeClientConfig, RealtimeEndpoint, RealtimeMessage, MessageHandler } from "@mio/realtime-sdk";
+export type { RealtimeClientConfig, RealtimeMessage, MessageHandler } from "@mio/realtime-sdk";

@@ -56,7 +56,7 @@ function makeClient(): { client: RealtimeClient; nextWs: () => Promise<FakeWebSo
   };
 
   const client = new RealtimeClient({
-    host: "example.test",
+    wsUrl: "ws://example.test/ws",
     tenantId: TENANT_ID,
     token: "fake-token",
     reconnect: false,

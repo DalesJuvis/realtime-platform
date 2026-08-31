@@ -27,35 +27,23 @@ import type {
  * pour cette seule constante quand une implémentation custom est injectée. */
 const WS_OPEN = 1;
 
-/**
- * Où joindre le serveur — jamais une chaîne `"ws://"`/`"wss://"` à
- * construire à la main côté appelant : `host` (+ `port`/`secure`/`path`
- * optionnels) suffit dans l'immense majorité des cas. `url` reste une
- * échappatoire pour un besoin avancé (proxy, chemin non standard, etc.),
- * mais les deux formes sont mutuellement exclusives — pas de mélange.
- */
-export type RealtimeEndpoint =
-  | {
-      /** Nom d'hôte ou IP, sans schéma ni port — ex: `"realtime.example.com"`. */
-      host: string;
-      /** Défaut : 8080 (`ws_bind_addr` du serveur). */
-      port?: number;
-      /** `wss://` au lieu de `ws://`. Défaut : false. */
-      secure?: boolean;
-      /** Défaut : `"/ws"`. */
-      path?: string;
-      url?: undefined;
-    }
-  | {
-      /** Échappatoire : URL complète déjà construite, ex. `"wss://realtime.example.com/ws"`. */
-      url: string;
-      host?: undefined;
-      port?: undefined;
-      secure?: undefined;
-      path?: undefined;
-    };
-
-export type RealtimeClientConfig = RealtimeEndpoint & {
+export type RealtimeClientConfig = {
+  /**
+   * L'URL `ws://`/`wss://.../ws` exacte à joindre — **jamais construite à
+   * la main côté appelant** (pas de `host`/`port`/`secure`/`path` ici,
+   * volontairement supprimés : un défaut `port: 8080` a longtemps traîné
+   * dans ce SDK et était systématiquement faux en production derrière un
+   * reverse proxy, où `/ws` est servi sur le même domaine que l'API, sans
+   * port du tout). Utilisez `ws_url` tel que renvoyé par
+   * `POST /api/v1/auth/tokens` ou `POST /api/v1/portal/tokens` — le
+   * serveur le dérive lui-même de la requête de mint, donc rien à deviner
+   * ni à garder synchronisé ici (voir `WsUrlService::derive_ws_url` côté
+   * backend). Un besoin exotique (proxy custom, tunnel de test) reste
+   * un simple `wsUrl` construit à la main — le champ accepte n'importe
+   * quelle chaîne `ws://`/`wss://` valide, ce n'est pas un format imposé
+   * par le serveur.
+   */
+  wsUrl: string;
   /** Tenant ID (UUID) — doit correspondre au tenant du jeton `token`. */
   tenantId: string;
   /**
@@ -89,17 +77,6 @@ export type RealtimeClientConfig = RealtimeEndpoint & {
    */
   webSocketImpl?: new (url: string) => WebSocketLike;
 };
-
-/** Construit l'URL `ws://`/`wss://` à partir d'un `RealtimeEndpoint` — le
- * seul endroit du SDK où ce schéma apparaît en toutes lettres. */
-function resolveUrl(endpoint: RealtimeEndpoint): string {
-  if (endpoint.url !== undefined) return endpoint.url;
-  const scheme = endpoint.secure ? "wss" : "ws";
-  const port = endpoint.port ?? 8080;
-  const path = endpoint.path ?? "/ws";
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${scheme}://${endpoint.host}:${port}${normalizedPath}`;
-}
 
 /**
  * Résout l'implémentation `WebSocket` à utiliser, sans jamais exiger que
@@ -172,7 +149,7 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   constructor(config: RealtimeClientConfig) {
     super();
     this.config = {
-      url: resolveUrl(config),
+      url: config.wsUrl,
       tenantId: config.tenantId,
       token: config.token,
       heartbeatIntervalMs: config.heartbeatIntervalMs ?? 15_000,

@@ -9,7 +9,7 @@
  */
 
 export { RealtimeClient } from "./client.js";
-export type { RealtimeClientConfig, RealtimeEndpoint, WebSocketLike } from "./client.js";
+export type { RealtimeClientConfig, WebSocketLike } from "./client.js";
 
 export type {
   MessageHandler,

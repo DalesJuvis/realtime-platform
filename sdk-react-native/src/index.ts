@@ -31,7 +31,6 @@ export type {
   ChannelSubscriberProps,
   ConnectionIndicatorProps,
   RealtimeClientConfig,
-  RealtimeEndpoint,
   RealtimeMessage,
   MessageHandler,
 } from "@mio/realtime-sdk-react";

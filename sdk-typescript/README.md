@@ -27,8 +27,7 @@ npm install ws
 import { createRealtimeClient } from "@mio/realtime-sdk";
 
 const client = createRealtimeClient({
-  host: "realtime.example.com",
-  secure: true, // wss:// au lieu de ws:// — construit en interne, jamais à écrire à la main
+  wsUrl: monWsUrlEmisParLeServeur, // le `ws_url` de la réponse de mint-token, jamais assemblé à la main
   tenantId: "12345678-9abc-def0-1122-334455667788",
   token: monJetonEmisParLeServeur, // voir "Authentification HTTP" plus bas
 });
@@ -45,9 +44,12 @@ unsubscribe();
 client.disconnect();
 ```
 
-`host` (+ `port`, défaut 8080 ; `path`, défaut `/ws`) suffit dans
-l'immense majorité des cas — `url` reste une échappatoire pour un besoin
-avancé (proxy, chemin non standard), mais **jamais les deux à la fois**.
+`wsUrl` est obligatoire et vient tel quel du `ws_url` retourné par
+`/api/v1/auth/tokens` (voir "Authentification HTTP" plus bas) — le SDK
+n'assemble plus jamais d'URL à partir d'un `host`/`port`/`secure`. En
+production, l'endpoint WS partage le même domaine que l'API REST, sans
+port (`wss://exemple.com/ws`), ce qu'un défaut côté SDK ne pourrait pas
+deviner correctement.
 
 En Node.js, aucune ligne de plus à écrire : ni `import WebSocket from
 "ws"`, ni `webSocketImpl` — le SDK détecte l'absence de `WebSocket`
@@ -138,11 +140,16 @@ Content-Type: application/json
 ```
 
 ```json
-{ "success": true, "data": { "token": "…", "expires_in": 3600 }, "trace_id": "…" }
+{ "success": true, "data": { "token": "…", "expires_in": 3600, "ws_url": "wss://realtime.example.com/ws" }, "trace_id": "…" }
 ```
 
-`secret` n'authentifie que cette requête HTTP — il ne circule jamais vers
-le client final, qui ne reçoit que le `token` résultant :
+`ws_url` est dérivé par le serveur lui-même à partir du domaine de cette
+requête (ou d'une configuration explicite côté opérateur) — jamais
+fourni par l'appelant. Séquence complète :
+[`diagrams/auth/issue-client-token/version.md`](../diagrams/auth/issue-client-token/version.md).
+`secret` n'authentifie que cette requête HTTP — il
+ne circule jamais vers le client final, qui ne reçoit que `token` et
+`ws_url` :
 
 ```ts
 // Côté backend du tenant (jamais dans le navigateur) :
@@ -153,8 +160,8 @@ const res = await fetch("https://realtime.example.com:8090/api/v1/auth/tokens", 
 });
 const { data } = await res.json();
 
-// Le `token` seul est renvoyé au client final, qui s'en sert ici :
-const client = createRealtimeClient({ host, tenantId, token: data.token });
+// `token` et `ws_url` sont renvoyés au client final, qui s'en sert ici :
+const client = createRealtimeClient({ wsUrl: data.ws_url, tenantId, token: data.token });
 ```
 
 ## Publier un message via HTTP (sans connexion persistante)
@@ -250,7 +257,7 @@ bascule tient en une ligne, dans `createRealtimeClient()` :
 
 ```ts
 // Moteur maison (par défaut)
-const client: RealtimeAdapter = createRealtimeClient({ host, tenantId, token });
+const client: RealtimeAdapter = createRealtimeClient({ wsUrl, tenantId, token });
 
 // Firebase (gabarit à compléter, voir src/adapters/firebase-adapter.ts)
 const client: RealtimeAdapter = new FirebaseAdapter({ firebaseConfig, basePath });
