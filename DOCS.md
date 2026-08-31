@@ -571,7 +571,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.3/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -599,8 +599,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.3/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.3/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand

@@ -115,7 +115,7 @@ la version `.min.js` (build committé, `npm run build`), pas la source
 brute :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.3/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.4/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
