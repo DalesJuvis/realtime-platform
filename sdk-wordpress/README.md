@@ -60,7 +60,7 @@ via le shortcode `[mio_realtime]`.
 ```bash
 composer install    # includes/ + tests/php (phpunit en dev uniquement)
 composer test        # 12 tests
-npm test              # 23 tests (assets/js/)
+npm test              # 44 tests (assets/js/)
 npm run build          # produit assets/js/*.min.js (terser) — voir scripts/minify.js
 ```
 
@@ -117,7 +117,7 @@ la version `.min.js` (build committé, `npm run build`), pas la source
 brute :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
@@ -180,8 +180,8 @@ Deux façons de s'en servir — **directement dans un callback `subscribe()`**
 (contrôle total, canal par canal) :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({ wsUrl: '…', tenantId: '…', token: '…' })
 

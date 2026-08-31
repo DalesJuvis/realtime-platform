@@ -104,12 +104,26 @@ attachBackgroundNotifications(client, {
 })
 ```
 
+For per-channel control instead of every subscribed channel at once, call
+`showBackgroundNotification(message, options)` directly from a
+`subscribe()` callback — same `options`, same gating (permission granted,
+tab hidden/unfocused) — rather than `attachBackgroundNotifications`'s
+client-wide `"message"` event:
+
+```typescript
+import { showBackgroundNotification } from '@mio/realtime-sdk'
+
+client.subscribe('orders:42', (message) => {
+  showBackgroundNotification(message, { title: () => 'New order' })
+})
+```
+
 Also available with zero build step in the WordPress lightweight client
-(no `npm install`) — `MioRealtimeClient.attachBackgroundNotifications(client, options)`
-and `MioRealtimeClient.requestNotificationPermission()`, same options
-shape, on both `mio-client.js` and `mio-embed.js`. See the WordPress
-section below and `sdk-wordpress/README.md`'s "Notifications en
-arrière-plan".
+(no `npm install`) — `MioRealtimeClient.showBackgroundNotification(message, options)`,
+`.attachBackgroundNotifications(client, options)`, and
+`.requestNotificationPermission()`, same options shape, on both
+`mio-client.js` and `mio-embed.js`. See the WordPress section below and
+`sdk-wordpress/README.md`'s "Notifications en arrière-plan".
 
 ### Push notifications (tab or browser closed)
 
@@ -578,7 +592,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -590,7 +604,7 @@ source — the plain `.js` files stay in the repo purely for reading:
 `data-ws-url` is the `ws_url` from the mint-token response — hand it
 through as-is, never assemble it from a host/port.
 
-> **Pin the version.** `@v0.1.5` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.6` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
@@ -606,8 +620,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand
@@ -628,7 +642,8 @@ CDN, same tag, minified builds, loaded in dependency order:
 > that only `wp_localize_script` injects, so there's nothing a bare
 > `<script>` tag on another site could do with it.
 
-Add background notifications with two more calls, same `client` as above:
+Add background notifications, same `client` as above — either per-channel,
+directly inside a `subscribe()` callback:
 
 ```html
 <script>
@@ -637,12 +652,24 @@ Add background notifications with two more calls, same `client` as above:
     window.MioRealtimeClient.requestNotificationPermission()
   })
 
+  client.subscribe('orders:42', function (message) {
+    window.MioRealtimeClient.showBackgroundNotification(message, {
+      title: function (m) { return '#' + m.channelId },
+    })
+  })
+</script>
+```
+
+...or once for every subscribed channel, via `attachBackgroundNotifications`:
+
+```html
+<script>
   window.MioRealtimeClient.attachBackgroundNotifications(client, {
     title: function (m) { return '#' + m.channelId },
   })
 </script>
 ```
 
-Same two calls on `window.MioEmbedClient` if you're using `mio-embed.js`
+Same calls on `window.MioEmbedClient` if you're using `mio-embed.js`
 instead. See DOCS.md's "Background notifications" under Web Push above
 for what this does and doesn't cover (tab hidden, not tab/browser closed).

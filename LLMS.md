@@ -334,7 +334,7 @@ No AUTH ack (see §1.6) — watch `close`, not just `authenticated`.
 
 `RealtimeMessage`: `{ channelId: string, payload: string, tenantId?: string, receivedAt: number }` — `receivedAt` is a client-side `Date.now()` timestamp, **not** server-stamped (the wire frame carries no timestamp field at all).
 
-Also exported: `isNotificationSupported()`, `requestNotificationPermission()`, `attachBackgroundNotifications(client, options)`, `registerPushServiceWorker(url)`, `subscribeToPush(registration, vapidPublicKey)`, `unsubscribeFromPush(subscription)` — see §9.
+Also exported: `isNotificationSupported()`, `requestNotificationPermission()`, `showBackgroundNotification(message, options)` (per-message, callable from any handler), `attachBackgroundNotifications(client, options)` (wired to the client's own `"message"` event, calls `showBackgroundNotification` internally), `registerPushServiceWorker(url)`, `subscribeToPush(registration, vapidPublicKey)`, `unsubscribeFromPush(subscription)` — see §9.
 
 ### React (`@mio/realtime-sdk-react`)
 
@@ -525,7 +525,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js` (dependency-free
 `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.5/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.6/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`).
 
 **Full API — `Mio\Realtime\Client`**
@@ -540,7 +540,7 @@ Constructor: `new Client(string $apiUrl, string $tenantId, string $secret, ?Http
 **`mio-client.js`/`mio-embed.js` (browser, no PHP, deliberately minimal — no unicast, no wildcard, no chunking, no `channel()`/events):**
 `new MioRealtimeClient({wsUrl, tenantId, token, heartbeatIntervalMs?, reconnect?, reconnectBaseDelayMs?, reconnectMaxDelayMs?})` — `wsUrl` is the `ws_url` from mint-token, passed through as-is (no `host`/`port`/`secure` config exists here, see §1 rule 8). `.connect()`, `.disconnect()`, `.subscribe(channelId, handler) -> unsubscribe fn`, `.publish(channelId, payload)`, `.replay(channelId, sinceUnixSeconds)` — the last two queue and send once, in call order, if invoked before the socket is actually open (e.g. right after `connect()`), rather than throwing. `mio-embed.js` additionally auto-inits from its own `<script>` tag's `data-*` attributes (`data-ws-url`, `data-tenant-id`, `data-token`, `data-channel`, `data-replay`, `data-target` — a CSS selector for where to render the auto-built feed) and exposes the instance at `window.MioEmbed.client`.
 
-Static, on the constructor itself (`MioRealtimeClient.*` / `MioEmbedClient.*`, same on both files): `isNotificationSupported(): boolean`, `requestNotificationPermission(): Promise<string>` (call from a click), `attachBackgroundNotifications(client, options?): () => void` — native `Notification` API only, tab hidden/unfocused, no server setup; mirrors `@mio/realtime-sdk`'s `attachBackgroundNotifications` (§9), ported to this file's zero-dependency constraints. `options`: `filter?`, `title?`, `body?`, `icon?`, `onClick?`, same shape as the TypeScript SDK's `BackgroundNotificationOptions`.
+Static, on the constructor itself (`MioRealtimeClient.*` / `MioEmbedClient.*`, same on both files): `isNotificationSupported(): boolean`, `requestNotificationPermission(): Promise<string>` (call from a click), `showBackgroundNotification(message, options?): void` — shows one notification for `message`, callable directly from any handler (e.g. a `subscribe()` callback) for per-channel control, and `attachBackgroundNotifications(client, options?): () => void` — the same logic wired to the client's own `'message'` event instead, covering every subscribed channel at once. Native `Notification` API only, tab hidden/unfocused, no server setup; mirrors `@mio/realtime-sdk`'s `showBackgroundNotification`/`attachBackgroundNotifications` (§9), ported to this file's zero-dependency constraints. `options`: `filter?`, `title?`, `body?`, `icon?`, `onClick?`, same shape as the TypeScript SDK's `BackgroundNotificationOptions`.
 
 ### Laravel (`mio/realtime-laravel`)
 
@@ -598,10 +598,10 @@ it — outside any SDK's or server's control.
 
 | Component | Status |
 |---|---|
-| `backend/` | Compiled, tested (87/89 passing, 2 ignored live-Redis integration tests), deployed to production |
-| `sdk-typescript` | Compiled + tested (30/30), includes `channel()` |
+| `backend/` | Compiled, tested (96/98 passing, 2 ignored live-Redis integration tests), deployed to production |
+| `sdk-typescript` | Compiled + tested (34/34), includes `channel()` |
 | `sdk-react` / `sdk-react-native` | Compiled (`tsc` strict), hooks not runtime-tested against a live server |
-| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client tested (23/23); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
+| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client tested (44/44); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
 | `sdk-laravel` | `LaravelHttpTransport` tested (3/3); service provider/facade untested against a real app |
 | `sdk-python` | Protocol codec tested (13/13); `client.py` (network) untested |
 | `sdk-rust` | Written, not compiled by its authors |
