@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mio-embed.js — vanilla test harness</title>
+<style>
+  :root {
+    --bg: #282a36;
+    --panel: #21222c;
+    --border: #44475a;
+    --fg: #f8f8f2;
+    --muted: #6272a4;
+    --accent: #ff6347;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--fg);
+    font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    padding: 2rem 1rem 4rem;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+  p.lead { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.85rem; }
+  section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+  section h2 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin: 0 0 0.9rem;
+  }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin: 0.7rem 0 0.25rem; }
+  label:first-of-type { margin-top: 0; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 0.5rem 0.6rem;
+    border-radius: 5px;
+    font: inherit;
+  }
+  input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .row { display: flex; gap: 0.75rem; }
+  .row > div { flex: 1; }
+  .checks { display: flex; gap: 1.25rem; margin-top: 0.9rem; }
+  .checks label { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--fg); font-size: 0.85rem; }
+  button {
+    font: inherit;
+    border: none;
+    border-radius: 5px;
+    padding: 0.55rem 1rem;
+    cursor: pointer;
+    background: var(--accent);
+    color: #1a1a1a;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--fg); font-weight: normal; }
+  .actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+  #status-line {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    font-size: 0.8rem; color: var(--muted); margin-top: 0.75rem;
+  }
+  #status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  #status-dot.live { background: #50fa7b; }
+  #status-dot.error { background: var(--accent); }
+  #embed-target { margin-top: 1rem; min-height: 2rem; }
+  .publish-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .publish-row input { flex: 1; }
+  .hint { color: var(--muted); font-size: 0.75rem; margin-top: 0.5rem; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>mio-embed.js — vanilla test harness</h1>
+  <p class="lead">
+    Loads <code>assets/mio-embed.js</code> exactly the way a real site would
+    (a plain <code>&lt;script data-*&gt;</code> tag, no build step) — plus a
+    manual publish box below, since the embed itself only renders incoming
+    messages, it never sends any.
+  </p>
+
+  <section>
+    <h2>Configuration</h2>
+    <label for="wsUrl">WebSocket URL</label>
+    <input type="text" id="wsUrl" placeholder="wss://mio.gabonnettoyage.online/ws">
+    <label for="tenantId">Tenant ID</label>
+    <input type="text" id="tenantId" placeholder="12345678-9abc-def0-1122-334455667788">
+    <label for="token">Token</label>
+    <input type="text" id="token" placeholder="minted from the tenant portal's Overview page">
+    <label for="channel">Channel</label>
+    <input type="text" id="channel" placeholder="orders:42">
+    <div class="checks">
+      <label><input type="checkbox" id="replay"> replay on connect</label>
+    </div>
+    <p class="hint">
+      Saved to this browser's localStorage only — never written into this
+      file. Mint a token from your tenant portal's Overview page ("Mint
+      token") or the API Keys page — the same response also returns
+      <code>ws_url</code>, paste it above as-is.
+    </p>
+  </section>
+
+  <section>
+    <h2>Live feed</h2>
+    <div class="actions">
+      <button id="connect-btn">Load embed &amp; connect</button>
+      <button id="disconnect-btn" class="secondary" disabled>Disconnect</button>
+    </div>
+    <div id="status-line"><span id="status-dot"></span><span id="status-text">not connected</span></div>
+    <div id="embed-target"></div>
+    <div class="publish-row">
+      <input type="text" id="publish-input" placeholder="type a message to publish on this channel…" disabled>
+      <button id="publish-btn" disabled>Send</button>
+    </div>
+    <p class="hint">The message you send round-trips through the real backend and should appear in the feed above within a moment.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var FIELDS = ['wsUrl', 'tenantId', 'token', 'channel'];
+  var STORAGE_KEY = 'mio-embed-test-config';
+
+  function loadConfig() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      var saved = raw ? JSON.parse(raw) : {};
+      FIELDS.forEach(function (f) {
+        if (saved[f] !== undefined) document.getElementById(f).value = saved[f];
+      });
+      if (saved.replay !== undefined) document.getElementById('replay').checked = saved.replay;
+    } catch (e) { /* ignore malformed/blocked storage */ }
+  }
+
+  function saveConfig() {
+    var data = {};
+    FIELDS.forEach(function (f) { data[f] = document.getElementById(f).value.trim(); });
+    data.replay = document.getElementById('replay').checked;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* private mode etc. */ }
+    return data;
+  }
+
+  loadConfig();
+
+  var connectBtn = document.getElementById('connect-btn');
+  var disconnectBtn = document.getElementById('disconnect-btn');
+  var publishInput = document.getElementById('publish-input');
+  var publishBtn = document.getElementById('publish-btn');
+  var statusDot = document.getElementById('status-dot');
+  var statusText = document.getElementById('status-text');
+  var embedTarget = document.getElementById('embed-target');
+  var currentScript = null;
+  var channelInUse = null;
+
+  function setStatus(text, cls) {
+    statusText.textContent = text;
+    statusDot.className = cls || '';
+  }
+
+  connectBtn.addEventListener('click', function () {
+    var cfg = saveConfig();
+    if (!cfg.wsUrl || !cfg.tenantId || !cfg.token || !cfg.channel) {
+      setStatus('fill in WebSocket URL, tenant ID, token, and channel first', 'error');
+      return;
+    }
+
+    // Tear down any previous embed run.
+    if (currentScript) currentScript.remove();
+    embedTarget.innerHTML = '';
+    window.MioEmbed = undefined;
+
+    // Real production usage: a <script> tag reading its own data-*
+    // attributes via document.currentScript. Building it dynamically here
+    // (instead of hardcoding it in the HTML) is what lets this page test
+    // any tenant/token without editing the file or committing a secret.
+    var script = document.createElement('script');
+    script.src = 'assets/mio-embed.js';
+    script.setAttribute('data-ws-url', cfg.wsUrl);
+    script.setAttribute('data-tenant-id', cfg.tenantId);
+    script.setAttribute('data-token', cfg.token);
+    script.setAttribute('data-channel', cfg.channel);
+    script.setAttribute('data-target', '#embed-target');
+    script.setAttribute('data-replay', cfg.replay ? 'true' : 'false');
+    currentScript = script;
+    channelInUse = cfg.channel;
+
+    setStatus('loading embed…');
+    document.body.appendChild(script);
+
+    // MioEmbedClient exposes an event emitter; auto-init stashes the
+    // instance at window.MioEmbed.client once the script has run.
+    var pollForClient = setInterval(function () {
+      if (window.MioEmbed && window.MioEmbed.client) {
+        clearInterval(pollForClient);
+        var client = window.MioEmbed.client;
+        client.on('open', function () {
+          setStatus('live on "' + channelInUse + '"', 'live');
+          publishInput.disabled = false;
+          publishBtn.disabled = false;
+        });
+        client.on('close', function () {
+          setStatus('reconnecting…');
+          publishInput.disabled = true;
+          publishBtn.disabled = true;
+        });
+        client.on('error', function (err) {
+          setStatus('error: ' + err.message, 'error');
+        });
+      }
+    }, 50);
+
+    connectBtn.disabled = true;
+    disconnectBtn.disabled = false;
+  });
+
+  disconnectBtn.addEventListener('click', function () {
+    if (window.MioEmbed && window.MioEmbed.client) window.MioEmbed.client.disconnect();
+    if (currentScript) currentScript.remove();
+    window.MioEmbed = undefined;
+    currentScript = null;
+    embedTarget.innerHTML = '';
+    setStatus('not connected');
+    publishInput.disabled = true;
+    publishBtn.disabled = true;
+    connectBtn.disabled = false;
+    disconnectBtn.disabled = true;
+  });
+
+  function sendPublish() {
+    var text = publishInput.value.trim();
+    if (!text || !window.MioEmbed || !window.MioEmbed.client || !channelInUse) return;
+    try {
+      window.MioEmbed.client.publish(channelInUse, text);
+      publishInput.value = '';
+    } catch (err) {
+      setStatus('publish failed: ' + err.message, 'error');
+    }
+  }
+
+  publishBtn.addEventListener('click', sendPublish);
+  publishInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') sendPublish();
+  });
+})();
+</script>
+</body>
+</html>
