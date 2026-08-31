@@ -26,6 +26,11 @@ from .protocol import Opcode, ProtocolError, decode_frame, encode_frame, glob_ma
 
 logger = logging.getLogger("realtime_sdk")
 
+#: WS close code the server sends when AUTH is rejected (invalid or
+#: expired token) — see ``WsController.rs::WS_CLOSE_CODE_AUTH_FAILED`` on
+#: the backend, the one source of truth for this value.
+WS_CLOSE_CODE_AUTH_FAILED = 4001
+
 
 @dataclass(frozen=True)
 class RealtimeMessage:
@@ -195,6 +200,7 @@ class RealtimeClient:
         backoff = self._config.reconnect_base_delay
 
         while True:
+            close_code: "int | None" = None
             try:
                 async with websockets.connect(self._config.url) as ws:
                     self._ws = ws
@@ -219,11 +225,30 @@ class RealtimeClient:
                             self._dispatch(raw)
                     finally:
                         self._heartbeat_task.cancel()
+                close_code = ws.close_code
 
             except (ConnectionClosed, OSError) as err:
                 logger.warning("connexion perdue : %s", err)
+                close_code = getattr(err, "code", None)
             finally:
                 self._ws = None
+
+            if close_code == WS_CLOSE_CODE_AUTH_FAILED:
+                # Retrying with the exact same token the server just
+                # rejected would just fail again, forever, silently — stop
+                # here rather than backing off and reconnecting. This SDK
+                # has no event/callback system yet for connection-lifecycle
+                # state (unlike sdk-typescript's `authFailed` event or
+                # mio-client.js's `client.on('authFailed', ...)` — adding
+                # one is a bigger change than this fix), so a clear log
+                # line is the best signal available today.
+                logger.error(
+                    "authentification rejetée par le serveur (jeton invalide ou expiré, code WS %s) — "
+                    "minez un nouveau jeton ; reconnexion volontairement abandonnée (retenter avec le "
+                    "même jeton échouerait indéfiniment)",
+                    WS_CLOSE_CODE_AUTH_FAILED,
+                )
+                return
 
             if self._closed_by_user or not self._config.reconnect:
                 return
