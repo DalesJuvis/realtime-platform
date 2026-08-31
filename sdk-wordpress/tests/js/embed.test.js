@@ -49,3 +49,46 @@ test('requiring the module in Node never touches `document` (auto-init is browse
   // rather than as a mysterious crash in some other test.
   assert.ok(true);
 });
+
+/** Same fake as client.test.js's — a real `WebSocket` starts CONNECTING
+ * (readyState 0) and only becomes OPEN (1) once `onopen` actually fires,
+ * asynchronously. Reproduces the exact race autoInit's own
+ * `client.connect(); if (ds.replay === 'true') client.replay(...)` hits. */
+class SlowOpeningFakeWebSocket {
+  constructor(url) {
+    this.url = url;
+    this.readyState = 0;
+    this.onopen = null;
+    this.onmessage = null;
+    this.onerror = null;
+    this.onclose = null;
+    this.sent = [];
+    queueMicrotask(() => {
+      this.readyState = 1;
+      if (this.onopen) this.onopen();
+    });
+  }
+  send(data) {
+    this.sent.push(data);
+  }
+  close() {
+    this.readyState = 3;
+  }
+}
+
+test('replay() called synchronously right after connect() does not throw, and is sent once the socket actually opens', async () => {
+  const realWebSocket = global.WebSocket;
+  global.WebSocket = SlowOpeningFakeWebSocket;
+  try {
+    const client = new Client({ wsUrl: 'wss://example.com/ws', tenantId: SAMPLE_TENANT, token: 't' });
+    client.connect();
+    assert.doesNotThrow(() => client.replay('orders:42', 0));
+
+    await new Promise((r) => setTimeout(r, 0));
+    const opcodes = client._ws.sent.map((frame) => frame[2]);
+    assert.deepEqual(opcodes, [Protocol.Opcode.Auth, Protocol.Opcode.Replay]);
+    client.disconnect();
+  } finally {
+    global.WebSocket = realWebSocket;
+  }
+});

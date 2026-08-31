@@ -252,6 +252,7 @@
     this._reconnectAttempt = 0;
     this._closedByUser = true;
     this._subscriptions = {};
+    this._pendingReplays = [];
     this._listeners = { open: [], close: [], error: [], message: [] };
   }
 
@@ -322,9 +323,13 @@
     this._send(Protocol.Opcode.Publish, channelId, payload);
   };
 
-  /** History since `sinceUnixSeconds` (0 = everything available) — arrives as normal messages on `channelId`'s handlers. Not supported on a wildcard pattern. */
+  /** History since `sinceUnixSeconds` (0 = everything available) — arrives as normal messages on `channelId`'s handlers. Not supported on a wildcard pattern. Deferred until the socket is open if called right after connect() (same one-shot deferral subscribe() already does), rather than throwing. */
   MioEmbedClient.prototype.replay = function (channelId, sinceUnixSeconds) {
-    this._send(Protocol.Opcode.Replay, channelId, String(sinceUnixSeconds || 0));
+    if (this._ws && this._ws.readyState === WS_OPEN) {
+      this._send(Protocol.Opcode.Replay, channelId, String(sinceUnixSeconds || 0));
+    } else {
+      this._pendingReplays.push([channelId, String(sinceUnixSeconds || 0)]);
+    }
   };
 
   MioEmbedClient.prototype._openSocket = function () {
@@ -338,6 +343,11 @@
       self._send(Protocol.Opcode.Auth, '', self._config.token);
       Object.keys(self._subscriptions).forEach(function (channelId) {
         self._send(Protocol.Opcode.Subscribe, channelId, '');
+      });
+      var pendingReplays = self._pendingReplays;
+      self._pendingReplays = [];
+      pendingReplays.forEach(function (args) {
+        self._send(Protocol.Opcode.Replay, args[0], args[1]);
       });
       self._startHeartbeat();
       self._emit('open', undefined);

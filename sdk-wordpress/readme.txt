@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,17 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.3 =
+* Fixes a real bug: `replay()` (`data-replay="true"` on `mio-embed.js`, or
+  the `[mio_realtime ... replay="true"]` shortcode) threw
+  `"cannot send, WebSocket is not open"` when called right after
+  `connect()` — which autoInit always does — because the socket is still
+  connecting at that exact point, asynchronously. `replay()` now defers
+  to the socket actually opening instead of sending immediately, the same
+  way `subscribe()` already did. No config or markup changes needed —
+  just update the CDN tag to `@v0.1.3` (jsDelivr caches each tag's
+  content forever, so `@v0.1.2` will keep serving the broken build).
 
 = 0.1.2 =
 * **Breaking:** the WebSocket URL is no longer configured by hand. The
