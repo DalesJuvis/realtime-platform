@@ -23,6 +23,10 @@
 
   var Opcode = MioProtocol.Opcode;
   var WS_OPEN = 1;
+  // WS close code sent by the server when AUTH is rejected (invalid or
+  // expired token) — see WsController.rs::WS_CLOSE_CODE_AUTH_FAILED, the
+  // one source of truth for this value.
+  var WS_CLOSE_CODE_AUTH_FAILED = 4001;
 
   /**
    * @param {object} config
@@ -63,7 +67,7 @@
     // subscribe() for the separate (and different: rejoined on *every*
     // reconnect) mechanism that already handled this correctly.
     this._pendingSends = []; // [opcode, channelId, payload][]
-    this._listeners = { open: [], close: [], error: [], message: [] };
+    this._listeners = { open: [], close: [], error: [], message: [], authFailed: [] };
   }
 
   MioRealtimeClient.prototype.on = function (event, handler) {
@@ -195,6 +199,15 @@
       self._stopHeartbeat();
       self._ws = null;
       self._emit('close', { code: event.code, reason: event.reason });
+
+      // Retrying with the exact same token the server just rejected would
+      // just fail again, forever, silently — emit a distinguishable event
+      // instead and never auto-reconnect here, no matter `reconnect`.
+      if (event.code === WS_CLOSE_CODE_AUTH_FAILED) {
+        self._emit('authFailed', { code: event.code, reason: event.reason });
+        return;
+      }
+
       if (!self._closedByUser && self._config.reconnect) {
         self._scheduleReconnect();
       }

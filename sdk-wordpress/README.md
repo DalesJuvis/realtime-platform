@@ -157,7 +157,12 @@ clé publiable Stripe. Minez-en un avec un `sub` à faible privilège
 (`"public-embed"`, pas un vrai utilisateur) et un TTL que vous êtes prêt à
 faire tourner (`Client::mintToken($sub, $ttlSecs)` côté PHP, ou
 `POST /api/v1/auth/tokens` directement — voir le README de
-`sdk-typescript`), puis renouvelez-le sur ce rythme.
+`sdk-typescript`), puis renouvelez-le sur ce rythme. Le TTL par défaut est
+1h, plafonné à 30 jours côté serveur (au-delà, silencieusement ramené au
+plafond) — le portail tenant propose des préréglages jusqu'à ce plafond
+directement dans "Mint token". Une fois le jeton expiré, la connexion
+s'arrête (`client.on('authFailed', ...)`, jamais de reconnexion
+automatique) : il faut en miner un nouveau et republier la page avec.
 
 Omettre `data-token`/`data-channel` charge juste `window.MioEmbedClient`
 (le constructeur) sans rendu automatique, pour qui préfère construire sa
@@ -234,6 +239,7 @@ dans le README de `sdk-typescript`.
 | Publication (navigateur) | `client.publish(channelId, payload)` (JS, un seul frame) |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds)` (JS) |
 | Notifications en arrière-plan | `MioRealtimeClient.showBackgroundNotification(message, options?)` (JS, canal par canal) ou `.attachBackgroundNotifications(client, options?)` (tous canaux) — onglet caché/sans focus, aucun serveur |
+| Détection d'un jeton expiré/invalide | `client.on('authFailed', ({code, reason}) => ...)` (JS) — le client ne retente jamais automatiquement dans ce cas, même avec `reconnect` activé |
 | Widget prêt à l'emploi | `[mio_realtime channel="..."]` |
 
 ## Limitations connues (documentées, pas cachées)

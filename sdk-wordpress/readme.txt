@@ -4,7 +4,7 @@ Tags: realtime, websocket, notifications, live-feed, pubsub
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.1.6
+Stable tag: 0.1.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -71,6 +71,19 @@ protocol's one-frame limit; the platform's full SDKs support transparent
 chunking for larger payloads, this lightweight plugin does not).
 
 == Changelog ==
+
+= 0.1.7 =
+* New: `client.on('authFailed', ({code, reason}) => ...)` — fires when the
+  server rejects AUTH (an invalid or expired token), detected via a
+  dedicated WS close code (`4001`) the backend now sends for exactly this,
+  instead of an indistinguishable dropped connection. The client never
+  auto-reconnects after this specific close, even with `reconnect: true`
+  — retrying with the same rejected token would just fail again, forever,
+  silently. Mint a new token and construct a fresh client instead.
+* Tenant-portal's "Mint token" now has a TTL picker (1 hour default, up to
+  a 30-day server-side maximum) for tokens that need to outlive the old
+  1-hour-only default — useful for a token hand-pasted into a static site
+  with no backend to renew it automatically.
 
 = 0.1.6 =
 * New: `MioRealtimeClient.showBackgroundNotification(message, options)` —

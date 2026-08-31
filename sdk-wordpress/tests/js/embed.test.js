@@ -225,3 +225,82 @@ test('showBackgroundNotification called directly from a subscribe() callback sho
 test('showBackgroundNotification is a no-op when unsupported (no window/Notification global)', () => {
   assert.doesNotThrow(() => Client.showBackgroundNotification({ channelId: 'orders:42', payload: 'order created' }));
 });
+
+// authFailed — same cases as client.test.js, run against the consolidated file.
+
+test('authFailed fires and no reconnect is attempted on the server\'s auth-failure close code', async () => {
+  const realWebSocket = global.WebSocket;
+  let constructCount = 0;
+  let latestWs;
+  class CountingFakeWebSocket extends SlowOpeningFakeWebSocket {
+    constructor(url) {
+      super(url);
+      constructCount++;
+      latestWs = this;
+    }
+  }
+  global.WebSocket = CountingFakeWebSocket;
+  try {
+    const client = new Client({
+      wsUrl: 'wss://example.com/ws',
+      tenantId: SAMPLE_TENANT,
+      token: 't',
+      reconnect: true,
+      reconnectBaseDelayMs: 5,
+      reconnectMaxDelayMs: 5,
+    });
+    const authFailedEvents = [];
+    client.on('authFailed', (e) => authFailedEvents.push(e));
+
+    client.connect();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(constructCount, 1);
+
+    latestWs.onclose({ code: 4001, reason: 'authentication failed' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.deepEqual(authFailedEvents, [{ code: 4001, reason: 'authentication failed' }]);
+    assert.equal(constructCount, 1, 'must not reconnect after an auth-failure close — same token would just fail again');
+    client.disconnect();
+  } finally {
+    global.WebSocket = realWebSocket;
+  }
+});
+
+test('a normal close still reconnects — auth-failure handling does not break the general case', async () => {
+  const realWebSocket = global.WebSocket;
+  let constructCount = 0;
+  let latestWs;
+  class CountingFakeWebSocket extends SlowOpeningFakeWebSocket {
+    constructor(url) {
+      super(url);
+      constructCount++;
+      latestWs = this;
+    }
+  }
+  global.WebSocket = CountingFakeWebSocket;
+  try {
+    const client = new Client({
+      wsUrl: 'wss://example.com/ws',
+      tenantId: SAMPLE_TENANT,
+      token: 't',
+      reconnect: true,
+      reconnectBaseDelayMs: 5,
+      reconnectMaxDelayMs: 5,
+    });
+
+    client.connect();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(constructCount, 1);
+
+    latestWs.onclose({ code: 1006, reason: '' });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    assert.equal(constructCount, 2, 'a non-auth-failure close must still trigger the normal reconnect');
+    client.disconnect();
+  } finally {
+    global.WebSocket = realWebSocket;
+  }
+});
