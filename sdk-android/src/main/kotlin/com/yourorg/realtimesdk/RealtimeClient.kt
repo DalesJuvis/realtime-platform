@@ -18,6 +18,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 import kotlin.random.Random
 
+/** Code de fermeture WS envoyé par le serveur quand AUTH est rejeté (jeton
+ * invalide ou expiré — voir `WsController.rs::WS_CLOSE_CODE_AUTH_FAILED`
+ * côté backend, seule source de vérité pour cette valeur). */
+internal const val WS_CLOSE_CODE_AUTH_FAILED = 4001
+
 /**
  * Client du moteur temps réel maison, pour Android/JVM. Repose sur
  * [OkHttp](https://square.github.io/okhttp/) pour le transport WebSocket
@@ -54,9 +59,21 @@ class RealtimeClient(private val config: RealtimeClientConfig) {
     private val closedByUser = AtomicBoolean(true)
     private val reconnectAttempt = AtomicInteger(0)
 
+    /** L'URL/le jeton effectivement utilisés pour la prochaine tentative de
+     * connexion — distincts de `config.url`/`config.token` une fois
+     * `config.tokenProvider` configuré : `openSocket()` les met à jour à
+     * chaque tentative avec ce que le provider renvoie. Sans
+     * `tokenProvider`, restent simplement égaux aux valeurs de `config`. */
+    @Volatile private var currentUrl: String = config.url
+    @Volatile private var currentToken: String? = config.token
+
     fun connect() {
         closedByUser.set(false)
-        openSocket()
+        // Sur le scheduler, jamais sur le thread appelant : une fois
+        // `tokenProvider` configuré, `openSocket()` peut bloquer le temps
+        // de l'appel réseau vers votre propre backend — appeler ça
+        // directement depuis le thread UI Android serait un risque d'ANR.
+        scheduler.execute { openSocket() }
     }
 
     /**
@@ -143,8 +160,42 @@ class RealtimeClient(private val config: RealtimeClientConfig) {
     }
 
     private fun openSocket() {
-        val request = Request.Builder().url(config.url).build()
-        webSocket = config.okHttpClient.newWebSocket(request, InternalListener())
+        // Résout un jeton frais avant *chaque* tentative, si `tokenProvider`
+        // est configuré — le tout premier `connect()` comme chaque
+        // reconnexion, y compris après un `ConnectionEvent.AuthFailed`
+        // (voir `InternalListener.onClosed`, qui laisse simplement le
+        // backoff normal reprogrammer un appel ici). Une exception ici est
+        // traitée comme n'importe quel autre échec de connexion : `Error`,
+        // puis reconnexion replanifiée avec le même backoff que le reste —
+        // jamais de boucle serrée sur un backend applicatif temporairement
+        // en panne.
+        val provider = config.tokenProvider
+        if (provider != null) {
+            try {
+                val fresh = provider.getToken()
+                currentToken = fresh.token
+                if (fresh.wsUrl != null) currentUrl = fresh.wsUrl
+            } catch (e: Exception) {
+                connectionListeners.forEach { it.onEvent(ConnectionEvent.Error(e)) }
+                scheduleReconnect()
+                return
+            }
+            if (closedByUser.get()) return
+        }
+
+        val token = currentToken ?: run {
+            // Ne peut arriver que si `tokenProvider` n'est pas configuré et
+            // que `config.token` n'a jamais été fourni — le constructeur de
+            // `RealtimeClientConfig` l'empêche déjà, ceci est un filet de
+            // sécurité si cette invariant venait à changer.
+            connectionListeners.forEach {
+                it.onEvent(ConnectionEvent.Error(IllegalStateException("aucun jeton disponible — fournissez token ou tokenProvider")))
+            }
+            return
+        }
+
+        val request = Request.Builder().url(currentUrl).build()
+        webSocket = config.okHttpClient.newWebSocket(request, InternalListener(token))
     }
 
     private fun resubscribeAll(ws: WebSocket) {
@@ -204,17 +255,21 @@ class RealtimeClient(private val config: RealtimeClientConfig) {
         }
     }
 
-    private inner class InternalListener : WebSocketListener() {
+    /** [token] est celui résolu par `openSocket()` pour *cette* tentative
+     * précise — jamais `config.token` directement, qui peut être `null`
+     * quand `tokenProvider` est configuré, et qui de toute façon ne serait
+     * pas le jeton fraîchement obtenu après un renouvellement. */
+    private inner class InternalListener(private val token: String) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             reconnectAttempt.set(0)
             // AUTH systématiquement en premier.
-            send(webSocket, Opcode.AUTH, "", config.token)
+            send(webSocket, Opcode.AUTH, "", token)
             resubscribeAll(webSocket)
             startHeartbeat(webSocket)
             connectionListeners.forEach { it.onEvent(ConnectionEvent.Open) }
             // Optimiste — le protocole n'a pas d'opcode d'ACK explicite ;
-            // en cas d'échec d'AUTH, le serveur ferme simplement la
-            // connexion (observez plutôt `ConnectionEvent.Closed`).
+            // en cas d'échec d'AUTH, le serveur ferme la connexion avec un
+            // code dédié (observez plutôt `ConnectionEvent.AuthFailed`).
             connectionListeners.forEach { it.onEvent(ConnectionEvent.Authenticated) }
         }
 
@@ -226,6 +281,25 @@ class RealtimeClient(private val config: RealtimeClientConfig) {
             heartbeatFuture?.cancel(false)
             this@RealtimeClient.webSocket = null
             connectionListeners.forEach { it.onEvent(ConnectionEvent.Closed(code, reason)) }
+
+            if (code == WS_CLOSE_CODE_AUTH_FAILED) {
+                connectionListeners.forEach { it.onEvent(ConnectionEvent.AuthFailed(code, reason)) }
+
+                if (config.tokenProvider == null) {
+                    // Retenter avec le même jeton que le serveur vient de
+                    // rejeter échouerait à nouveau, indéfiniment et
+                    // silencieusement — jamais de reconnexion automatique
+                    // ici, même avec `config.reconnect`.
+                    return
+                }
+                // `tokenProvider` configuré : on tombe dans le chemin de
+                // reconnexion normal ci-dessous. `openSocket()` rappelle
+                // toujours `tokenProvider.getToken()` avant chaque
+                // tentative, donc cette reconnexion récupère un jeton frais
+                // automatiquement — rien à faire côté application au-delà
+                // d'avoir configuré `tokenProvider` une seule fois.
+            }
+
             scheduleReconnect()
         }
 
@@ -271,6 +345,61 @@ sealed class ConnectionEvent {
 
     /** Cf. note sur l'absence d'ACK AUTH dans `InternalListener.onOpen`. */
     object Authenticated : ConnectionEvent()
+
+    /**
+     * Émis juste après [Closed] quand la fermeture vient précisément d'un
+     * AUTH rejeté (jeton invalide ou expiré — code de fermeture WS dédié,
+     * [WS_CLOSE_CODE_AUTH_FAILED], distinct de toute autre raison de
+     * déconnexion).
+     *
+     * Sans `RealtimeClientConfig.tokenProvider` : le client **n'essaie
+     * jamais de se reconnecter automatiquement** après ceci, même avec
+     * `reconnect = true` — retenter avec le même jeton que le serveur
+     * vient de rejeter échouerait à nouveau, indéfiniment et
+     * silencieusement. Réagissez ici (jeton frais depuis votre backend,
+     * nouveau `RealtimeClient`) plutôt que de compter sur `Closed` seul.
+     *
+     * Avec `tokenProvider` configuré : plus la peine — le client rappelle
+     * `tokenProvider.getToken()` automatiquement avant la prochaine
+     * tentative et se reconnecte avec le jeton frais tout seul. Cet
+     * évènement reste émis (utile pour un indicateur "renouvellement…"),
+     * mais rien à faire pour que la connexion reprenne.
+     */
+    data class AuthFailed(val code: Int, val reason: String) : ConnectionEvent()
+}
+
+/**
+ * Ce que [TokenProvider.getToken] doit renvoyer — exactement la forme de
+ * la réponse de `POST /api/v1/auth/tokens`/`POST /api/v1/portal/tokens`
+ * côté appelant (votre propre backend, pas ce SDK). [wsUrl] omis (`null`)
+ * réutilise celui déjà configuré — quasi toujours ce qu'on veut, `ws_url`
+ * ne varie pas d'un mint à l'autre pour un même déploiement.
+ */
+data class TokenRefreshResult @JvmOverloads constructor(
+    val token: String,
+    val wsUrl: String? = null,
+)
+
+/**
+ * Fournit un jeton frais à la demande — **votre propre backend** (qui
+ * détient le secret tenant, jamais ce SDK ni l'app appelante), pas
+ * directement l'API mio. [getToken] est appelé avant *chaque* tentative de
+ * connexion : le premier `connect()`, et automatiquement à chaque
+ * reconnexion — y compris après un [ConnectionEvent.AuthFailed] (jeton
+ * expiré/invalide), ce qui rend le renouvellement transparent pour le code
+ * applicatif une fois configuré une seule fois ici.
+ *
+ * Appelé de façon synchrone sur le thread de fond dédié de ce client
+ * (jamais le thread appelant de `connect()`, voir sa propre doc) — bloquer
+ * ici le temps d'un appel réseau vers votre backend est sûr et attendu, ni
+ * coroutine `suspend` ni callback-de-callback à gérer. Une exception levée
+ * ici est traitée comme n'importe quel autre échec de connexion :
+ * [ConnectionEvent.Error] est émis et une reconnexion est replanifiée avec
+ * le même backoff exponentiel que le reste — pas de boucle serrée si votre
+ * backend est temporairement indisponible.
+ */
+fun interface TokenProvider {
+    fun getToken(): TokenRefreshResult
 }
 
 /**
@@ -278,19 +407,31 @@ sealed class ConnectionEvent {
  * nécessaires pour que les paramètres par défaut restent utilisables
  * proprement depuis Java (sans lui, Java verrait un seul constructeur
  * exigeant tous les paramètres).
+ *
+ * Fournissez exactement l'un de [token] (jeton statique) ou
+ * [tokenProvider] (renouvellement automatique et silencieux — voir sa
+ * propre doc) ; le constructeur lève [IllegalArgumentException] sinon.
  */
 data class RealtimeClientConfig @JvmOverloads constructor(
-    /** URL du endpoint WebSocket, ex: `wss://realtime.example.com/ws`. */
+    /** URL du endpoint WebSocket, ex: `wss://realtime.example.com/ws`. Si
+     * [tokenProvider] est configuré et renvoie un [TokenRefreshResult.wsUrl],
+     * celui-ci prend le dessus pour chaque connexion — cette valeur ne sert
+     * alors que de première valeur / repli. */
     val url: String,
-    /** Tenant ID — doit correspondre au tenant du jeton [token]. */
+    /** Tenant ID — doit correspondre au tenant du jeton [token]/[tokenProvider]. */
     val tenantId: UUID,
     /**
      * Jeton d'authentification émis côté serveur
      * (`auth.rs::AuthManager::issue_token`). Ce SDK ne le génère jamais
      * lui-même : un jeton signé HMAC ne doit être émis que côté serveur,
-     * qui seul détient le secret du tenant.
+     * qui seul détient le secret du tenant. Statique — s'il expire, voir
+     * [ConnectionEvent.AuthFailed] (aucune tentative de reconnexion
+     * automatique dans ce cas, contrairement à [tokenProvider]).
      */
-    val token: String,
+    val token: String? = null,
+    /** Voir la doc de [TokenProvider]. Alternative à [token] pour un
+     * renouvellement automatique et silencieux. */
+    val tokenProvider: TokenProvider? = null,
     /** Intervalle entre deux PING, en ms. Défaut : 15000. */
     val heartbeatIntervalMs: Long = 15_000,
     /** Reconnexion automatique sur perte de connexion. Défaut : true. */
@@ -305,4 +446,10 @@ data class RealtimeClientConfig @JvmOverloads constructor(
      * pinning...) plutôt que d'en laisser un second s'instancier.
      */
     val okHttpClient: OkHttpClient = OkHttpClient(),
-)
+) {
+    init {
+        require((token != null) != (tokenProvider != null)) {
+            "RealtimeClientConfig: fournissez exactement l'un de token ou tokenProvider, pas les deux, pas aucun."
+        }
+    }
+}
