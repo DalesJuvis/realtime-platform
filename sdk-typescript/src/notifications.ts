@@ -54,13 +54,46 @@ export interface BackgroundNotificationOptions {
 }
 
 /**
+ * Affiche une notification `Notification` native pour `message`, si la
+ * page est cachée ou sans focus (sinon no-op : ne double pas ce que
+ * l'utilisateur voit déjà à l'écran) — la même logique qu'utilise
+ * `attachBackgroundNotifications` en interne, mais appelable directement
+ * depuis n'importe quel handler (le callback de `subscribe()`, par
+ * exemple), pas seulement depuis l'évènement `"message"` du client. Ne
+ * demande pas la permission elle-même : appelez
+ * `requestNotificationPermission()` avant (typiquement sur un clic
+ * utilisateur), sinon cette fonction ne fait rien silencieusement.
+ */
+export function showBackgroundNotification(
+  message: RealtimeMessage,
+  options: BackgroundNotificationOptions = {},
+): void {
+  if (!isNotificationSupported()) return;
+  if (Notification.permission !== "granted") return;
+  if (document.visibilityState === "visible" && document.hasFocus()) return;
+  if (options.filter && !options.filter(message)) return;
+
+  const title = options.title ? options.title(message) : message.channelId;
+  const body = options.body ? options.body(message) : message.payload;
+  const notificationOptions: NotificationOptions = { body };
+  if (options.icon !== undefined) notificationOptions.icon = options.icon;
+  const notification = new Notification(title, notificationOptions);
+  notification.onclick = () => {
+    window.focus();
+    options.onClick?.(message);
+  };
+}
+
+/**
  * Affiche une notification `Notification` native pour chaque message reçu
  * par `client` tant que la page est cachée ou sans focus — s'abonne à
  * l'évènement `"message"` du client (tous canaux confondus, avant même le
  * dispatch par canal), donc fonctionne quels que soient les canaux
- * souscrits par ailleurs. Ne demande pas la permission elle-même :
- * appelez `requestNotificationPermission()` avant (typiquement sur un
- * clic utilisateur), sinon les notifications sont silencieusement omises.
+ * souscrits par ailleurs, sans avoir à appeler `showBackgroundNotification`
+ * vous-même dans chaque `subscribe()`. Ne demande pas la permission
+ * elle-même : appelez `requestNotificationPermission()` avant (typiquement
+ * sur un clic utilisateur), sinon les notifications sont silencieusement
+ * omises.
  *
  * Retourne une fonction de désinscription.
  */
@@ -69,22 +102,7 @@ export function attachBackgroundNotifications(
   options: BackgroundNotificationOptions = {},
 ): Unsubscribe {
   if (!isNotificationSupported()) return () => {};
-
-  return client.on("message", (message) => {
-    if (Notification.permission !== "granted") return;
-    if (document.visibilityState === "visible" && document.hasFocus()) return;
-    if (options.filter && !options.filter(message)) return;
-
-    const title = options.title ? options.title(message) : message.channelId;
-    const body = options.body ? options.body(message) : message.payload;
-    const notificationOptions: NotificationOptions = { body };
-    if (options.icon !== undefined) notificationOptions.icon = options.icon;
-    const notification = new Notification(title, notificationOptions);
-    notification.onclick = () => {
-      window.focus();
-      options.onClick?.(message);
-    };
-  });
+  return client.on("message", (message) => showBackgroundNotification(message, options));
 }
 
 /** Enregistre le Service Worker à `scriptUrl` (ex. `"/sw.js"`) — requis

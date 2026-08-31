@@ -30,6 +30,7 @@ export { DEFAULT_MAX_MESSAGE_BYTES } from "./chunking.js";
 export {
   isNotificationSupported,
   requestNotificationPermission,
+  showBackgroundNotification,
   attachBackgroundNotifications,
   registerPushServiceWorker,
   subscribeToPush,
