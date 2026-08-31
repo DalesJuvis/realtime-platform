@@ -20,7 +20,14 @@ final class LaravelHttpTransportTest extends TestCase
         $factory = new Factory();
         $factory->fake([
             '*' => Factory::response(
-                ['success' => true, 'data' => ['token' => 'signed.token.value', 'expires_in' => 3600]],
+                [
+                    'success' => true,
+                    'data' => [
+                        'token' => 'signed.token.value',
+                        'expires_in' => 3600,
+                        'ws_url' => 'wss://realtime.example.com/ws',
+                    ],
+                ],
                 200
             ),
         ]);
@@ -36,6 +43,7 @@ final class LaravelHttpTransportTest extends TestCase
 
         self::assertSame('signed.token.value', $minted->token);
         self::assertSame(3600, $minted->expiresIn);
+        self::assertSame('wss://realtime.example.com/ws', $minted->wsUrl);
 
         $factory->assertSent(function ($request) {
             return $request->url() === 'https://realtime.example.com:8090/api/v1/auth/tokens'
