@@ -227,6 +227,34 @@ Authorization: Bearer <token from /api/v1/auth/tokens>
                 code={`{ "success": true, "data": { "published": true }, "trace_id": "…" }`}
               />
             </Section>
+            <Section
+              title="Publish a saved template over HTTP"
+              description="Sends one of this workspace's Templates by id instead of a raw payload — {{variable}} placeholders are filled in server-side, so the caller never needs the template's own text or the full template list, only the template_id and the values to fill in."
+              code={`POST ${apiUrl}/api/v1/messages/template
+Content-Type: application/json
+Authorization: Bearer <token from /api/v1/auth/tokens>
+
+{
+  "tenant_id": "${tid}",
+  "channel_id": "orders:42",
+  "template_id": "<template id from Templates>",
+  "variables": { "name": "Ada", "order_id": "42" }
+}`}
+              codeLabel="Request"
+              language="http"
+              caveat="Same 211-byte limit as above, checked after interpolation — 400 INVALID_REQUEST if the rendered text doesn't fit, shorten the template or the values. An unknown or foreign-tenant template_id returns 404 TEMPLATE_NOT_FOUND. A variable with no matching entry renders as an empty string rather than leaving the {{placeholder}} in the sent text."
+            >
+              <CodeBlock
+                label="Response"
+                language="json"
+                code={`{ "success": true, "data": { "published": true }, "trace_id": "…" }`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Every connected SDK below wraps this as{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">publishTemplate(channelId, templateId, variables)</code>{' '}
+                (or that SDK's own naming convention) alongside its existing <code className="rounded bg-muted px-1 py-0.5 font-mono">publish()</code> — see each SDK's own tab.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="web-push" className="mt-0 space-y-4">
@@ -375,6 +403,16 @@ client.disconnect()`}
                 For silent renewal instead of handling <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code> yourself, replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">getToken: async () =&gt; ({'{'} token, wsUrl {'}'})</code> — called before every connection attempt (including automatically after an <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code>), calling <b>your own backend</b>, never mio's API directly.
               </p>
             </Section>
+            <Section
+              title="Publish a saved template"
+              description="Fills in {{variable}} placeholders server-side and publishes the result — see the REST API tab for the endpoint this wraps."
+              language="typescript"
+              code={`await client.publishTemplate('orders:42', '<template id from Templates>', {
+  name: 'Ada',
+  order_id: '42',
+})`}
+              caveat="Goes over HTTP, not the open WS frame stream — works even before connect() or without an open connection, as long as a token (or getToken) is configured. Unlike publish()/unicast(), it is not queued for a not-yet-open socket; each call fires immediately."
+            />
           </TabsContent>
 
           <TabsContent value="react" className="mt-0 space-y-4">
@@ -411,6 +449,10 @@ function OrdersFeed() {
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">useBackgroundNotifications</code>,{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">usePushSubscription</code>.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template: <code className="rounded bg-muted px-1 py-0.5 font-mono">useChannel(...).publishTemplate(templateId, variables)</code>, or standalone via{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate(channelId)</code> — same HTTP call as the REST API tab, {'{{'}variable{'}}'} filled in server-side.
+              </p>
             </Section>
           </TabsContent>
 
@@ -437,7 +479,11 @@ function OrdersFeed() {
   // ... same API as @mio/realtime-sdk-react
 }`}
               caveat="Notification hooks (useBackgroundNotifications/usePushSubscription) are deliberately NOT re-exported here — they wrap browser-only Notification/PushManager APIs that don't exist in React Native. Native push needs a different mechanism (e.g. @react-native-firebase/messaging)."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">publishTemplate</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate</code> are re-exported unchanged from <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk-react</code> — see the React tab.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="python" className="mt-0 space-y-4">
@@ -463,7 +509,12 @@ async def main():
 
 asyncio.run(main())`}
               caveat="The WebSocket client (client.py) is documented as not yet runtime-tested by its authors — only the pure-stdlib protocol codec has real test coverage. Verify against a live connection before production use."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.publish_template("orders:42", template_id, {'{'}"name": "Ada"{'}'})</code>.
+                Unlike the WS client above, this one call is mock-tested (an HTTP request, not a live socket) — see <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-python/README.md</code>.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="rust" className="mt-0 space-y-4">
@@ -496,7 +547,11 @@ async fn main() {
     client.publish("orders:42", "order created").unwrap();
 }`}
               caveat="This SDK is documented as not yet compiled by its authors (no Rust toolchain was available when it was written) — run cargo build yourself and treat it as a first draft, not a validated artifact."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publish_template("orders:42", template_id, &amp;variables).await.unwrap();</code> (an HTTP call, independent of the WS connection above). Unlike the rest of this SDK, <code className="rounded bg-muted px-1 py-0.5 font-mono">publish_template</code> and its <code className="rounded bg-muted px-1 py-0.5 font-mono">cargo build</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">cargo test</code> were actually run and pass.
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="android" className="mt-0 space-y-4">
@@ -527,6 +582,10 @@ client.disconnect()`}
               <p className="text-xs text-muted-foreground">
                 Watch <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code> for an invalid/expired token — without <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code>, the client never auto-reconnects after this. Replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider = TokenProvider {'{'} ... {'}'}</code> for silent renewal — called synchronously on the client's own background thread (safe to block on your backend call) before every connection attempt.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — callback-based like the rest of this client, not a suspend fun:{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, mapOf("name" to "Ada")) {'{'} result -&gt; ... {'}'}</code>. Runs over HTTP via the same <code className="rounded bg-muted px-1 py-0.5 font-mono">OkHttpClient</code> already configured, independent of the WS connection.
+              </p>
             </Section>
             <Section
               title="Android — Java"
@@ -548,6 +607,9 @@ client.publish("orders:42", "order created");`}
               <p className="text-xs text-muted-foreground">
                 Same <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> silent-renewal story as Kotlin above — Java has no named/optional arguments, so pass <code className="rounded bg-muted px-1 py-0.5 font-mono">null</code> for <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> and fill in every parameter through <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> explicitly (see the README for the full example).
               </p>
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, result -&gt; {'{'} ... {'}'});</code> (an overload without the <code className="rounded bg-muted px-1 py-0.5 font-mono">variables</code> map also exists).
+              </p>
             </Section>
           </TabsContent>
 
@@ -567,7 +629,11 @@ $client->publish('orders:42', 'order created', $minted->token);
 // Named event, same envelope client.channel(id).on() decodes in the browser:
 $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);`}
               caveat="Client::publish()/emitEvent() do not chunk — payload over 211 UTF-8 bytes throws before any network call. Never return $secret to the browser — only $minted->token should leave PHP."
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">$client-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>. Same tenant-scoped lookup and server-side {'{{'}variable{'}}'} filling as the REST API tab — no local size check here, the 211-byte cap is enforced server-side after interpolation.
+              </p>
+            </Section>
             <Section
               title="WordPress — on the page"
               description="A shortcode renders a live-updating feed, backed by a real WebSocket connection in the visitor's browser."
@@ -605,6 +671,9 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
                 bound singleton. See <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-laravel/README.md</code> for why this package depends on{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">mio/realtime-wordpress</code> (naming leftover, not a functional coupling).
               </p>
+              <p className="text-xs text-muted-foreground">
+                Publish a saved template — not on the <code className="rounded bg-muted px-1 py-0.5 font-mono">MioRealtime</code> facade yet, resolve <code className="rounded bg-muted px-1 py-0.5 font-mono">LaravelHttpTransport</code> from the container instead: <code className="rounded bg-muted px-1 py-0.5 font-mono">app(\Mio\Realtime\Laravel\LaravelHttpTransport::class)-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>.
+              </p>
             </Section>
           </TabsContent>
 
@@ -613,14 +682,14 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-embed.js — no plugin, no build step"
               description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-embed.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
   data-channel="orders:42"
   data-replay="true"
 ></script>`}
-              caveat="Pin the version: @v0.1.7 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
+              caveat="Pin the version: @v0.1.8 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
             >
               <p className="text-xs text-muted-foreground">
                 No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified <code className="rounded bg-muted px-1 py-0.5 font-mono">.min.js</code> build
@@ -632,8 +701,8 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title="mio-protocol.js + mio-client.js — building your own page logic"
               description="For anything beyond the auto-rendered feed above — custom UI, multiple channels, your own publish form — load the two files mio-embed.js bundles and drive MioRealtimeClient yourself."
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-client.min.js"></script>
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: '${wsUrl}', // the ws_url from your mint-token response

@@ -32,7 +32,7 @@ import { updateProfileAction } from '@actions/profile/updateProfile.action'
 import { uploadLogoAction } from '@actions/profile/uploadLogo.action'
 import { changePasswordAction } from '@actions/account/changePassword.action'
 import { errorMessage } from '@lib/errors'
-import { formatDateTime, maskKey, workspaceNameFromEmail } from '@lib/utils'
+import { copyToClipboard, formatDateTime, maskKey, workspaceNameFromEmail } from '@lib/utils'
 import { usePortalAuthStore } from '@store/portalAuth.store'
 import { useUiStore } from '@store/ui.store'
 import type { KeyPair } from '@entities/KeyPair.entity'
@@ -44,8 +44,12 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
 
 function CopyField({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
   async function copy() {
-    await navigator.clipboard.writeText(value)
-    toast.success(`${label} copied.`)
+    try {
+      await copyToClipboard(value)
+      toast.success(`${label} copied.`)
+    } catch {
+      toast.error(`Failed to copy ${label.toLowerCase()}.`)
+    }
   }
   return (
     <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">

@@ -14,6 +14,7 @@ import { Copy, Hash, Radio } from 'lucide-react'
 import { Badge } from '@components/ui/badge'
 import { DataTable } from '@components/DataTable/DataTable'
 import { getChannelsAction } from '@actions/channels/getChannels.action'
+import { copyToClipboard } from '@lib/utils'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { Channel } from '@entities/Channel.entity'
 
@@ -104,9 +105,13 @@ export default function ChannelsPage() {
           {
             label: 'Copy channel ID',
             icon: Copy,
-            onClick: () => {
-              void navigator.clipboard.writeText(row.channel_id)
-              toast.success('Channel ID copied.')
+            onClick: async () => {
+              try {
+                await copyToClipboard(row.channel_id)
+                toast.success('Channel ID copied.')
+              } catch {
+                toast.error('Failed to copy channel ID.')
+              }
             },
           },
         ]}

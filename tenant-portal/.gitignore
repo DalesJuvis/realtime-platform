@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Reproduced by scripts/copy-tinymce.mjs on `npm install` — a copy of
+# node_modules/tinymce's static assets, not source.
+public/tinymce
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

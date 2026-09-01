@@ -70,6 +70,65 @@ export function formatDuration(totalSeconds: number): string {
   return `${Math.max(0, Math.round(totalSeconds))} second${totalSeconds === 1 ? '' : 's'}`
 }
 
+/**
+ * `crypto.randomUUID()` only exists in a secure context (HTTPS, or
+ * `localhost` exactly) — opening the dev server over a LAN IP or plain
+ * HTTP throws `crypto.randomUUID is not a function`. `getRandomValues` has
+ * no such restriction, so it's the fallback; a `Math.random` string is the
+ * last resort for the id-less unlikely-JS-engine case. These ids are only
+ * ever local React keys/dialog-stack identity, never security tokens, so
+ * the fallbacks' weaker randomness is fine.
+ */
+export function randomId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
+/**
+ * `navigator.clipboard` only exists in a secure context (HTTPS, or
+ * `localhost` exactly) — same restriction as `crypto.randomUUID` (see
+ * `randomId` above). Opening the app over a LAN IP or plain HTTP makes
+ * `navigator.clipboard` undefined, so `.writeText` throws before any
+ * copy actually happens — every "Copy" button would silently do nothing.
+ * Falls back to the legacy `execCommand('copy')` trick (select the text
+ * in a temporary offscreen `<textarea>`, then copy) — deprecated, but
+ * still the standard workaround for a non-secure context.
+ */
+export async function copyToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Permission denied or similar — fall through to the legacy path.
+    }
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  const succeeded = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!succeeded) {
+    throw new Error('Copy to clipboard failed.')
+  }
+}
+
 /** Triggers a browser download of an already-fetched blob (e.g. a CSV export). */
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)

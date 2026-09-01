@@ -24,7 +24,7 @@
  * raw `collapsed` (itself `lg:`-scoped, so irrelevant off-canvas anyway).
  */
 
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation, matchPath } from 'react-router-dom'
 import {
   LayoutDashboard,
   Hash,
@@ -81,45 +81,35 @@ function NavItem({
   iconOnly: boolean
   onNavigate: () => void
 }) {
+  const location = useLocation()
+
+  // Computed manually (not read off NavLink's own `isActive` render-prop)
+  // so `className` below can stay a plain string. Two earlier attempts
+  // both worked around Radix Slot needing that: first a `contents`-styled
+  // `<a>` wrapping a real inner `<span>`, which fixed the class-merge but
+  // left the tooltip's trigger anchored to a `display: contents` element
+  // that Popper measures as a zero-size box (tooltip stuck at the
+  // sidebar's top-left regardless of `side="right"`); then moving the
+  // tooltip down onto that inner `<span>` instead. Both were patches
+  // around the same root cause. Removing the function-className
+  // entirely — `<NavLink>` is a completely ordinary element, `<Tooltip>`
+  // can wrap it directly, and there's no zero-size node anywhere in the
+  // tree for Popper to ever mismeasure.
+  const isActive = matchPath({ path: to, end: end ?? false }, location.pathname) !== null
+
   const link = (
-    // `className="contents"` (not the real flex/padding classes — those
-    // move to the inner `<span>` below) is load-bearing, not cosmetic:
-    // the collapsed rail wraps this NavLink in `<TooltipTrigger asChild>`,
-    // and Radix Slot's prop merge does
-    // `[slotClassName, childClassName].filter(Boolean).join(" ")` for
-    // `className` (see @radix-ui/react-slot's mergeProps). NavLink's own
-    // `className` here would otherwise be a *function*
-    // (`({isActive}) => cn(...)`) — `Array.prototype.join` stringifies a
-    // non-string element via `Function.prototype.toString()`, so Slot was
-    // silently writing the function's literal source code (comments
-    // included) into the DOM `class` attribute instead of ever calling
-    // it. Tokens that happened to survive as clean, unquoted substrings
-    // of that source (`w-full`, `px-3`, ...) still matched real Tailwind
-    // classes by accident; `flex`, `justify-center`, and `px-0` all had a
-    // stray `"`/`,` fused onto them from the surrounding string literals
-    // and matched nothing — hence `flex` (and therefore `justify-center`)
-    // silently never applied, and `px-3` never got overridden to `px-0`
-    // for the icon-only rail, leaving nav icons unpadded-but-uncentered
-    // and visibly offset from the logo above. A plain string here is
-    // Slot-merge-safe regardless of nesting; `display: contents` makes
-    // the `<a>` invisible to layout so the inner `<span>` (rendered from
-    // NavLink's `children` render-prop, never touched by Slot at all)
-    // is what actually carries flex/padding/color — same visual result
-    // `<a>` itself used to produce, just resolved somewhere Slot can't
-    // reach it.
-    <NavLink to={to} end={end ?? false} onClick={onNavigate} className="contents">
-      {({ isActive }) => (
-        <span
-          className={cn(
-            'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-            iconOnly && 'justify-center px-0',
-            isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-          )}
-        >
-          <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
-          {!iconOnly && label}
-        </span>
+    <NavLink
+      to={to}
+      end={end ?? false}
+      onClick={onNavigate}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+        iconOnly && 'justify-center px-0',
+        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
+    >
+      <Icon className={cn('h-4 w-4 shrink-0', isActive && 'text-primary')} />
+      {!iconOnly && label}
     </NavLink>
   )
 

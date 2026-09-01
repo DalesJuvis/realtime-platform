@@ -12,7 +12,7 @@
 
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { AnimatePresence, motion, type TargetAndTransition } from 'framer-motion'
-import { cn } from '@lib/utils'
+import { cn, randomId } from '@lib/utils'
 
 export type DialogAnimation = 'slide-up' | 'fade' | 'scale'
 export type DialogSize = 'sm' | 'md' | 'lg' | 'xl'
@@ -72,7 +72,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [stack, setStack] = useState<DialogInstance[]>([])
 
   const openDialog = useCallback((component: ReactNode, options: DialogOptions = {}): string => {
-    const id = crypto.randomUUID()
+    const id = randomId()
     setStack((prev) => [
       ...prev,
       {
