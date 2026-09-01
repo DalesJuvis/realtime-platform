@@ -250,6 +250,51 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
   }
 
   /**
+   * Publie un template sauvegardé côté tenant-portal (Templates) sur
+   * `channelId` — ses `{{variable}}` sont remplies **côté serveur** à
+   * partir de `variables`, jamais ici : cet appel n'a besoin que du
+   * `templateId` et des valeurs à injecter, jamais du texte du template
+   * ni de la liste complète des templates du tenant (voir
+   * `POST /api/v1/messages/template` dans DOCS.md).
+   *
+   * Contrairement à `publish()`, passe par une requête HTTP, pas le frame
+   * binaire du socket déjà ouvert — le protocole 256 octets n'a aucune
+   * notion de template, seulement `channel_id`+`payload`. Fonctionne donc
+   * même sans connexion WS ouverte, tant qu'un jeton est disponible
+   * (`token` fourni, ou `getToken` — rappelé ici pour un jeton frais,
+   * même logique qu'avant chaque tentative de connexion).
+   *
+   * L'URL HTTP est dérivée de `wsUrl` (`ws(s)://…/ws` → `http(s)://…`,
+   * même domaine) — voir la doc de `wsUrl` sur pourquoi c'est le même
+   * domaine que l'API derrière un reverse proxy en production.
+   */
+  async publishTemplate(
+    channelId: string,
+    templateId: string,
+    variables: Record<string, string> = {},
+  ): Promise<void> {
+    const token = await this.resolveHttpToken();
+    const res = await fetch(`${this.httpBaseUrl()}/api/v1/messages/template`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        tenant_id: this.config.tenantId,
+        channel_id: channelId,
+        template_id: templateId,
+        variables,
+      }),
+    });
+
+    const body = (await res.json()) as {
+      success: boolean;
+      error?: { code: string; message: string };
+    };
+    if (!body.success) {
+      throw new Error(body.error?.message ?? `publishTemplate a échoué (HTTP ${res.status})`);
+    }
+  }
+
+  /**
    * Demande le rattrapage de l'historique d'un canal depuis
    * `sinceUnixSeconds` (0 = tout l'historique disponible côté serveur).
    * Les frames de rattrapage arrivent comme des messages normaux, routés
@@ -522,6 +567,28 @@ export class RealtimeClient extends TypedEmitter<RealtimeEvents> implements Real
         handlers.forEach((h) => h(message));
       }
     }
+  }
+
+  /** Dérive l'URL HTTP de base depuis `wsUrl` — même domaine, `/ws` en
+   * moins (voir la doc de `wsUrl` et de `publishTemplate`). */
+  private httpBaseUrl(): string {
+    return this.config.url.replace(/^ws/, "http").replace(/\/ws\/?$/, "");
+  }
+
+  /** Jeton pour un appel HTTP ponctuel (`publishTemplate`) — indépendant
+   * de la connexion WS elle-même, qui peut très bien ne pas être ouverte.
+   * Avec `getToken` configuré, en récupère toujours un frais (même
+   * logique que `openSocket()` avant chaque tentative de connexion) ;
+   * sinon retombe sur `config.token` déjà fourni. */
+  private async resolveHttpToken(): Promise<string> {
+    if (this.config.getToken) {
+      const fresh = await this.config.getToken();
+      return fresh.token;
+    }
+    if (!this.config.token) {
+      throw new Error("RealtimeClient: aucun jeton disponible — fournissez `token` ou `getToken`.");
+    }
+    return this.config.token;
   }
 
   private send(opcode: Opcode, channelId: string, payload: string): void {

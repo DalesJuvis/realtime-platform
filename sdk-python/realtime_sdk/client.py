@@ -1,13 +1,15 @@
 """``client.py`` — Client asyncio du moteur temps réel maison.
 
-Dépend de la bibliothèque tierce ``websockets`` (non testable dans
-l'environnement où ce SDK a été écrit — pas d'accès réseau pour
-l'installer, cf. README). ``protocol.py``, lui, est pur stdlib et a été
-réellement testé.
+Dépend des bibliothèques tierces ``websockets`` (frames du protocole
+binaire) et ``httpx`` (utilisée uniquement par ``publish_template()``, le
+seul appel HTTP de ce module — tout le reste transite par le socket WS) ;
+ni l'une ni l'autre n'est testable au runtime dans l'environnement où ce
+SDK a été écrit (pas d'accès réseau pour les installer, cf. README).
+``protocol.py``, lui, est pur stdlib et a été réellement testé.
 
 API volontairement proche des SDKs TypeScript et Rust du même projet :
-mêmes opérations (``publish``, ``subscribe``, ``unicast``, ``replay``),
-mêmes limitations documentées.
+mêmes opérations (``publish``, ``subscribe``, ``unicast``, ``replay``,
+``publish_template``), mêmes limitations documentées.
 """
 
 from __future__ import annotations
@@ -15,10 +17,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 from dataclasses import dataclass
-from typing import Callable, Dict, Set
+from typing import Callable, Dict, Optional, Set
 from uuid import UUID
 
+import httpx
 import websockets
 from websockets.exceptions import ConnectionClosed
 
@@ -45,6 +49,9 @@ Unsubscribe = Callable[[], None]
 
 @dataclass
 class ClientConfig:
+    #: URL WebSocket du serveur (ex: ``wss://realtime.example.com/ws``).
+    #: ``publish_template()`` en dérive l'URL HTTP de base — même domaine,
+    #: sans le ``/ws`` final — voir sa docstring pour le détail.
     url: str
     tenant_id: UUID
     #: Jeton émis côté serveur (``auth.rs::AuthManager::issue_token``).
@@ -182,6 +189,62 @@ class RealtimeClient:
         ``connect()``) — mis en file et rejoué dès la connexion,
         plutôt que de lever ``ConnectionError``."""
         await self._send_or_queue(Opcode.REPLAY, channel_id, str(since_unix_secs))
+
+    async def publish_template(
+        self, channel_id: str, template_id: str, variables: Optional[Dict[str, str]] = None
+    ) -> None:
+        """Publie dans ``channel_id`` un des templates sauvegardés du tenant
+        (portail tenant-portal → Templates), identifié par ``template_id`` —
+        le serveur interpole lui-même les ``{{variable}}`` avec
+        ``variables`` ; ce client ne voit jamais le texte du template ni la
+        liste des templates du tenant.
+
+        Contrairement à ``publish()``/``unicast()``/``replay()``, ceci
+        n'est **pas** un frame du protocole binaire fixe de 256 octets, qui
+        ignore complètement la notion de template : c'est un appel HTTP
+        ``POST /api/v1/messages/template`` séparé, sur le même domaine que
+        l'URL WS configurée (``wss://host/ws`` → ``https://host``, même
+        reverse proxy en production — voir la doc de ``ClientConfig.url``).
+        Il n'est donc ni mis en file si la connexion WS n'est pas établie,
+        ni affecté par une reconnexion en cours : chaque appel est un
+        aller-retour HTTP indépendant, authentifié avec le même jeton
+        bearer que AUTH (``self._config.token``), jamais le secret brut du
+        tenant.
+
+        Lève ``RuntimeError`` si le serveur répond avec ``"success": false``
+        — par exemple ``template_id`` inconnu ou appartenant à un autre
+        tenant (``404 TEMPLATE_NOT_FOUND``), ou texte rendu après
+        interpolation dépassant 211 octets UTF-8 (``400 INVALID_REQUEST`` —
+        même limite que ``publish()``, mais vérifiée côté serveur *après*
+        substitution des ``{{variable}}``). Une entrée absente de
+        ``variables`` est rendue par le serveur comme chaîne vide, jamais
+        comme le ``{{placeholder}}`` brut.
+        """
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.post(
+                f"{self._http_base_url()}/api/v1/messages/template",
+                json={
+                    "tenant_id": str(self._config.tenant_id),
+                    "channel_id": channel_id,
+                    "template_id": template_id,
+                    "variables": variables or {},
+                },
+                headers={"Authorization": f"Bearer {self._config.token}"},
+            )
+        body = response.json()
+        if not body.get("success"):
+            error = body.get("error") or {}
+            raise RuntimeError(
+                error.get("message") or f"publish_template a échoué (HTTP {response.status_code})"
+            )
+
+    def _http_base_url(self) -> str:
+        """Dérive l'URL HTTP de base depuis ``self._config.url`` — même
+        domaine, sans le ``/ws`` final (``wss://host/ws`` → ``https://host``).
+        Utilisée uniquement par ``publish_template()``, seul appel HTTP de
+        ce module."""
+        url = re.sub(r"^ws", "http", self._config.url, count=1)
+        return re.sub(r"/ws/?$", "", url)
 
     async def _send_or_queue(self, opcode: Opcode, channel_id: str, payload: str) -> None:
         if self._ws is not None:

@@ -48,6 +48,13 @@ fun main() {
     client.unicast("user-789", "message direct")
     client.replay("orders:42")
 
+    // HTTP, pas un frame du protocole binaire — fonctionne même sans
+    // connexion WS active. `{{variable}}` interpolées côté serveur, jamais
+    // ici (le SDK ne voit jamais le texte du template).
+    client.publishTemplate("orders:42", "tpl-commande-creee", mapOf("name" to "Ada")) { error ->
+        if (error != null) println("publishTemplate a échoué : ${error.message}") else println("template publié")
+    }
+
     Thread.sleep(5000)
     subscription.close() // envoie UNSUB pour "orders:42"
     client.disconnect()

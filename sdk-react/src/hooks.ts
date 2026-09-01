@@ -63,6 +63,14 @@ export interface UseChannelResult {
   messages: RealtimeMessage[];
   /** Publie sur `channelId`. Lève une erreur si `channelId` est nullish. */
   publish: (payload: string) => void;
+  /**
+   * Publie un template sauvegardé du tenant (tenant-portal → Templates)
+   * sur `channelId`, `{{variable}}` remplies côté serveur — voir
+   * `RealtimeClient.publishTemplate`. Passe par HTTP, pas le frame binaire
+   * du socket, donc fonctionne même sans connexion WS ouverte. Lève une
+   * erreur si `channelId` est nullish.
+   */
+  publishTemplate: (templateId: string, variables?: Record<string, string>) => Promise<void>;
   /** Vide le buffer local sans se désabonner. */
   clear: () => void;
 }
@@ -108,9 +116,19 @@ export function useChannel(
     [client, channelId],
   );
 
+  const publishTemplate = useCallback(
+    (templateId: string, variables?: Record<string, string>) => {
+      if (!channelId) {
+        throw new Error("useChannel: impossible de publier un template sans `channelId`.");
+      }
+      return client.publishTemplate(channelId, templateId, variables);
+    },
+    [client, channelId],
+  );
+
   const clear = useCallback(() => setMessages([]), []);
 
-  return { messages, publish, clear };
+  return { messages, publish, publishTemplate, clear };
 }
 
 /**
@@ -120,4 +138,23 @@ export function useChannel(
 export function usePublish(channelId: string): (payload: string) => void {
   const { client } = useRealtimeContext();
   return useCallback((payload: string) => client.publish(channelId, payload), [client, channelId]);
+}
+
+/**
+ * Publication de template seule, sans souscription — équivalent de
+ * `usePublish` pour `RealtimeClient.publishTemplate` : envoie un template
+ * sauvegardé du tenant (tenant-portal → Templates) par id, `{{variable}}`
+ * remplies côté serveur, sans jamais avoir besoin du texte du template.
+ * Passe par HTTP, pas le frame binaire du socket, donc fonctionne même
+ * sans connexion WS ouverte tant qu'un jeton est disponible.
+ */
+export function usePublishTemplate(
+  channelId: string,
+): (templateId: string, variables?: Record<string, string>) => Promise<void> {
+  const { client } = useRealtimeContext();
+  return useCallback(
+    (templateId: string, variables?: Record<string, string>) =>
+      client.publishTemplate(channelId, templateId, variables),
+    [client, channelId],
+  );
 }

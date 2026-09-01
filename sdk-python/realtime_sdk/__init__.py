@@ -19,11 +19,13 @@ __all__ = [
 __version__ = "0.1.0"
 
 try:
-    # `client.py` dépend de la bibliothèque tierce `websockets`. On garde
-    # cet import optionnel pour que `realtime_sdk.protocol` (pur stdlib,
-    # testé) reste utilisable seul — ex: un script de debug qui
-    # encode/décode des frames capturées sans avoir besoin d'ouvrir de
-    # connexion réseau — même si `websockets` n'est pas installé.
+    # `client.py` dépend des bibliothèques tierces `websockets` (frames du
+    # protocole binaire) et `httpx` (utilisée uniquement par
+    # `publish_template()`). On garde cet import optionnel pour que
+    # `realtime_sdk.protocol` (pur stdlib, testé) reste utilisable seul —
+    # ex: un script de debug qui encode/décode des frames capturées sans
+    # avoir besoin d'ouvrir de connexion réseau — même si ni l'une ni
+    # l'autre n'est installée.
     from .client import ClientConfig, RealtimeClient, RealtimeMessage
 except ImportError as _err:  # pragma: no cover - dépend de l'environnement d'installation
     _import_error = _err
@@ -31,7 +33,8 @@ except ImportError as _err:  # pragma: no cover - dépend de l'environnement d'i
     class _MissingWebsocketsDependency:
         def __init__(self, *_args: object, **_kwargs: object) -> None:
             raise ImportError(
-                "RealtimeClient nécessite le paquet 'websockets' : `pip install websockets`"
+                "RealtimeClient nécessite les paquets 'websockets' et 'httpx' : "
+                "`pip install websockets httpx`"
             ) from _import_error
 
     ClientConfig = _MissingWebsocketsDependency  # type: ignore[assignment,misc]

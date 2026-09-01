@@ -63,6 +63,7 @@ implémentation précise (tests, environnement exotique).
 | Fonctionnalité | API |
 |---|---|
 | Publication | `client.publish(channelId, payload)` |
+| Publication d'un template sauvegardé (tenant-portal → Templates) | `client.publishTemplate(channelId, templateId, variables?)` |
 | Souscription (canal exact) | `client.subscribe(channelId, handler)` |
 | Souscription (motif `orders:*`) | `client.subscribe("orders:*", handler)` |
 | Envoi direct à un utilisateur | `client.unicast(userId, payload)` |
@@ -303,6 +304,14 @@ l'encodage/décodage.
   `channelId` du frame, repurposé, qui le porte. Un UUID v4 en texte (36
   caractères) ne rentre pas : utilisez un identifiant court dédié à
   l'adressage socket si vos IDs utilisateur sont des UUIDs.
+- **`publishTemplate()` passe par HTTP, pas le socket ouvert** — le
+  protocole 256 octets n'a aucune notion de template. Fonctionne donc
+  même sans connexion WS active (tant qu'un jeton est disponible), mais
+  contrairement à `publish()`/`unicast()` ce n'est pas mis en file
+  d'attente avant l'ouverture du socket : chaque appel part
+  immédiatement. Le `templateId` doit appartenir au même tenant que le
+  jeton, sinon `404 TEMPLATE_NOT_FOUND` ; une valeur absente pour une
+  `{{variable}}` du template rend une chaîne vide, pas le placeholder.
 - **Pas d'accusé de réception AUTH.** Le protocole actuel n'a pas
   d'opcode d'ACK explicite : l'évènement `authenticated` est émis de
   façon optimiste juste après l'envoi du frame AUTH. En cas d'échec

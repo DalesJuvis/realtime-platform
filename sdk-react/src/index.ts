@@ -5,7 +5,14 @@
 export { RealtimeProvider, useRealtimeContext } from "./RealtimeContext.js";
 export type { RealtimeProviderProps, RealtimeContextValue, ConnectionState } from "./RealtimeContext.js";
 
-export { useRealtimeClient, useConnectionState, useSubscription, useChannel, usePublish } from "./hooks.js";
+export {
+  useRealtimeClient,
+  useConnectionState,
+  useSubscription,
+  useChannel,
+  usePublish,
+  usePublishTemplate,
+} from "./hooks.js";
 export type { UseChannelOptions, UseChannelResult } from "./hooks.js";
 
 export { ChannelSubscriber, ConnectionIndicator } from "./components.js";

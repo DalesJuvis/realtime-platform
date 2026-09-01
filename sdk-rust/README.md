@@ -62,10 +62,18 @@ souscription par motif (`orders:*`) et UNICAST.
 | Fonctionnalité | API |
 |---|---|
 | Publication | `client.publish(channel_id, payload)` |
+| Publication d'un template sauvegardé (tenant-portal) | `client.publish_template(channel_id, template_id, &variables).await` |
 | Souscription (canal exact ou motif `orders:*`) | `client.subscribe(channel_id) -> broadcast::Receiver<RealtimeMessage>` |
 | Désabonnement | `client.unsubscribe(channel_id)` |
 | Envoi direct à un utilisateur | `client.unicast(user_id, payload)` |
 | Rattrapage d'historique | `client.replay(channel_id, since_unix_secs)` |
+
+`publish_template()` est à part des autres méthodes : c'est un appel HTTP
+(`POST /api/v1/messages/template`, voir `DOCS.md`), pas un frame sur le
+socket WS déjà ouvert — le protocole binaire 256 octets n'a aucune notion
+de template. Fonctionne donc même sans connexion WS active, tant que
+`config.token` reste valide (pas de renouvellement automatique, voir la
+limitation ci-dessous).
 
 Reconnexion automatique (backoff exponentiel + jitter), heartbeat PING
 périodique, et ré-abonnement transparent à tous les canaux actifs après
@@ -93,6 +101,11 @@ qu'un autre récepteur les traite).
 - **`disconnect()` n'envoie pas de frame de fermeture WebSocket propre** —
   simplification assumée (`JoinHandle::abort()` direct), documentée dans
   le code de `RealtimeClient::disconnect`.
+- **Pas d'équivalent du `getToken`/`tokenProvider` du SDK TypeScript** —
+  `publish_template()` réutilise le `token` statique de `ClientConfig` tel
+  quel, sans renouvellement automatique ; si le jeton a expiré, reconstruisez
+  un `RealtimeClient` (ou appelez l'API de mint côté serveur) avant de
+  rappeler `publish_template()`.
 
 *Résolu depuis la v0.1 : `unsubscribe()` envoie désormais un vrai frame
 UNSUB (`Opcode 0x09`) au serveur — la tâche de relais côté serveur est

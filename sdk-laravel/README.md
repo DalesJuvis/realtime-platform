@@ -66,6 +66,30 @@ MioRealtime::publish('orders:42', 'order created', $minted->token);
 MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
 ```
 
+Publishing one of the tenant's saved templates (tenant-portal → Templates)
+by id — the `{{variable}}` placeholders are filled in server-side, so the
+caller never needs the template's own text — is `publishTemplate()`, but
+it lives on `LaravelHttpTransport` itself rather than on the `MioRealtime`
+facade/`Client` above (`Client`, shipped by `mio/realtime-wordpress`,
+doesn't have a `publishTemplate()` of its own yet):
+
+```php
+use Mio\Realtime\Laravel\LaravelHttpTransport;
+
+app(LaravelHttpTransport::class)->publishTemplate(
+    'orders:42',
+    $templateId,
+    $minted->token,
+    ['name' => 'Ada']
+);
+```
+
+> **Caveat:** same 211-byte limit as `publish()`, but checked *after*
+> server-side interpolation, so a short template can still fail with a
+> long enough variable value. A `template_id` that doesn't exist, or
+> belongs to a different tenant, throws `ClientException` with error code
+> `TEMPLATE_NOT_FOUND`.
+
 Or resolve `Mio\Realtime\Client` directly (constructor injection, a
 form request, a job) instead of the facade — both reach the same bound
 singleton:

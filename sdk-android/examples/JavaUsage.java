@@ -6,6 +6,7 @@ import com.yourorg.realtimesdk.RealtimeClientConfig;
 import com.yourorg.realtimesdk.TokenProvider;
 import com.yourorg.realtimesdk.TokenRefreshResult;
 
+import java.util.Collections;
 import java.util.UUID;
 
 /**
@@ -52,6 +53,22 @@ public final class JavaUsage {
         client.publish("orders:42", "commande créée");
         client.unicast("user-789", "message direct");
         client.replay("orders:42", 0); // surcharge générée par @JvmOverloads
+
+        // HTTP, pas un frame du protocole binaire — fonctionne même sans
+        // connexion WS active. `{{variable}}` interpolées côté serveur,
+        // jamais ici (le SDK ne voit jamais le texte du template).
+        client.publishTemplate(
+                "orders:42",
+                "tpl-commande-creee",
+                Collections.singletonMap("name", "Ada"),
+                error -> {
+                    if (error != null) {
+                        System.out.println("publishTemplate a échoué : " + error.getMessage());
+                    } else {
+                        System.out.println("template publié");
+                    }
+                }
+        );
 
         Thread.sleep(5000);
         try {

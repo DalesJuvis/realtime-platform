@@ -9,13 +9,18 @@ même projet — mêmes opérations, mêmes limitations documentées.
 > - `realtime_sdk/protocol.py` — **réellement testé** dans l'environnement
 >   où ce SDK a été écrit : pur stdlib, aucune dépendance externe, 12/12
 >   tests unitaires passants (`python -m unittest discover -s tests`).
-> - `realtime_sdk/client.py` — **non testé au runtime**, faute d'accès
->   réseau pour installer son unique dépendance externe, `websockets`. La
->   logique suit fidèlement le même design que les SDKs TS/Rust (déjà
->   écrits dans les mêmes contraintes), mais un premier `pip install -e .`
->   suivi d'un test contre un vrai serveur reste nécessaire avant usage
->   réel. Le module s'importe cependant sans erreur même sans
->   `websockets` installé — `realtime_sdk.protocol` reste utilisable seul.
+> - `realtime_sdk/client.py` — **non testé au runtime contre un vrai
+>   serveur**, faute d'accès réseau pour installer ses dépendances
+>   externes (`websockets`, `httpx`). La logique suit fidèlement le même
+>   design que les SDKs TS/Rust (déjà écrits dans les mêmes contraintes),
+>   mais un premier `pip install -e .` suivi d'un test contre un vrai
+>   serveur reste nécessaire avant usage réel. Le module s'importe
+>   cependant sans erreur même sans ces paquets installés —
+>   `realtime_sdk.protocol` reste utilisable seul. Exception :
+>   `publish_template()` a sa logique HTTP (URL, corps, en-têtes,
+>   gestion des erreurs) couverte par `tests/test_client.py`, qui mocke
+>   `httpx.AsyncClient` via `unittest.mock` plutôt que d'ouvrir une
+>   vraie connexion réseau.
 
 ## Installation
 
@@ -56,6 +61,15 @@ motif, UNICAST, REPLAY).
 | Souscription (canal exact ou motif `orders:*`) | `client.subscribe(channel_id, handler) -> Callable[[], None]` |
 | Envoi direct à un utilisateur | `await client.unicast(user_id, payload)` |
 | Rattrapage d'historique | `await client.replay(channel_id, since_unix_secs=0)` |
+| Publication d'un template sauvegardé (tenant-portal → Templates) | `await client.publish_template(channel_id, template_id, variables={})` |
+
+`publish_template()` est à part des trois autres : ce n'est **pas** un
+frame du protocole binaire 256 octets (qui ignore la notion de template),
+mais un appel HTTP séparé (`POST /api/v1/messages/template`, dérivé de
+l'URL WS configurée — même domaine, sans le `/ws` final) où le serveur
+interpole lui-même les `{{variable}}` du template ; le client ne voit
+jamais le texte du template ni la liste des templates du tenant. Ajoute
+`httpx` comme dépendance (utilisée uniquement par cette méthode).
 
 Reconnexion automatique (backoff exponentiel + jitter), heartbeat PING
 périodique, et ré-abonnement transparent à tous les canaux actifs après
@@ -78,6 +92,10 @@ même canal ; chacun reçoit tous les messages.
   fois (`await asyncio.sleep(0)`) avant de retourner, ce qui ne garantit
   pas que la connexion soit établie si vous enchaînez immédiatement avec
   `publish()`. Documenté dans le docstring de `connect()`.
+- **`publish_template()` n'est pas mis en file** comme `publish()`/
+  `unicast()`/`replay()` si la connexion WS n'est pas (encore) établie —
+  c'est un appel HTTP indépendant, pas un frame du protocole binaire, donc
+  rien à différer : chaque appel part immédiatement avec son propre jeton.
 
 *Résolu depuis la v0.1 : la fonction de désabonnement retournée par
 `subscribe()` envoie désormais un vrai frame UNSUB (`Opcode 0x09`) au

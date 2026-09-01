@@ -31,4 +31,8 @@ android {
 dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
+    // Même version que le runtime OkHttp ci-dessus — sert un vrai serveur
+    // HTTP local en test pour publishTemplate() (RealtimeClientTest),
+    // plutôt que de mocker OkHttpClient à la main.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

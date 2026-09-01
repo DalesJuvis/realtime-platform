@@ -1,6 +1,6 @@
 {
   "name": "@mio/realtime-sdk-react-native",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bindings React Native pour @mio/realtime-sdk — réexporte le contexte/hooks/composants de @mio/realtime-sdk-react, avec reconnexion consciente de AppState et (optionnel) NetInfo.",
   "type": "module",
   "main": "dist/index.js",

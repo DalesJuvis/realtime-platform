@@ -92,11 +92,36 @@ client.publish("orders:42", "commande créée");
 | Fonctionnalité | API |
 |---|---|
 | Publication | `client.publish(channelId, payload)` |
+| Publication d'un template sauvegardé (tenant-portal → Templates) | `client.publishTemplate(channelId, templateId, variables, callback)` |
 | Souscription (canal exact ou motif `orders:*`) | `client.subscribe(channelId, listener) -> AutoCloseable` |
 | Désabonnement | `subscription.close()` (envoie un vrai UNSUB, `Opcode 0x09`) |
 | Envoi direct à un utilisateur | `client.unicast(userId, payload)` |
 | Rattrapage d'historique | `client.replay(channelId, sinceUnixSeconds = 0)` |
 | Évènements de connexion | `client.onConnectionEvent { event -> ... }` |
+
+### Publier un template sauvegardé (HTTP)
+
+`publishTemplate` envoie le `template_id` et les `variables` à interpoler —
+jamais le texte du template ni la liste des templates du tenant, remplis
+**côté serveur** (`POST /api/v1/messages/template`, voir la section
+correspondante de `DOCS.md`). Contrairement à `publish()`, c'est un appel
+HTTP, pas un frame binaire sur le socket déjà ouvert — le protocole 256
+octets n'a aucune notion de template — donc ça fonctionne même sans
+connexion WS active :
+
+```kotlin
+client.publishTemplate("orders:42", "tpl-commande-creee", mapOf("name" to "Ada")) { error ->
+    if (error != null) println("échec : ${error.message}") else println("publié")
+}
+```
+
+> **Caveat :** asynchrone par callback (invoqué depuis le thread
+> planificateur interne du client, jamais le thread appelant ni le thread
+> principal Android — même remarque que pour `MessageListener`), et
+> soumis à la même limite de 211 octets UTF-8 que `publish()`, mais
+> vérifiée **après** interpolation côté serveur : un template court avec
+> des valeurs longues peut dépasser la limite alors que le template seul
+> ne la dépasse pas (`400 INVALID_REQUEST`).
 
 Reconnexion automatique (backoff exponentiel + jitter), heartbeat PING
 périodique, et ré-abonnement transparent à tous les canaux actifs après
@@ -136,6 +161,11 @@ UI Android, ni coroutine).
   contrairement aux SDKs Rust (`abort()` direct, sans handshake) — léger
   écart d'implémentation entre SDKs à harmoniser si la symétrie stricte
   vous importe.
+- **`publishTemplate()` est HTTP, pas un frame du protocole binaire** — le
+  frame fixe 256 octets n'a aucune notion de template. Son callback est
+  invoqué depuis le thread planificateur interne, jamais le thread
+  appelant (même remarque que `MessageListener`/`ConnectionListener`
+  ci-dessus).
 
 ## Développement
 

@@ -1,6 +1,6 @@
 [package]
 name = "realtime-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.75"
 description = "SDK client Rust pour le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets)."
@@ -16,10 +16,19 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"
 tokio-tungstenite = { version = "0.24", features = ["connect", "rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 dashmap = "6"
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "1"
 tracing = "0.1"
 rand = "0.8"
+# Pour `publish_template()` uniquement : un appel REST JSON ponctuel
+# (`POST /api/v1/messages/template`), hors du flux WS binaire. `rustls`
+# plutôt que `native-tls`/OpenSSL pour rester cohérent avec le choix déjà
+# fait pour `tokio-tungstenite` ci-dessus (pas de dépendance OpenSSL native
+# à builder/vendorer), et `default-features = false` pour ne pas tirer les
+# features `reqwest` inutiles à ce SDK (cookies, multipart, etc.).
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

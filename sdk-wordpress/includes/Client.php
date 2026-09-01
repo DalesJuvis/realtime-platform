@@ -1,8 +1,9 @@
 <?php
 /**
  * Client — server-side (PHP) client for the platform's HTTP surface:
- * minting a client token and publishing one message, the two operations
- * that fit a WordPress request's lifecycle (see this package's README for
+ * minting a client token and publishing one message (raw, or a saved
+ * tenant-portal template by id), the operations that fit a WordPress
+ * request's lifecycle (see this package's README for
  * why this is deliberately *not* a persistent-WebSocket client the way
  * `sdk-typescript`/`sdk-python`/`sdk-rust` are — PHP-under-WordPress has
  * no long-lived process to hold a socket open in).
@@ -138,11 +139,57 @@ class Client
     }
 
     /**
+     * Publishes a saved tenant-portal template (Templates page) by id to
+     * `$channelId` — its `{{variable}}` placeholders are filled in
+     * **server-side** from `$variables`, so this call never needs the
+     * template's own text or the tenant's full template list, only
+     * `$templateId` and the values to fill in (see DOCS.md's "Publish a
+     * saved template over HTTP").
+     *
+     * Unlike `publish()`, there's no local pre-network size guard here:
+     * the 211-UTF-8-byte cap is the same, but it's enforced server-side
+     * only, *after* interpolation — this method has no way to know the
+     * rendered length without the template's own text. An oversized
+     * result surfaces as `ClientException` with error code
+     * `INVALID_REQUEST` from the API call itself. `$channelId` is still
+     * checked locally, same as `publish()`.
+     *
      * @param string $channelId
-     * @param string $payload
+     * @param string $templateId From tenant-portal's Templates page.
+     * @param string $token From `mintToken()`.
+     * @param array<string, string> $variables Values to fill
+     *        `{{name}}`-style placeholders with (inner whitespace like
+     *        `{{ name }}` is tolerated); a placeholder with no matching
+     *        entry renders as an empty string, not the literal
+     *        placeholder. Omit for a template with no placeholders.
+     * @return bool
+     * @throws ClientException `TEMPLATE_NOT_FOUND` if `$templateId`
+     *         doesn't exist or belongs to a different tenant.
+     */
+    public function publishTemplate($channelId, $templateId, $token, array $variables = array())
+    {
+        self::assertChannelIdFits($channelId);
+
+        $data = $this->request('/api/v1/messages/template', array(
+            'tenant_id' => $this->tenantId,
+            'channel_id' => $channelId,
+            'template_id' => $templateId,
+            // Cast an empty map to an object so it encodes as JSON `{}`,
+            // never `[]` — json_encode() can't otherwise distinguish an
+            // empty associative array from an empty list, and the API
+            // expects an object (see DOCS.md: "variables is a
+            // string-to-string map, send {} if none").
+            'variables' => empty($variables) ? new \stdClass() : $variables,
+        ), $token);
+
+        return !empty($data['published']);
+    }
+
+    /**
+     * @param string $channelId
      * @throws ClientException
      */
-    private static function assertFits($channelId, $payload)
+    private static function assertChannelIdFits($channelId)
     {
         if (strlen($channelId) > self::MAX_CHANNEL_ID_BYTES) {
             throw new ClientException(
@@ -150,6 +197,16 @@ class Client
                 'CHANNEL_ID_TOO_LONG'
             );
         }
+    }
+
+    /**
+     * @param string $channelId
+     * @param string $payload
+     * @throws ClientException
+     */
+    private static function assertFits($channelId, $payload)
+    {
+        self::assertChannelIdFits($channelId);
         if (strlen($payload) > self::MAX_PAYLOAD_BYTES) {
             throw new ClientException(
                 'payload exceeds ' . self::MAX_PAYLOAD_BYTES . ' bytes — this endpoint does not chunk, ' .

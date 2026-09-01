@@ -17,6 +17,7 @@ export {
   useSubscription,
   useChannel,
   usePublish,
+  usePublishTemplate,
   ChannelSubscriber,
   ConnectionIndicator,
   RealtimeClient,

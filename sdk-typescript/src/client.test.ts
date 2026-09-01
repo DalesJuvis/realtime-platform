@@ -426,3 +426,82 @@ test("a getToken rejection emits error and still reconnects with backoff — no 
 
   client.disconnect();
 });
+
+test("publishTemplate posts to the derived HTTP URL with the client's token and tenant", async () => {
+  const client = new RealtimeClient({
+    wsUrl: "wss://example.test/ws",
+    tenantId: TENANT_ID,
+    token: "my-token",
+  });
+
+  let capturedUrl: string | undefined;
+  let capturedInit: RequestInit | undefined;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    capturedUrl = url;
+    capturedInit = init;
+    return new Response(JSON.stringify({ success: true, data: { published: true } }));
+  }) as typeof fetch;
+
+  try {
+    await client.publishTemplate("orders:42", "template-id-1", { name: "Ada" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(capturedUrl, "https://example.test/api/v1/messages/template");
+  assert.equal(capturedInit?.method, "POST");
+  assert.equal((capturedInit?.headers as Record<string, string>).Authorization, "Bearer my-token");
+  assert.deepEqual(JSON.parse(capturedInit?.body as string), {
+    tenant_id: TENANT_ID,
+    channel_id: "orders:42",
+    template_id: "template-id-1",
+    variables: { name: "Ada" },
+  });
+});
+
+test("publishTemplate rejects with the server's error message on a non-success envelope", async () => {
+  const client = new RealtimeClient({
+    wsUrl: "wss://example.test/ws",
+    tenantId: TENANT_ID,
+    token: "my-token",
+  });
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({ success: false, error: { code: "TEMPLATE_NOT_FOUND", message: "template not found" } }),
+    )) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      () => client.publishTemplate("orders:42", "missing-template"),
+      /template not found/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("publishTemplate re-fetches a fresh token via getToken rather than using a stale one", async () => {
+  const client = new RealtimeClient({
+    wsUrl: "wss://example.test/ws",
+    tenantId: TENANT_ID,
+    getToken: async () => ({ token: "fresh-token" }),
+  });
+
+  let capturedAuth: string | undefined;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    capturedAuth = (init.headers as Record<string, string>).Authorization;
+    return new Response(JSON.stringify({ success: true, data: { published: true } }));
+  }) as typeof fetch;
+
+  try {
+    await client.publishTemplate("orders:42", "template-id-1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(capturedAuth, "Bearer fresh-token");
+});

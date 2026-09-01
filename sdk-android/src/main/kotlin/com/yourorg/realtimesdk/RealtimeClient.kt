@@ -1,7 +1,9 @@
 package com.yourorg.realtimesdk
 
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -39,7 +41,7 @@ internal const val WS_CLOSE_CODE_AUTH_FAILED = 4001
  *
  * API volontairement proche des SDKs TypeScript/Rust/Python du même
  * projet : mêmes opérations (`publish`, `subscribe`, `unicast`, `replay`,
- * `unsubscribe`), mêmes limitations documentées.
+ * `unsubscribe`, `publishTemplate`), mêmes limitations documentées.
  */
 class RealtimeClient(private val config: RealtimeClientConfig) {
 
@@ -148,6 +150,123 @@ class RealtimeClient(private val config: RealtimeClientConfig) {
     fun replay(channelId: String, sinceUnixSeconds: Long = 0) {
         sendOrThrow(Opcode.REPLAY, channelId, sinceUnixSeconds.toString())
     }
+
+    /** Équivalent à l'autre surcharge avec `variables = emptyMap()`. Deux
+     * vraies surcharges plutôt qu'un paramètre par défaut + `@JvmOverloads` :
+     * `callback` doit rester le dernier paramètre pour la syntaxe de lambda
+     * finale Kotlin (`client.publishTemplate(id, tpl) { error -> ... }`), or
+     * `@JvmOverloads` ne peut générer de surcharge qu'en supprimant des
+     * paramètres par défaut *en fin* de liste — impossible ici puisque
+     * `callback`, sans défaut, viendrait après `variables`. */
+    fun publishTemplate(channelId: String, templateId: String, callback: PublishTemplateCallback) {
+        publishTemplate(channelId, templateId, emptyMap(), callback)
+    }
+
+    /**
+     * Publie un template sauvegardé côté tenant-portal (Templates) sur
+     * `channelId` — ses `{{variable}}` sont remplis **côté serveur** à
+     * partir de `variables`, jamais ici : cet appel n'a besoin que du
+     * `templateId` et des valeurs à injecter, jamais du texte du template
+     * ni de la liste complète des templates du tenant (voir la section
+     * "Publish a saved template over HTTP" de DOCS.md,
+     * `POST /api/v1/messages/template`).
+     *
+     * Contrairement à [publish], passe par une requête HTTP, pas le frame
+     * binaire 256 octets du socket déjà ouvert — le protocole n'a aucune
+     * notion de template, seulement `channel_id`+`payload`. Fonctionne
+     * donc même sans connexion WS ouverte, tant qu'un jeton est
+     * disponible ([RealtimeClientConfig.token] ou
+     * [RealtimeClientConfig.tokenProvider] — ce dernier rappelé ici pour
+     * un jeton frais, même logique qu'avant chaque tentative de connexion
+     * WS, voir `resolveHttpToken`).
+     *
+     * Asynchrone par callback plutôt que bloquant, cohérent avec le reste
+     * de cette API volontairement sans coroutines dans sa surface
+     * publique (voir la doc de tête de cette classe) : [callback] est
+     * invoqué depuis le thread planificateur interne de ce client —
+     * jamais le thread appelant, ni le thread principal Android (même
+     * remarque que pour `MessageListener`/`ConnectionListener`, cf.
+     * "Considérations spécifiques Android" du README).
+     *
+     * [callback] reçoit `null` en cas de succès, sinon une exception :
+     * [TemplatePublishException] (avec le code machine de l'API —
+     * `TEMPLATE_NOT_FOUND`, `INVALID_REQUEST`, `RATE_LIMITED`...) si le
+     * serveur a répondu avec une enveloppe d'erreur, une autre exception
+     * (réseau, jeton absent...) sinon.
+     *
+     * ⚠️ Même limite de 211 octets UTF-8 que [publish], mais vérifiée
+     * **après** interpolation côté serveur : un template court avec des
+     * valeurs longues peut dépasser la limite alors que le template seul
+     * ne la dépasse pas. Un `{{name}}` sans entrée correspondante dans
+     * `variables` est rendu comme une chaîne vide, jamais laissé tel quel.
+     */
+    fun publishTemplate(
+        channelId: String,
+        templateId: String,
+        variables: Map<String, String>,
+        callback: PublishTemplateCallback,
+    ) {
+        scheduler.execute {
+            val token = try {
+                resolveHttpToken()
+            } catch (e: Exception) {
+                callback.onComplete(e)
+                return@execute
+            }
+
+            val json = MinimalJson.encodeObject(
+                "tenant_id" to config.tenantId.toString(),
+                "channel_id" to channelId,
+                "template_id" to templateId,
+                "variables" to variables,
+            )
+            val request = Request.Builder()
+                .url("${httpBaseUrl()}/api/v1/messages/template")
+                .header("Authorization", "Bearer $token")
+                .post(json.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            try {
+                config.okHttpClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    val parsed = if (body.isNotEmpty()) MinimalJson.parse(body) as? Map<*, *> else null
+                    if (parsed?.get("success") == true) {
+                        callback.onComplete(null)
+                    } else {
+                        val error = parsed?.get("error") as? Map<*, *>
+                        val code = error?.get("code") as? String
+                        val message = error?.get("message") as? String
+                            ?: "publishTemplate a échoué (HTTP ${response.code})"
+                        callback.onComplete(TemplatePublishException(code, message))
+                    }
+                }
+            } catch (e: Exception) {
+                callback.onComplete(e)
+            }
+        }
+    }
+
+    /** Jeton pour un appel HTTP ponctuel ([publishTemplate]) — indépendant
+     * de la connexion WS elle-même, qui peut très bien ne pas être
+     * ouverte. Avec [RealtimeClientConfig.tokenProvider] configuré, en
+     * récupère toujours un frais (même logique que `openSocket()` avant
+     * chaque tentative de connexion) ; sinon retombe sur
+     * [RealtimeClientConfig.token] déjà fourni. */
+    private fun resolveHttpToken(): String {
+        config.tokenProvider?.let { return it.getToken().token }
+        return config.token
+            ?: throw IllegalStateException("RealtimeClient: aucun jeton disponible — fournissez token ou tokenProvider.")
+    }
+
+    /** Dérive l'URL HTTP de base depuis l'URL WS courante — même domaine,
+     * `/ws` en moins (le listener WS et l'API REST partagent le même
+     * domaine public derrière un reverse proxy en production, voir la doc
+     * de [RealtimeClientConfig.url]). Basé sur `currentUrl` (pas
+     * `config.url`) pour refléter un éventuel `wsUrl` déjà mis à jour par
+     * [RealtimeClientConfig.tokenProvider] lors d'une connexion WS
+     * antérieure — sans connexion WS préalable, égal à `config.url`. */
+    internal fun httpBaseUrl(): String =
+        currentUrl.replaceFirst(Regex("^ws"), "http").replaceFirst(Regex("/ws/?$"), "")
 
     private fun sendOrThrow(opcode: Opcode, channelId: String, payload: String) {
         val ws = webSocket ?: throw IllegalStateException("connexion WebSocket non établie")
@@ -332,6 +451,29 @@ fun interface MessageListener {
 fun interface ConnectionListener {
     fun onEvent(event: ConnectionEvent)
 }
+
+/**
+ * Callback du résultat asynchrone de [RealtimeClient.publishTemplate] —
+ * interface fonctionnelle (SAM), utilisable comme lambda aussi bien
+ * depuis Kotlin que depuis Java, même convention que [MessageListener]/
+ * [ConnectionListener] ailleurs dans ce SDK. [error] est `null` en cas de
+ * succès, sinon l'exception (souvent [TemplatePublishException]).
+ */
+fun interface PublishTemplateCallback {
+    fun onComplete(error: Exception?)
+}
+
+/**
+ * Erreur renvoyée à [PublishTemplateCallback] quand le serveur a répondu
+ * avec l'enveloppe d'erreur commune à toute l'API (`success: false`) pour
+ * [RealtimeClient.publishTemplate]. [code] porte le code machine
+ * (`MISSING_TOKEN`, `UNAUTHORIZED`, `INVALID_REQUEST`,
+ * `TEMPLATE_NOT_FOUND`, `RATE_LIMITED` — voir la section "Publish a saved
+ * template over HTTP" de DOCS.md) pour un branchement programmatique sans
+ * parser [Throwable.message] ; `null` si l'enveloppe reçue n'en portait
+ * pas.
+ */
+class TemplatePublishException(val code: String?, message: String) : Exception(message)
 
 /**
  * Évènement de connexion. `sealed class` plutôt qu'enum car `Closed` et

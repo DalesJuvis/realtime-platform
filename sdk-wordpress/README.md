@@ -12,10 +12,10 @@ transport HTTP différent en dessous (voir "Pourquoi pas..." plus bas).
 
 > **Statut de validation (précis, pas juste rassurant) :**
 > - `includes/Client.php` (mint de jeton, publication HTTP, évènements
->   nommés) — **réellement testé** : 12/12 tests PHPUnit passants
->   (`composer test`), contre un `HttpTransport` factice, sans dépendre de
->   WordPress (voir la doc de tête de `HttpTransport.php` pour pourquoi
->   c'est possible).
+>   nommés, publication d'un template sauvegardé) — **réellement testé** :
+>   16/16 tests PHPUnit passants (`composer test`), contre un
+>   `HttpTransport` factice, sans dépendre de WordPress (voir la doc de
+>   tête de `HttpTransport.php` pour pourquoi c'est possible).
 > - `assets/js/mio-protocol.js` (codec du frame binaire), `mio-client.js`
 >   (client WebSocket navigateur) et `mio-embed.js` (même logique,
 >   consolidée en un seul fichier — voir plus bas) — **réellement
@@ -59,7 +59,7 @@ via le shortcode `[mio_realtime]`.
 
 ```bash
 composer install    # includes/ + tests/php (phpunit en dev uniquement)
-composer test        # 12 tests
+composer test        # 16 tests
 npm test              # 44 tests (assets/js/)
 npm run build          # produit assets/js/*.min.js (terser) — voir scripts/minify.js
 ```
@@ -86,6 +86,10 @@ $client->publish('orders:42', 'commande créée', $minted->token);
 
 // Évènement nommé, même enveloppe JSON que côté navigateur (voir plus bas) :
 $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);
+
+// Template sauvegardé (tenant-portal → Templates) : {{variable}} remplies côté serveur,
+// cet appel n'a besoin que du templateId et des valeurs, jamais du texte du template.
+$client->publishTemplate('orders:42', $templateId, $minted->token, ['name' => 'Ada']);
 ```
 
 Ne jamais renvoyer `$secret` au navigateur — seul `$minted->token` doit en
@@ -117,7 +121,7 @@ la version `.min.js` (build committé, `npm run build`), pas la source
 brute :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
@@ -185,8 +189,8 @@ Deux façons de s'en servir — **directement dans un callback `subscribe()`**
 (contrôle total, canal par canal) :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({ wsUrl: '…', tenantId: '…', token: '…' })
 
@@ -234,6 +238,7 @@ dans le README de `sdk-typescript`.
 | Mint de jeton (serveur) | `Client::mintToken($sub, $ttlSecs = null)` |
 | Publication (serveur, HTTP) | `Client::publish($channelId, $payload, $token)` |
 | Évènement nommé (serveur, HTTP) | `Client::emitEvent($channelId, $event, $token, $data = null)` — même enveloppe JSON que `sdk-typescript`'s `client.channel(id).on()` |
+| Publication d'un template sauvegardé (serveur, HTTP) | `Client::publishTemplate($channelId, $templateId, $token, $variables = [])` — tenant-portal → Templates, `{{variable}}` remplies côté serveur |
 | Jeton pour le navigateur | `GET /wp-json/mio/v1/token` (jamais le secret) |
 | Souscription (navigateur) | `client.subscribe(channelId, handler)` (JS, canal exact ou motif `orders:*`) |
 | Publication (navigateur) | `client.publish(channelId, payload)` (JS, un seul frame) |
@@ -249,6 +254,14 @@ dans le README de `sdk-typescript`.
   `payload` > 211 octets UTF-8 lève `ClientException` côté PHP avant tout
   appel réseau. `assets/js/mio-client.js`'s `publish()` applique la même
   limite côté navigateur.
+- **`Client::publishTemplate()` ne vérifie pas la taille du rendu
+  localement** — contrairement à `publish()`, la limite de 211 octets
+  UTF-8 est appliquée uniquement côté serveur, *après* interpolation des
+  `{{variable}}` : cette méthode n'a aucun moyen de connaître la longueur
+  du rendu sans le texte du template lui-même. Un rendu trop long remonte
+  comme `ClientException` (code `INVALID_REQUEST`) depuis l'appel HTTP,
+  pas comme une erreur locale avant tout appel réseau. `$channelId` reste
+  vérifié localement, comme pour `publish()`.
 - **`assets/js/mio-client.js` n'est pas `sdk-typescript`** — pas
   d'UNICAST, pas de chunking, pas de multiplexage avancé. Choix
   délibéré : rester un fichier `<script>` sans dépendance ni étape de
@@ -261,6 +274,14 @@ dans le README de `sdk-typescript`.
   comme ce canal n'a pas de contrôle d'accès par visiteur côté backend.
   `ttl_secs` y est fixé en dur (3600s) plutôt qu'accepté depuis la
   requête, précisément parce que cette route n'a pas d'authentification.
+- **`publishTemplate()` n'existe que côté PHP (`Client`), pas côté
+  navigateur** — `mio-client.js`/`mio-embed.js` sont des clients WebSocket
+  purs (pas d'`apiUrl` configuré, aucun appel HTTP) et
+  `POST /api/v1/messages/template` n'a pas d'équivalent dans le frame
+  binaire 256 octets (aucun opcode `Template`) : même `sdk-typescript`'s
+  `publishTemplate()` passe par une requête HTTP séparée, pas le socket
+  déjà ouvert. Publiez un template depuis PHP (`Client::publishTemplate()`,
+  typiquement un hook WordPress) plutôt que depuis le navigateur.
 - **Pas de nettoyage automatique de jetons/sessions** — chaque appel à la
   route REST mine un nouveau jeton (le backend ne fait pas de cache de
   jeton côté serveur ; à ajouter si le volume de visiteurs le justifie).

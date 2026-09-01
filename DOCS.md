@@ -93,6 +93,42 @@ Authorization: Bearer <token from /api/v1/auth/tokens>
 > returns `400 INVALID_REQUEST`. Split larger messages into multiple
 > calls, or use a connected SDK client instead.
 
+### Publish a saved template over HTTP
+
+Sends one of the tenant's templates (tenant-portal → Templates) by id
+instead of a raw `payload` — the `{{variable}}` placeholders are filled in
+**server-side**, so the caller never needs the template's own text or the
+tenant's full template list, only the `template_id` and the values to
+fill in. Same bearer client token as `/api/v1/messages`, never the raw
+secret.
+
+```http
+POST https://realtime.example.com:8090/api/v1/messages/template
+Content-Type: application/json
+Authorization: Bearer <token from /api/v1/auth/tokens>
+
+{
+  "tenant_id": "<your-tenant-id>",
+  "channel_id": "orders:42",
+  "template_id": "<template id from tenant-portal>",
+  "variables": { "name": "Ada", "order_id": "42" }
+}
+```
+
+```json
+{ "success": true, "data": { "published": true }, "trace_id": "…" }
+```
+
+Every connected SDK exposes this as `publishTemplate(channelId, templateId, variables)`
+alongside its existing `publish(channelId, payload)`.
+
+> **Caveats:** same 211-byte limit as above, checked *after* interpolation
+> (`400 INVALID_REQUEST` if the rendered text doesn't fit — shorten the
+> template or the values). A `template_id` that doesn't exist, or belongs
+> to a different tenant, returns `404 TEMPLATE_NOT_FOUND`. A variable with
+> no matching entry in `variables` renders as an empty string rather than
+> leaving the `{{placeholder}}` in the sent text.
+
 ## Web Push
 
 ### Background notifications (tab open, hidden)
@@ -678,7 +714,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -690,7 +726,7 @@ source — the plain `.js` files stay in the repo purely for reading:
 `data-ws-url` is the `ws_url` from the mint-token response — hand it
 through as-is, never assemble it from a host/port.
 
-> **Pin the version.** `@v0.1.7` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.8` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
@@ -706,8 +742,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand

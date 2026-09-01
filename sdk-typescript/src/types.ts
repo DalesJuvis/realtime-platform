@@ -53,6 +53,16 @@ export interface RealtimeAdapter {
   publish(channelId: string, payload: string): void | Promise<void>;
 
   /**
+   * Publie un template sauvegardé (tenant-portal → Templates) par son id,
+   * `{{variable}}` remplies côté serveur — voir `RealtimeClient.publishTemplate`.
+   * Optionnel dans l'interface comme `unicast`/`channel` ci-dessous : c'est
+   * une notion propre au moteur maison (templates stockés côté Portal),
+   * sans équivalent chez PubNub/Firebase — leurs adaptateurs ne
+   * l'implémentent donc pas.
+   */
+  publishTemplate?(channelId: string, templateId: string, variables?: Record<string, string>): Promise<void>;
+
+  /**
    * S'abonne à `channelId` (canal exact, ou motif `orders:*` si
    * l'adaptateur le supporte — cf. sa documentation individuelle).
    * Retourne une fonction à appeler pour se désinscrire.

@@ -63,8 +63,9 @@ function OrdersFeed() {
 | `useRealtimeClient()` | Le `RealtimeClient` du Provider englobant, pour un usage direct (`client.replay(...)`, etc.). |
 | `useConnectionState()` | `{ connectionState, lastError }` — `connectionState` : `"idle" \| "connecting" \| "open" \| "closed" \| "error"`. |
 | `useSubscription(channelId, handler)` | Souscription à effet seul, sans re-render — pour piloter autre chose que du state React. |
-| `useChannel(channelId, { limit?, replaySince? })` | Souscription à état : `{ messages, publish, clear }`, re-render à chaque message. |
+| `useChannel(channelId, { limit?, replaySince? })` | Souscription à état : `{ messages, publish, publishTemplate, clear }`, re-render à chaque message. |
 | `usePublish(channelId)` | Publication seule, sans souscription. |
+| `usePublishTemplate(channelId)` | Publication d'un template sauvegardé du tenant (par id, `{{variable}}` remplies côté serveur) seule, sans souscription — HTTP, fonctionne même sans connexion WS ouverte. Voir « Publish a saved template over HTTP » dans le DOCS.md racine. |
 | `<ChannelSubscriber channelId>{state => ...}</ChannelSubscriber>` | Équivalent render-prop de `useChannel`, pour composition JSX ou composants classe. |
 | `<ConnectionIndicator labels?>` | Texte d'état de connexion minimal, non stylé — un point de départ, pas un composant themé. |
 | `useBackgroundNotifications(options?)` | Affiche une `Notification` navigateur pour chaque message reçu tant que l'onglet est caché/sans focus — voir `attachBackgroundNotifications` côté `sdk-typescript`. |

@@ -116,7 +116,8 @@ invalidates only tokens signed with *that* secret, not others.
 Two listener ports (defaults, see `backend/.env`/`Settings`):
 - **`:8090`** — Portal API (`/api/v1/portal/*`) + public Auth
   (`/api/v1/auth/*`) + public Messages/Push (`/api/v1/messages`,
-  `/api/v1/push/subscriptions`). Safe to expose publicly.
+  `/api/v1/messages/template`, `/api/v1/push/subscriptions`). Safe to
+  expose publicly.
 - **`:9090`** — Admin API (`/api/v1/admin/*`, `/api/v1/system/*`).
   **Never expose publicly** — bound to `127.0.0.1` in every production
   compose file. Reach it via SSH tunnel.
@@ -153,6 +154,7 @@ response is JSON-parseable as the error shape above.
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/v1/messages` | HTTP publish, no persistent connection needed. `{tenant_id, channel_id, payload}` → `{published: true}`. No chunking — 211-byte cap. |
+| POST | `/api/v1/messages/template` | Publish a saved template by id instead of a raw payload — `{{variable}}` filled in server-side. `{tenant_id, channel_id, template_id, variables}` → `{published: true}`. Template looked up scoped to this token's own `tenant_id` (foreign/unknown id → `404 TEMPLATE_NOT_FOUND`, indistinguishable). 211-byte cap checked *after* rendering. A variable with no matching entry renders empty, not the literal placeholder. Every connected SDK wraps this as `publishTemplate`/`publish_template` alongside its `publish()`. |
 | POST | `/api/v1/push/subscriptions` | Register a Web Push subscription: `{tenant_id, endpoint, keys: {p256dh, auth}, channels: [...]}`. |
 | DELETE | `/api/v1/push/subscriptions` | Unregister by `endpoint`. |
 
@@ -197,16 +199,16 @@ response is JSON-parseable as the error shape above.
 | `KEY_PAIR_NOT_FOUND` | 404 | `GET /api/v1/portal/keys` before first rotate |
 | `API_KEY_NOT_FOUND` | 404 | `DELETE /api/v1/portal/api-keys/:id`, unknown/not-owned |
 | `API_KEY_NAME_REQUIRED` | 400 | `POST /api/v1/portal/api-keys`, blank name |
-| `TEMPLATE_NOT_FOUND` | 404 | template update/delete, unknown id |
+| `TEMPLATE_NOT_FOUND` | 404 | template update/delete, or `POST /api/v1/messages/template` with an unknown/foreign-tenant `template_id` |
 | `CHANNEL_ID_TOO_LONG` | 400 | portal broadcast, >24 bytes |
 | `PAYLOAD_TOO_LARGE` | 400 | portal broadcast, >211 bytes |
-| `RATE_LIMITED` | 429 | portal broadcast or `POST /api/v1/messages`, quota exhausted |
+| `RATE_LIMITED` | 429 | portal broadcast, `POST /api/v1/messages`, or `POST /api/v1/messages/template`, quota exhausted |
 | `INVALID_LOGO` | 400 | bad MIME type or >2 MB decoded |
 | `WEAK_PASSWORD` | 400 | new password <8 chars |
 | `STORAGE_ERROR` | 500 | underlying DB error, any portal/push route |
 | `UNAUTHORIZED` | 401 | missing/invalid session or admin token; client token doesn't validate for the given `tenant_id` |
-| `MISSING_TOKEN` | 401 | `Authorization` header absent/malformed on `/api/v1/messages` or push routes |
-| `INVALID_REQUEST` | 400 | `POST /api/v1/messages` body fails validation (channel/payload size) |
+| `MISSING_TOKEN` | 401 | `Authorization` header absent/malformed on `/api/v1/messages`, `/api/v1/messages/template`, or push routes |
+| `INVALID_REQUEST` | 400 | `POST /api/v1/messages` body fails validation (channel/payload size); same for `/api/v1/messages/template`, but payload size is checked *after* `{{variable}}` interpolation |
 | `UNKNOWN_TENANT` | 404 | admin mint-token for a `:id` that doesn't exist |
 
 ## 6. Wire protocol — 256-byte fixed frame
@@ -534,7 +536,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js` (dependency-free
 `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.7/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`).
 
 **Full API — `Mio\Realtime\Client`**

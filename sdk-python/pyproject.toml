@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "realtime-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "SDK client Python pour le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets), avec reconnexion automatique."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "UNLICENSED" }
 dependencies = [
     "websockets>=12.0",
+    "httpx>=0.24",
 ]
 
 [project.optional-dependencies]

@@ -201,4 +201,70 @@ final class ClientTest extends TestCase
             self::assertCount(0, $transport->requests, 'must fail before any HTTP call, same as publish() itself');
         }
     }
+
+    public function testPublishTemplateSendsBearerTokenTemplateIdAndVariables()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array(
+            'success' => true,
+            'data' => array('published' => true),
+        )));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'super-secret', $transport);
+
+        $ok = $client->publishTemplate('orders:42', 'template-id-1', 'a-client-token', array('name' => 'Ada'));
+
+        self::assertTrue($ok);
+        $req = $transport->requests[0];
+        self::assertSame('https://realtime.example.com:8090/api/v1/messages/template', $req['url']);
+        self::assertSame('Bearer a-client-token', $req['headers']['Authorization']);
+        $body = json_decode($req['body'], true);
+        self::assertSame('tenant-1', $body['tenant_id']);
+        self::assertSame('orders:42', $body['channel_id']);
+        self::assertSame('template-id-1', $body['template_id']);
+        self::assertSame(array('name' => 'Ada'), $body['variables']);
+        self::assertArrayNotHasKey('secret', $body);
+    }
+
+    public function testPublishTemplateEncodesAnEmptyVariablesMapAsAJsonObjectNotAnArray()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array(
+            'success' => true,
+            'data' => array('published' => true),
+        )));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        $client->publishTemplate('orders:42', 'template-id-1', 'a-client-token');
+
+        $req = $transport->requests[0];
+        self::assertStringContainsString('"variables":{}', $req['body']);
+    }
+
+    public function testPublishTemplateRejectsOversizedChannelIdWithoutAnyNetworkCall()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(200, array('success' => true, 'data' => array())));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        $this->expectException(ClientException::class);
+        try {
+            $client->publishTemplate(str_repeat('c', 25), 'template-id-1', 'token');
+        } finally {
+            self::assertCount(0, $transport->requests, 'must fail before any HTTP call');
+        }
+    }
+
+    public function testPublishTemplateSurfacesTemplateNotFoundAsClientException()
+    {
+        $transport = new FakeHttpTransport($this->jsonResponse(404, array(
+            'success' => false,
+            'error' => array('code' => 'TEMPLATE_NOT_FOUND', 'message' => 'no such template', 'trace_id' => 'xyz'),
+        )));
+        $client = new Client('https://realtime.example.com:8090', 'tenant-1', 'secret', $transport);
+
+        try {
+            $client->publishTemplate('orders:42', 'missing-template', 'token');
+            self::fail('expected a ClientException');
+        } catch (ClientException $e) {
+            self::assertSame('TEMPLATE_NOT_FOUND', $e->getErrorCode());
+            self::assertSame(404, $e->getHttpStatus());
+        }
+    }
 }

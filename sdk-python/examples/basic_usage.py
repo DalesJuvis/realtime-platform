@@ -37,6 +37,11 @@ async def main() -> None:
         await client.unicast("user-789", "message direct")
         await client.replay("orders:42", 0)  # rattrape tout l'historique disponible
 
+        # Appel HTTP séparé (pas un frame du protocole binaire) : le
+        # serveur interpole lui-même les `{{variable}}` du template
+        # `template_id`, choisi côté tenant-portal → Templates.
+        await client.publish_template("orders:42", "tmpl-order-created", {"order_id": "42"})
+
         await asyncio.sleep(3600)
 
 

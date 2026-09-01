@@ -105,4 +105,81 @@ final class LaravelHttpTransportTest extends TestCase
             self::assertSame(401, $e->getHttpStatus());
         }
     }
+
+    public function testPublishTemplateSendsBearerTokenAndTenantScopedBody()
+    {
+        $factory = new Factory();
+        $factory->fake([
+            '*' => Factory::response(
+                ['success' => true, 'data' => ['published' => true]],
+                200
+            ),
+        ]);
+
+        $transport = new LaravelHttpTransport($factory, 'https://realtime.example.com:8090', 'tenant-1');
+
+        $ok = $transport->publishTemplate('orders:42', 'template-uuid', 'a-client-token', ['name' => 'Ada']);
+
+        self::assertTrue($ok);
+        $factory->assertSent(function ($request) {
+            return $request->url() === 'https://realtime.example.com:8090/api/v1/messages/template'
+                && $request->hasHeader('Authorization', 'Bearer a-client-token')
+                && $request['tenant_id'] === 'tenant-1'
+                && $request['channel_id'] === 'orders:42'
+                && $request['template_id'] === 'template-uuid'
+                && $request['variables'] === ['name' => 'Ada'];
+        });
+    }
+
+    public function testPublishTemplateSendsAnEmptyJsonObjectWhenNoVariablesAreGiven()
+    {
+        $factory = new Factory();
+        $factory->fake([
+            '*' => Factory::response(
+                ['success' => true, 'data' => ['published' => true]],
+                200
+            ),
+        ]);
+
+        $transport = new LaravelHttpTransport($factory, 'https://realtime.example.com:8090', 'tenant-1');
+
+        $transport->publishTemplate('orders:42', 'template-uuid', 'a-client-token');
+
+        $factory->assertSent(function ($request) {
+            // json_decode(..., true) turns both `{}` and `[]` into `[]`, so assert on
+            // the raw body to prove `variables` was actually sent as a JSON object.
+            return strpos($request->body(), '"variables":{}') !== false;
+        });
+    }
+
+    public function testPublishTemplateThrowsClientExceptionOnTemplateNotFound()
+    {
+        $factory = new Factory();
+        $factory->fake([
+            '*' => Factory::response(
+                ['success' => false, 'error' => ['code' => 'TEMPLATE_NOT_FOUND', 'message' => 'no such template']],
+                404
+            ),
+        ]);
+
+        $transport = new LaravelHttpTransport($factory, 'https://realtime.example.com:8090', 'tenant-1');
+
+        try {
+            $transport->publishTemplate('orders:42', 'missing-template', 'a-client-token');
+            self::fail('expected a ClientException');
+        } catch (\Mio\Realtime\ClientException $e) {
+            self::assertSame('TEMPLATE_NOT_FOUND', $e->getErrorCode());
+            self::assertSame(404, $e->getHttpStatus());
+        }
+    }
+
+    public function testPublishTemplateThrowsLogicExceptionWithoutApiUrlOrTenantId()
+    {
+        $factory = new Factory();
+        $transport = new LaravelHttpTransport($factory);
+
+        $this->expectException(\LogicException::class);
+
+        $transport->publishTemplate('orders:42', 'template-uuid', 'a-client-token');
+    }
 }
