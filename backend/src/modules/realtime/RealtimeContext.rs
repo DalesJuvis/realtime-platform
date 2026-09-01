@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use crate::modules::auth::services::TokenService::TokenService;
 use crate::modules::metrics::services::MetricsService::MetricsService;
+use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
 use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
 use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
 use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
@@ -26,4 +27,11 @@ pub struct RealtimeContext {
     pub push_subscriptions: Arc<PushSubscriptionRepository>,
     pub rate_limiter: Arc<RateLimitService>,
     pub metrics: Arc<MetricsService>,
+    /// Shared with `PortalContext::templates` — same repository instance,
+    /// same SQLite pool. `POST /api/v1/messages/template` is the only
+    /// realtime-domain use of it (see `PublishTemplateHttpUseCase`); it's
+    /// still a `portal::` type because templates are portal-authored data,
+    /// just read here through a client-token-scoped path instead of a
+    /// portal session.
+    pub templates: Arc<MessageTemplateRepository>,
 }

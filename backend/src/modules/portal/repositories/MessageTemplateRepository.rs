@@ -48,6 +48,22 @@ impl MessageTemplateRepository {
         })
     }
 
+    /// `None` covers both "no such id" and "belongs to a different
+    /// tenant" — same non-leaking shape as `update`/`delete` returning
+    /// `false` for either case, just as an `Option` since callers here
+    /// need the row itself, not just a yes/no.
+    pub async fn find_by_id(&self, tenant_id: TenantId, id: Uuid) -> Result<Option<MessageTemplate>, sqlx::Error> {
+        let row = sqlx::query_as::<_, MessageTemplateRow>(
+            "SELECT id, tenant_id, name, body, created_at, updated_at FROM message_templates \
+             WHERE id = ? AND tenant_id = ?",
+        )
+        .bind(id.to_string())
+        .bind(tenant_id.to_string())
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(MessageTemplateRow::into_entity))
+    }
+
     pub async fn list_for_tenant(&self, tenant_id: TenantId) -> Result<Vec<MessageTemplate>, sqlx::Error> {
         let rows = sqlx::query_as::<_, MessageTemplateRow>(
             "SELECT id, tenant_id, name, body, created_at, updated_at FROM message_templates \

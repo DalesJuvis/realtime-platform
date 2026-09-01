@@ -168,6 +168,15 @@ async fn main() {
         metrics.clone(),
     );
 
+    // Constructed here (not down by `portal_ctx`, where it used to live)
+    // so `RealtimeContext` can also hold it — `POST /api/v1/messages/template`
+    // needs the same tenant-scoped template lookup the Portal already uses,
+    // and this is the one `Arc`, shared by both contexts, not a second
+    // repository instance over the same table.
+    let templates = Arc::new(
+        modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository::new(portal_pool.clone()),
+    );
+
     let realtime_ctx = RealtimeContext {
         auth: auth.clone(),
         channel_router: channel_router.clone(),
@@ -176,6 +185,7 @@ async fn main() {
         push_subscriptions: push_subscriptions.clone(),
         rate_limiter: rate_limiter.clone(),
         metrics: metrics.clone(),
+        templates: templates.clone(),
     };
 
     // --- Admin API ---------------------------------------------------------
@@ -258,9 +268,6 @@ async fn main() {
         Err(err) => tracing::error!(error = %err, "failed to reload API key pairs from storage"),
     }
 
-    let templates = Arc::new(
-        modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository::new(portal_pool.clone()),
-    );
     let workspace_profile = Arc::new(
         modules::portal::repositories::WorkspaceProfileRepository::WorkspaceProfileRepository::new(portal_pool.clone()),
     );

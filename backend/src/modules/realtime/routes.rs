@@ -1,6 +1,7 @@
 //! # routes (realtime HTTP surface)
 //!
-//! **Action:** Registers the HTTP publish route under `/api/v1/messages`.
+//! **Action:** Registers the HTTP publish routes under `/api/v1/messages`
+//! — a raw-payload one and a `template_id` one.
 //! **Input:** `RealtimeContext` (reused as-is — this is the same publish
 //! pipeline as WS/TCP, just a different entry point, so no separate
 //! context struct).
@@ -12,14 +13,21 @@
 //! ## Security
 //! Guarded by a bearer client token (`Authorization` header), validated
 //! against the request body's `tenant_id` via `TokenService::validate` —
-//! never a raw tenant secret. See `PublishMessageHttpController`.
+//! never a raw tenant secret. See `PublishMessageHttpController` and
+//! `PublishTemplateHttpController`. The latter reads a template row
+//! (`RealtimeContext::templates`, tenant-scoped by the same token) but
+//! never exposes the tenant's template list itself — only a
+//! caller-supplied `template_id` renders, so a device still can't
+//! enumerate or read templates it wasn't already told about.
 
 use axum::http::Method;
 use axum::routing::{delete, post};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 
-use crate::modules::realtime::controllers::{PublishMessageHttpController, PushSubscriptionController};
+use crate::modules::realtime::controllers::{
+    PublishMessageHttpController, PublishTemplateHttpController, PushSubscriptionController,
+};
 use crate::modules::realtime::RealtimeContext::RealtimeContext;
 
 pub fn router(ctx: RealtimeContext) -> Router {
@@ -28,6 +36,7 @@ pub fn router(ctx: RealtimeContext) -> Router {
 
     Router::new()
         .route("/api/v1/messages", post(PublishMessageHttpController::handle))
+        .route("/api/v1/messages/template", post(PublishTemplateHttpController::handle))
         .route(
             "/api/v1/push/subscriptions",
             post(PushSubscriptionController::register).delete(PushSubscriptionController::unregister),
@@ -54,6 +63,7 @@ mod tests {
     use crate::modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
     use crate::modules::push::ports::PushPort::PushPort;
     use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
+    use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
     use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
     use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
     use crate::modules::realtime::services::PresenceService::PresenceService;
@@ -74,7 +84,8 @@ mod tests {
         });
         let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool));
+        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool.clone()));
+        let templates = Arc::new(MessageTemplateRepository::new(pool));
         let push_fallback = PushFallbackService::new(
             channel_router.clone(),
             push,
@@ -92,6 +103,7 @@ mod tests {
             push_subscriptions,
             rate_limiter: rate_limiter.clone(),
             metrics,
+            templates,
         };
         (ctx, auth, channel_router, rate_limiter)
     }
@@ -119,6 +131,17 @@ mod tests {
         let mut req = Request::builder()
             .method("POST")
             .uri("/api/v1/messages")
+            .header("content-type", "application/json");
+        if let Some(h) = auth_header {
+            req = req.header("authorization", h);
+        }
+        app.oneshot(req.body(Body::from(body.to_string())).unwrap()).await.unwrap()
+    }
+
+    async fn post_template(app: Router, auth_header: Option<&str>, body: serde_json::Value) -> axum::response::Response {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/v1/messages/template")
             .header("content-type", "application/json");
         if let Some(h) = auth_header {
             req = req.header("authorization", h);
@@ -159,6 +182,56 @@ mod tests {
         let raw = rx.try_recv().expect("subscriber should have received the HTTP-published frame");
         let frame = crate::entities::Frame::Frame::parse(&raw).unwrap();
         assert_eq!(frame.payload(), "hello via http");
+    }
+
+    #[tokio::test]
+    async fn publishes_a_template_with_filled_variables_and_reaches_a_subscriber() {
+        let (ctx, auth, channel_router, _) = test_ctx().await;
+        let tenant = Uuid::new_v4();
+        auth.register_tenant(tenant, b"secret".to_vec());
+        let token = auth.issue_token(tenant, "user-1", 60).unwrap();
+
+        let template = ctx.templates.create(tenant, "Welcome", "Hi {{name}}, welcome to {{place}}!").await.unwrap();
+
+        let key = ChannelKey::new(tenant, "room-1");
+        let mut rx = channel_router.subscribe(tenant, &key).unwrap();
+
+        let resp = post_template(
+            router(ctx),
+            Some(&format!("Bearer {token}")),
+            json!({
+                "tenant_id": tenant,
+                "channel_id": "room-1",
+                "template_id": template.id,
+                "variables": { "name": "Ada", "place": "mio" },
+            }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let raw = rx.try_recv().expect("subscriber should have received the rendered template frame");
+        let frame = crate::entities::Frame::Frame::parse(&raw).unwrap();
+        assert_eq!(frame.payload(), "Hi Ada, welcome to mio!");
+    }
+
+    #[tokio::test]
+    async fn rejects_a_template_id_belonging_to_a_different_tenant() {
+        let (ctx, auth, ..) = test_ctx().await;
+        let tenant_a = Uuid::new_v4();
+        let tenant_b = Uuid::new_v4();
+        auth.register_tenant(tenant_a, b"secret-a".to_vec());
+        auth.register_tenant(tenant_b, b"secret-b".to_vec());
+        let token_for_b = auth.issue_token(tenant_b, "user-1", 60).unwrap();
+
+        let template = ctx.templates.create(tenant_a, "Secret", "only for tenant A").await.unwrap();
+
+        let resp = post_template(
+            router(ctx),
+            Some(&format!("Bearer {token_for_b}")),
+            json!({ "tenant_id": tenant_b, "channel_id": "room-1", "template_id": template.id, "variables": {} }),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

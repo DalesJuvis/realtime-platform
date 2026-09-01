@@ -158,6 +158,7 @@ mod tests {
     use crate::entities::RateLimitConfig::RateLimitConfig;
     use crate::modules::auth::services::TokenService::TokenService;
     use crate::modules::metrics::services::MetricsService::MetricsService;
+    use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
     use crate::modules::push::adapters::FcmPushAdapter::{FcmConfig, FcmPushAdapter};
     use crate::modules::push::ports::PushPort::PushPort;
     use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
@@ -180,11 +181,21 @@ mod tests {
         });
         let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
-        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool));
+        let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool.clone()));
+        let templates = Arc::new(MessageTemplateRepository::new(pool));
         let push_fallback =
             PushFallbackService::new(channel_router.clone(), push, None, push_subscriptions.clone(), None, metrics.clone());
 
-        RealtimeContext { auth, channel_router, presence, push_fallback, push_subscriptions, rate_limiter, metrics }
+        RealtimeContext {
+            auth,
+            channel_router,
+            presence,
+            push_fallback,
+            push_subscriptions,
+            rate_limiter,
+            metrics,
+            templates,
+        }
     }
 
     /// The one behavior this whole change exists for: a real WS client
