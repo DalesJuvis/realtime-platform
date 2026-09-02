@@ -3,6 +3,7 @@ pub mod LoginController;
 pub mod ListSessionsController;
 pub mod MintTokenController;
 pub mod GetOverviewController;
+pub mod GetVapidKeyController;
 pub mod SignupController;
 pub mod GetKeysController;
 pub mod RotateSecretController;

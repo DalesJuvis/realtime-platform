@@ -14,3 +14,4 @@ pub mod TemplateDto;
 pub mod WorkspaceProfileDto;
 pub mod ChangePasswordDto;
 pub mod ApiKeyDto;
+pub mod VapidKeyDto;

@@ -304,6 +304,7 @@ async fn main() {
         push_fallback: realtime_ctx.push_fallback.clone(),
         rate_limiter: realtime_ctx.rate_limiter.clone(),
         public_ws_url: public_ws_url.clone(),
+        vapid_public_key: settings.vapid_public_key.clone().map(Arc::from),
     };
     // Public HTTP token-issuance ("auth before connect") — merged onto the
     // same listener as the Portal API: both are meant to be reachable by a

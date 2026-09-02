@@ -45,4 +45,11 @@ pub struct PortalContext {
     /// `Settings::public_ws_url` — see `auth::services::WsUrlService`'s
     /// doc comment.
     pub public_ws_url: Option<Arc<str>>,
+    /// `Settings::vapid_public_key` — one keypair per backend *instance*,
+    /// shared by every tenant on it (unlike `tenant_secrets`/`api_keys`,
+    /// this is not tenant-scoped data). `None` when Web Push isn't
+    /// configured on this deployment at all. Public by design, same as
+    /// `tenant_id` — safe to hand straight to a browser/client SDK's
+    /// `subscribeToPush`, never a secret.
+    pub vapid_public_key: Option<Arc<str>>,
 }

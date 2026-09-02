@@ -24,6 +24,7 @@ import { ActivityChart, type ActivitySample } from '@components/shared/ActivityC
 import { SetupGuideCard } from '@components/shared/SetupGuideCard'
 import { CopyButton } from '@components/shared/CopyButton'
 import { MintTokenCard } from '@components/shared/MintTokenCard'
+import { VapidKeyCard } from '@components/shared/VapidKeyCard'
 import { getOverviewAction } from '@actions/overview/getOverview.action'
 import { getChannelsAction } from '@actions/channels/getChannels.action'
 import { getTemplatesAction } from '@actions/templates/getTemplates.action'
@@ -378,6 +379,7 @@ export default function OverviewPage() {
           </Card>
 
           <MintTokenCard />
+          <VapidKeyCard />
         </div>
 
         <div className="space-y-6 lg:sticky lg:top-8 lg:self-start">

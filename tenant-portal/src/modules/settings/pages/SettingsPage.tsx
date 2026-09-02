@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@components/ui/tabs'
 import { Avatar, AvatarImage, AvatarFallback } from '@components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@components/ui/select'
 import { ConfirmDialog } from '@components/shared/ConfirmDialog'
+import { VapidKeyCard } from '@components/shared/VapidKeyCard'
 import { useDialog } from '@providers/DialogProvider'
 import { getKeysAction } from '@actions/keys/getKeys.action'
 import { rotateSecretAction } from '@actions/keys/rotateSecret.action'
@@ -510,8 +511,11 @@ export default function SettingsPage() {
         <TabsContent value="security">
           <SecurityTab />
         </TabsContent>
-        <TabsContent value="keys">
+        <TabsContent value="keys" className="space-y-6">
           <KeysTab />
+          <div className="max-w-xl">
+            <VapidKeyCard />
+          </div>
         </TabsContent>
         <TabsContent value="sessions">
           <SessionsTab />

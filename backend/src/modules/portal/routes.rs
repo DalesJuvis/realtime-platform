@@ -28,7 +28,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::modules::portal::controllers::{
     BroadcastController, ChangePasswordController, CreateTemplateController, DeleteTemplateController,
-    GenerateApiKeyController, GetKeysController, GetOverviewController, GetProfileController,
+    GenerateApiKeyController, GetKeysController, GetOverviewController, GetProfileController, GetVapidKeyController,
     ListApiKeysController, ListChannelsController, ListSessionsController, ListTemplatesController, LoginController,
     MintTokenController, RegisterController, RevokeApiKeyController, RotateSecretController, SignupController,
     UpdateProfileController, UpdateTemplateController, UploadLogoController,
@@ -49,6 +49,7 @@ fn protected_segment_routes(ctx: PortalContext) -> Router {
         .route("/sessions", get(ListSessionsController::handle))
         .route("/tokens", post(MintTokenController::handle))
         .route("/overview", get(GetOverviewController::handle))
+        .route("/vapid-key", get(GetVapidKeyController::handle))
         .route("/keys", get(GetKeysController::handle))
         .route("/keys/rotate", post(RotateSecretController::handle))
         .route("/api-keys", get(ListApiKeysController::handle).post(GenerateApiKeyController::handle))
@@ -153,6 +154,7 @@ mod tests {
             push_fallback,
             rate_limiter: Arc::new(RateLimitService::new(Default::default())),
             public_ws_url: None,
+            vapid_public_key: None,
         };
         (ctx, channel_router)
     }
@@ -231,6 +233,42 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let keys: Keys = body_json(resp).await;
         assert_eq!(keys.secret_key, signup_data.keys.secret_key);
+    }
+
+    #[derive(Deserialize, Default)]
+    struct VapidKey {
+        vapid_public_key: Option<String>,
+    }
+
+    #[tokio::test]
+    async fn vapid_key_is_null_when_web_push_is_not_configured() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "no-webpush@example.com").await;
+
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/vapid-key", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let key: VapidKey = body_json(resp).await;
+        assert!(key.vapid_public_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn vapid_key_returns_the_configured_instance_wide_key() {
+        let (mut ctx, _) = test_ctx().await;
+        ctx.vapid_public_key = Some(Arc::from("test-vapid-public-key"));
+        let app = router(ctx);
+        let signup_data = signup(&app, "webpush@example.com").await;
+
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/vapid-key", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let key: VapidKey = body_json(resp).await;
+        assert_eq!(key.vapid_public_key.as_deref(), Some("test-vapid-public-key"));
     }
 
     #[tokio::test]
