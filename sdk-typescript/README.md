@@ -227,6 +227,7 @@ import {
   requestNotificationPermission,
   registerPushServiceWorker,
   subscribeToPush,
+  guessDeviceLabel,
 } from "@mio/realtime-sdk";
 
 // 1. Onglet ouvert mais caché/sans focus — fonctionne dès aujourd'hui,
@@ -241,7 +242,10 @@ attachBackgroundNotifications(client);
 //    POST /api/v1/push/subscriptions dans ce repo pour un exemple complet).
 const registration = await registerPushServiceWorker("/sw.js");
 const subscription = await subscribeToPush(registration, vapidPublicKey);
-// POSTez `subscription` ({ endpoint, keys: { p256dh, auth } }) à votre backend.
+// POSTez `subscription` ({ endpoint, keys: { p256dh, auth } }) à votre backend,
+// avec un `device_label` (optionnel) pour distinguer les appareils d'un
+// même utilisateur dans une liste (un téléphone, un navigateur de bureau…) :
+// { ...subscription, channels: ["orders:*"], device_label: guessDeviceLabel() }
 ```
 
 **Ce que `subscribeToPush()` ne garantit pas :** un navigateur réellement

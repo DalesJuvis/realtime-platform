@@ -157,6 +157,51 @@ export async function unsubscribeFromPush(registration: ServiceWorkerRegistratio
   return existing.unsubscribe();
 }
 
+/**
+ * Devine un libellé humainement lisible ("Chrome sur Windows", "Safari sur
+ * iPhone") à partir de `navigator.userAgent` — pratique pour distinguer les
+ * appareils d'un même utilisateur ayant plusieurs abonnements Push actifs
+ * (un téléphone, un navigateur de bureau, etc.), chacun identifié par son
+ * propre `endpoint` côté serveur (voir `PushSubscriptionInfo`). Pas de
+ * bibliothèque de détection : ceci n'a besoin d'être correct que pour un
+ * humain qui parcourt une liste d'appareils, pas pour une vraie détection
+ * de plateforme — une supposition fausse est sans conséquence, le libellé
+ * n'est jamais utilisé pour du routage ou une décision de sécurité.
+ *
+ * Aucune valeur renvoyée n'est envoyée automatiquement au serveur : passez
+ * le résultat vous-même dans le corps de votre requête d'inscription (le
+ * champ optionnel `device_label` de `POST /api/v1/push/subscriptions`).
+ */
+export function guessDeviceLabel(): string {
+  if (typeof navigator === "undefined") return "Unknown device";
+  const ua = navigator.userAgent;
+
+  const os = (() => {
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/Android/.test(ua)) return "Android";
+    if (/Mac OS X/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "Windows";
+    if (/Linux/.test(ua)) return "Linux";
+    return null;
+  })();
+
+  const browser = (() => {
+    if (/Edg\//.test(ua)) return "Edge";
+    if (/OPR\//.test(ua)) return "Opera";
+    // Le user-agent de Chrome contient aussi le jeton de Safari, d'où l'ordre de test.
+    if (/Chrome\//.test(ua)) return "Chrome";
+    if (/CriOS\//.test(ua)) return "Chrome";
+    if (/FxiOS\//.test(ua)) return "Firefox";
+    if (/Firefox\//.test(ua)) return "Firefox";
+    if (/Safari\//.test(ua)) return "Safari";
+    return null;
+  })();
+
+  if (browser && os) return `${browser} on ${os}`;
+  return browser ?? os ?? "Unknown device";
+}
+
 function toSubscriptionInfo(subscription: PushSubscription): PushSubscriptionInfo {
   const p256dh = subscription.getKey("p256dh");
   const auth = subscription.getKey("auth");

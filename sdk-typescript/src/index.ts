@@ -35,6 +35,7 @@ export {
   registerPushServiceWorker,
   subscribeToPush,
   unsubscribeFromPush,
+  guessDeviceLabel,
 } from "./notifications.js";
 export type {
   BackgroundNotificationOptions,
