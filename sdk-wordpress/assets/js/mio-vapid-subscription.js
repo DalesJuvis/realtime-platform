@@ -237,15 +237,20 @@
   // Never runs outside a browser (no `document`), and never runs without
   // the required attributes — importing this file for its exports below
   // without configuring it is inert, same guarantee as mio-embed.js.
+  //
+  // Waits for DOMContentLoaded before looking up data-button when the
+  // document is still loading: a script pasted in <head> (the placement
+  // this file's own docs recommend, matching mio-embed.js's convention)
+  // executes before <body>'s button element exists yet. An earlier
+  // version looked the button up immediately and silently gave up if it
+  // wasn't there yet — no error, no event, just a click handler that was
+  // never attached. This is why it now waits instead of guessing.
   // ===========================================================================
   function autoInit() {
     if (typeof document === 'undefined' || !document.currentScript) return;
     var script = document.currentScript;
     var ds = script.dataset || {};
     if (!ds.apiBaseUrl || !ds.tenantId || !ds.token || !ds.vapidPublicKey || !ds.button) return;
-
-    var button = document.querySelector(ds.button);
-    if (!button) return;
 
     var options = {
       apiBaseUrl: ds.apiBaseUrl,
@@ -257,13 +262,28 @@
       deviceLabel: ds.deviceLabel || undefined,
     };
 
-    button.addEventListener('click', function () {
-      subscribe(options).then(function (result) {
-        button.dispatchEvent(new CustomEvent('mio:vapid-subscribed', { bubbles: true, detail: result }));
-      }, function (err) {
-        button.dispatchEvent(new CustomEvent('mio:vapid-subscription-error', { bubbles: true, detail: { error: err } }));
+    function wireButton() {
+      var button = document.querySelector(ds.button);
+      if (!button) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('mio-vapid-subscription.js: data-button "' + ds.button + '" matched no element — nothing wired.');
+        }
+        return;
+      }
+      button.addEventListener('click', function () {
+        subscribe(options).then(function (result) {
+          button.dispatchEvent(new CustomEvent('mio:vapid-subscribed', { bubbles: true, detail: result }));
+        }, function (err) {
+          button.dispatchEvent(new CustomEvent('mio:vapid-subscription-error', { bubbles: true, detail: { error: err } }));
+        });
       });
-    });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', wireButton);
+    } else {
+      wireButton();
+    }
   }
 
   var exportsObject = {

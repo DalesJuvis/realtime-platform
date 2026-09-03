@@ -536,7 +536,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js`/`mio-vapid-subscription.js`
 (dependency-free `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`; see §9 for `mio-vapid-subscription.js`).
 
 **Full API — `Mio\Realtime\Client`**
@@ -616,7 +616,7 @@ same flow as a single dependency-free `<script>` tag — every credential a
 `data-*` property, `data-button` (CSS selector) wired to
 `window.MioVapidSubscription.subscribe()` instead of auto-running on load
 (permission needs a user gesture). Hosted via jsDelivr like `mio-embed.js`
-(§ WordPress below): `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js`.
+(§ WordPress below): `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-vapid-subscription.min.js`.
 
 ## 10. Compile/test status per component (don't overclaim reliability)
 

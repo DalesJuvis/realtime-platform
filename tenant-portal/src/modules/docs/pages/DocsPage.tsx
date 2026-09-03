@@ -712,7 +712,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title={t.docs.embedScriptTitle}
               description={t.docs.embedScriptDescription}
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
@@ -732,7 +732,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title={t.docs.embedVapidTitle}
               description={t.docs.embedVapidDescription}
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
   data-api-base-url="${apiUrl}"
   data-tenant-id="${tid}"
   data-token="…"
@@ -752,8 +752,8 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title={t.docs.embedCustomTitle}
               description={t.docs.embedCustomDescription}
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-client.min.js"></script>
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: '${wsUrl}', // the ws_url from your mint-token response
