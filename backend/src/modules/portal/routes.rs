@@ -29,8 +29,10 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::modules::portal::controllers::{
     BroadcastController, ChangePasswordController, CreateTemplateController, DeleteTemplateController,
     GenerateApiKeyController, GetKeysController, GetOverviewController, GetProfileController, GetVapidKeyController,
-    ListApiKeysController, ListChannelsController, ListSessionsController, ListTemplatesController, LoginController,
-    MintTokenController, RegisterController, RevokeApiKeyController, RotateSecretController, SignupController,
+    ListApiKeysController, ListChannelsController, ListNotificationsController, ListPushSubscriptionsController,
+    ListSessionsController, ListTemplatesController, LoginController, MarkAllNotificationsReadController,
+    MarkNotificationReadController, MintTokenController, RegisterController, RevokeApiKeyController,
+    RevokePushSubscriptionController, RotateSecretController, SendTestPushController, SignupController,
     UpdateProfileController, UpdateTemplateController, UploadLogoController,
 };
 use crate::modules::portal::middleware::PortalSessionGuard;
@@ -61,6 +63,14 @@ fn protected_segment_routes(ctx: PortalContext) -> Router {
             "/templates/:id",
             put(UpdateTemplateController::handle).delete(DeleteTemplateController::handle),
         )
+        .route("/notifications", get(ListNotificationsController::handle))
+        .route("/notifications/read-all", post(MarkAllNotificationsReadController::handle))
+        .route("/notifications/:id/read", post(MarkNotificationReadController::handle))
+        .route(
+            "/push-subscriptions",
+            get(ListPushSubscriptionsController::handle).delete(RevokePushSubscriptionController::handle),
+        )
+        .route("/push-subscriptions/test", post(SendTestPushController::handle))
         .route("/profile", get(GetProfileController::handle).put(UpdateProfileController::handle))
         .route(
             "/profile/logo",
@@ -101,10 +111,12 @@ mod tests {
     use tower::ServiceExt; // for `Router::oneshot`
 
     use crate::entities::ChannelKey::ChannelKey;
+    use crate::entities::PushSubscription::PushSubscription;
     use crate::modules::auth::services::TokenService::TokenService;
     use crate::modules::metrics::services::MetricsService::MetricsService;
     use crate::modules::portal::repositories::ApiKeyRepository::ApiKeyRepository;
     use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
+    use crate::modules::portal::repositories::NotificationRepository::NotificationRepository;
     use crate::modules::portal::repositories::TenantSecretStoreRepository::TenantSecretStoreRepository;
     use crate::modules::portal::repositories::TenantUserRepository::TenantUserRepository;
     use crate::modules::portal::repositories::WorkspaceProfileRepository::WorkspaceProfileRepository;
@@ -137,8 +149,16 @@ mod tests {
             bearer_token: "test".to_string(),
         });
         let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool.clone()));
-        let push_fallback =
-            PushFallbackService::new(channel_router.clone(), push, None, push_subscriptions, None, metrics.clone());
+        let notifications = Arc::new(NotificationRepository::new(pool.clone()));
+        let push_fallback = PushFallbackService::new(
+            channel_router.clone(),
+            push,
+            None,
+            push_subscriptions.clone(),
+            None,
+            metrics.clone(),
+            notifications.clone(),
+        );
 
         let ctx = PortalContext {
             token_service: Arc::new(TokenService::new()),
@@ -150,6 +170,8 @@ mod tests {
             api_keys: Arc::new(ApiKeyRepository::new(pool.clone())),
             templates: Arc::new(MessageTemplateRepository::new(pool.clone())),
             workspace_profile: Arc::new(WorkspaceProfileRepository::new(pool)),
+            notifications,
+            push_subscriptions,
             channel_router: channel_router.clone(),
             push_fallback,
             rate_limiter: Arc::new(RateLimitService::new(Default::default())),
@@ -398,6 +420,296 @@ mod tests {
         let channels: Vec<Channel> = body_json(resp).await;
         let announcements = channels.iter().find(|c| c.channel_id == "announcements").unwrap();
         assert_eq!(announcements.subscriber_count, 1);
+    }
+
+    #[derive(Deserialize, Default)]
+    struct Notification {
+        id: uuid::Uuid,
+        payload: String,
+        read_at: Option<String>,
+    }
+
+    #[derive(Deserialize, Default)]
+    struct NotificationList {
+        items: Vec<Notification>,
+        unread_count: i64,
+    }
+
+    #[tokio::test]
+    async fn broadcasting_persists_a_notification_that_can_be_marked_read() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "notified@example.com").await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/broadcast",
+                &signup_data.access_token,
+                json!({ "channel_id": "orders", "payload": "order #42 shipped" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // The insert happens in a task spawned off the hot path (see
+        // `PushFallbackService::publish_and_fanout`) — give it a moment.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/notifications", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list: NotificationList = body_json(resp).await;
+        assert_eq!(list.items.len(), 1);
+        assert_eq!(list.items[0].payload, "order #42 shipped");
+        assert!(list.items[0].read_at.is_none());
+        assert_eq!(list.unread_count, 1);
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/api/v1/portal/notifications/{}/read", list.items[0].id),
+                &signup_data.access_token,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/notifications", &signup_data.access_token, json!({})))
+            .await
+            .unwrap();
+        let list: NotificationList = body_json(resp).await;
+        assert_eq!(list.unread_count, 0);
+        assert!(list.items[0].read_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn notifications_are_scoped_to_tenant_and_mark_all_read_clears_the_badge() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_a = signup(&app, "notif-a@example.com").await;
+        let signup_b = signup(&app, "notif-b@example.com").await;
+
+        for payload in ["one", "two"] {
+            app.clone()
+                .oneshot(authed(
+                    "POST",
+                    "/api/v1/portal/broadcast",
+                    &signup_a.access_token,
+                    json!({ "channel_id": "orders", "payload": payload }),
+                ))
+                .await
+                .unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/notifications", &signup_b.access_token, json!({})))
+            .await
+            .unwrap();
+        let list: NotificationList = body_json(resp).await;
+        assert!(list.items.is_empty(), "tenant B must not see tenant A's notifications");
+
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/notifications/read-all",
+                &signup_a.access_token,
+                json!({}),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/notifications", &signup_a.access_token, json!({})))
+            .await
+            .unwrap();
+        let list: NotificationList = body_json(resp).await;
+        assert_eq!(list.items.len(), 2);
+        assert_eq!(list.unread_count, 0);
+    }
+
+    #[derive(Deserialize, Default)]
+    struct DeviceSummary {
+        endpoint: String,
+        device_label: Option<String>,
+        #[serde(default)]
+        #[allow(dead_code)]
+        channels: Vec<String>,
+    }
+
+    fn device(tenant_id: uuid::Uuid, endpoint: &str, device_label: &str) -> PushSubscription {
+        PushSubscription {
+            endpoint: endpoint.to_string(),
+            tenant_id,
+            sub: "user-1".to_string(),
+            p256dh_key: "p256dh".to_string(),
+            auth_key: "auth".to_string(),
+            channels: vec!["*".to_string()],
+            device_label: Some(device_label.to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn push_subscriptions_lists_and_revokes_devices_scoped_to_tenant() {
+        let (ctx, _) = test_ctx().await;
+        let push_subscriptions = ctx.push_subscriptions.clone();
+        let app = router(ctx);
+        let signup_a = signup(&app, "devices-a@example.com").await;
+        let signup_b = signup(&app, "devices-b@example.com").await;
+        let tenant_a = signup_a.keys.tenant_id;
+        let tenant_b = signup_b.keys.tenant_id;
+
+        push_subscriptions
+            .upsert(&device(tenant_a, "https://fcm.googleapis.com/android", "Android Phone"))
+            .await
+            .unwrap();
+        push_subscriptions
+            .upsert(&device(tenant_a, "https://web.push.apple.com/iphone", "Safari on iPhone"))
+            .await
+            .unwrap();
+        push_subscriptions
+            .upsert(&device(tenant_b, "https://fcm.googleapis.com/other", "Other Tenant Device"))
+            .await
+            .unwrap();
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/push-subscriptions", &signup_a.access_token, json!({})))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let devices: Vec<DeviceSummary> = body_json(resp).await;
+        assert_eq!(devices.len(), 2, "tenant A must see only its own two devices");
+        assert!(devices.iter().any(|d| d.device_label.as_deref() == Some("Android Phone")));
+        assert!(devices.iter().any(|d| d.device_label.as_deref() == Some("Safari on iPhone")));
+
+        // Revoke one device — the other must survive.
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "DELETE",
+                "/api/v1/portal/push-subscriptions",
+                &signup_a.access_token,
+                json!({ "endpoint": "https://fcm.googleapis.com/android" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/api/v1/portal/push-subscriptions", &signup_a.access_token, json!({})))
+            .await
+            .unwrap();
+        let devices: Vec<DeviceSummary> = body_json(resp).await;
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device_label.as_deref(), Some("Safari on iPhone"));
+
+        // Tenant B never saw tenant A's devices, and still has its own.
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/push-subscriptions", &signup_b.access_token, json!({})))
+            .await
+            .unwrap();
+        let devices: Vec<DeviceSummary> = body_json(resp).await;
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].device_label.as_deref(), Some("Other Tenant Device"));
+    }
+
+    #[tokio::test]
+    async fn revoking_another_tenants_device_is_a_silent_no_op() {
+        let (ctx, _) = test_ctx().await;
+        let push_subscriptions = ctx.push_subscriptions.clone();
+        let app = router(ctx);
+        let signup_a = signup(&app, "devices-attacker@example.com").await;
+        let signup_b = signup(&app, "devices-owner@example.com").await;
+        let tenant_b = signup_b.keys.tenant_id;
+
+        push_subscriptions
+            .upsert(&device(tenant_b, "https://fcm.googleapis.com/victim", "Owner's Phone"))
+            .await
+            .unwrap();
+
+        // `delete` is scoped by tenant_id in the repository — a foreign
+        // tenant's DELETE call must not remove someone else's device, and
+        // (matching this endpoint's idempotent-revoke design) must not
+        // even surface an error saying so.
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "DELETE",
+                "/api/v1/portal/push-subscriptions",
+                &signup_a.access_token,
+                json!({ "endpoint": "https://fcm.googleapis.com/victim" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = app
+            .oneshot(authed("GET", "/api/v1/portal/push-subscriptions", &signup_b.access_token, json!({})))
+            .await
+            .unwrap();
+        let devices: Vec<DeviceSummary> = body_json(resp).await;
+        assert_eq!(devices.len(), 1, "victim's device must survive an attacker's revoke attempt");
+        assert_eq!(devices[0].endpoint, "https://fcm.googleapis.com/victim");
+    }
+
+    #[tokio::test]
+    async fn send_test_push_returns_not_found_for_an_unknown_endpoint() {
+        let (ctx, _) = test_ctx().await;
+        let app = router(ctx);
+        let signup_data = signup(&app, "test-push-404@example.com").await;
+
+        let resp = app
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/push-subscriptions/test",
+                &signup_data.access_token,
+                json!({ "endpoint": "https://fcm.googleapis.com/nonexistent" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn send_test_push_returns_service_unavailable_when_web_push_is_not_configured() {
+        let (ctx, _) = test_ctx().await;
+        let push_subscriptions = ctx.push_subscriptions.clone();
+        let app = router(ctx);
+        let signup_data = signup(&app, "test-push-503@example.com").await;
+        let tenant_id = signup_data.keys.tenant_id;
+
+        // `test_ctx()` builds `PushFallbackService` with `web_push: None`
+        // (see its own setup) — exactly the "not configured on this
+        // instance" case this endpoint has to report distinctly from
+        // "device not found".
+        push_subscriptions
+            .upsert(&device(tenant_id, "https://fcm.googleapis.com/registered", "Registered Phone"))
+            .await
+            .unwrap();
+
+        let resp = app
+            .oneshot(authed(
+                "POST",
+                "/api/v1/portal/push-subscriptions/test",
+                &signup_data.access_token,
+                json!({ "endpoint": "https://fcm.googleapis.com/registered" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]

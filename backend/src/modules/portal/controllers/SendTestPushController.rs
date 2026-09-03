@@ -1,0 +1,28 @@
+//! # SendTestPushController
+//!
+//! **Action:** HTTP entry point for `POST /api/v1/portal/push-subscriptions/test`.
+//! **Input:** Validated `PortalSession`, `{ endpoint }` JSON body.
+//! **Output:** `200 OK` with an empty envelope, or a typed error.
+//! **Side effects:** Delegates to `SendTestPushUseCase`.
+
+use axum::extract::{Extension, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::Json;
+
+use crate::entities::PortalSession::PortalSession;
+use crate::modules::portal::dto::ApiEnvelope;
+use crate::modules::portal::dto::PushSubscriptionSummaryDto::SendTestPushDto;
+use crate::modules::portal::usecases::SendTestPushUseCase;
+use crate::modules::portal::PortalContext::PortalContext;
+
+pub async fn handle(
+    State(ctx): State<PortalContext>,
+    Extension(session): Extension<PortalSession>,
+    Json(dto): Json<SendTestPushDto>,
+) -> impl IntoResponse {
+    match SendTestPushUseCase::execute(&ctx, session.tenant_id, &dto.endpoint).await {
+        Ok(()) => ApiEnvelope::success_response(StatusCode::OK, serde_json::json!({})),
+        Err(err) => ApiEnvelope::error_response(err.status_code(), err.code(), &err.to_string()),
+    }
+}

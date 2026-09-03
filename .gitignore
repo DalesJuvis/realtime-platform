@@ -16,3 +16,9 @@ dist/
 # Unrelated payments-admin template kept locally only as a UI reference,
 # never wired to this backend — not part of the realtime platform.
 saas-admin/
+
+# Local SQLite dev databases (backend/portal.db and friends) — never the
+# real thing to commit, same reasoning as .env above.
+*.db
+*.db-shm
+*.db-wal

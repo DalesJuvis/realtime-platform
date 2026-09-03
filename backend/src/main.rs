@@ -114,6 +114,14 @@ async fn main() {
 
     let push_subscriptions = Arc::new(PushSubscriptionRepository::new(portal_pool.clone()));
 
+    // Shared with both `RealtimeContext` and `PortalContext` below — one
+    // `Arc`, same SQLite pool, same reasoning as `templates` a few lines
+    // down: written by `PushFallbackService` on every publish, read by the
+    // portal's notification bell.
+    let notifications = Arc::new(
+        modules::portal::repositories::NotificationRepository::NotificationRepository::new(portal_pool.clone()),
+    );
+
     let push: Arc<dyn PushPort> = FcmPushAdapter::spawn(FcmConfig {
         project_id: settings.fcm_project_id.clone(),
         bearer_token: settings.fcm_bearer_token.clone(),
@@ -166,6 +174,7 @@ async fn main() {
         push_subscriptions.clone(),
         cluster,
         metrics.clone(),
+        notifications.clone(),
     );
 
     // Constructed here (not down by `portal_ctx`, where it used to live)
@@ -300,6 +309,8 @@ async fn main() {
         api_keys,
         templates,
         workspace_profile,
+        notifications,
+        push_subscriptions: realtime_ctx.push_subscriptions.clone(),
         channel_router: channel_router.clone(),
         push_fallback: realtime_ctx.push_fallback.clone(),
         rate_limiter: realtime_ctx.rate_limiter.clone(),

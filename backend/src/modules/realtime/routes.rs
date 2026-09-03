@@ -64,6 +64,7 @@ mod tests {
     use crate::modules::push::ports::PushPort::PushPort;
     use crate::modules::rate_limit::services::RateLimitService::RateLimitService;
     use crate::modules::portal::repositories::MessageTemplateRepository::MessageTemplateRepository;
+    use crate::modules::portal::repositories::NotificationRepository::NotificationRepository;
     use crate::modules::realtime::repositories::PushSubscriptionRepository::PushSubscriptionRepository;
     use crate::modules::realtime::services::ChannelRouterService::ChannelRouterService;
     use crate::modules::realtime::services::PresenceService::PresenceService;
@@ -85,7 +86,8 @@ mod tests {
         let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect("sqlite::memory:").await.unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
         let push_subscriptions = Arc::new(PushSubscriptionRepository::new(pool.clone()));
-        let templates = Arc::new(MessageTemplateRepository::new(pool));
+        let templates = Arc::new(MessageTemplateRepository::new(pool.clone()));
+        let notifications = Arc::new(NotificationRepository::new(pool));
         let push_fallback = PushFallbackService::new(
             channel_router.clone(),
             push,
@@ -93,6 +95,7 @@ mod tests {
             push_subscriptions.clone(),
             None,
             metrics.clone(),
+            notifications.clone(),
         );
 
         let ctx = RealtimeContext {

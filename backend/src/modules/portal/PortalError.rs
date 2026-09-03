@@ -32,6 +32,10 @@ pub enum PortalError {
     InvalidLogo(String),
     #[error("new password must be at least 8 characters")]
     WeakPassword,
+    #[error("no device with that endpoint for this tenant")]
+    PushSubscriptionNotFound,
+    #[error("Web Push isn't configured on this backend instance")]
+    WebPushNotConfigured,
     #[error("storage error: {0}")]
     Storage(#[from] sqlx::Error),
 }
@@ -45,11 +49,13 @@ impl PortalError {
             PortalError::KeyPairNotFound => StatusCode::NOT_FOUND,
             PortalError::ApiKeyNotFound => StatusCode::NOT_FOUND,
             PortalError::TemplateNotFound => StatusCode::NOT_FOUND,
+            PortalError::PushSubscriptionNotFound => StatusCode::NOT_FOUND,
             PortalError::ChannelIdTooLong | PortalError::PayloadTooLarge => StatusCode::BAD_REQUEST,
             PortalError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             PortalError::InvalidLogo(_) | PortalError::WeakPassword | PortalError::ApiKeyNameRequired => {
                 StatusCode::BAD_REQUEST
             }
+            PortalError::WebPushNotConfigured => StatusCode::SERVICE_UNAVAILABLE,
             PortalError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -63,11 +69,13 @@ impl PortalError {
             PortalError::ApiKeyNotFound => "API_KEY_NOT_FOUND",
             PortalError::ApiKeyNameRequired => "API_KEY_NAME_REQUIRED",
             PortalError::TemplateNotFound => "TEMPLATE_NOT_FOUND",
+            PortalError::PushSubscriptionNotFound => "PUSH_SUBSCRIPTION_NOT_FOUND",
             PortalError::ChannelIdTooLong => "CHANNEL_ID_TOO_LONG",
             PortalError::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             PortalError::RateLimited => "RATE_LIMITED",
             PortalError::InvalidLogo(_) => "INVALID_LOGO",
             PortalError::WeakPassword => "WEAK_PASSWORD",
+            PortalError::WebPushNotConfigured => "WEB_PUSH_NOT_CONFIGURED",
             PortalError::Storage(_) => "STORAGE_ERROR",
         }
     }

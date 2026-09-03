@@ -2,7 +2,10 @@
 //!
 //! **Action:** A browser's Web Push registration (VAPID) for a tenant's
 //! end-user, plus the channels it wants pushed while it has no live
-//! WebSocket connection.
+//! WebSocket connection. `endpoint` (unique per browser/device) is what
+//! actually makes one `sub` having several devices — a phone, a desktop
+//! browser, a second phone — work correctly: each subscribes separately
+//! and gets its own row, none of them overwrite each other.
 //! **Input:** N/A (data type).
 //! **Output:** N/A.
 //! **Side effects:** None — pure data type.
@@ -28,4 +31,10 @@ pub struct PushSubscription {
     /// pushed, matched the same way as a live WS `SUB` (see
     /// `PushSubscriptionRepository::find_matching`).
     pub channels: Vec<String>,
+    /// Caller-supplied, human-readable device name ("Chrome on Windows",
+    /// "Safari on iPhone") — the only thing that makes several of one
+    /// `sub`'s devices distinguishable at a glance instead of a list of
+    /// opaque push-service URLs. `None` for callers that don't send one
+    /// (or rows registered before this field existed).
+    pub device_label: Option<String>,
 }

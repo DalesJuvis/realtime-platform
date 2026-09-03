@@ -38,6 +38,7 @@ pub async fn execute(
         p256dh_key: dto.keys.p256dh,
         auth_key: dto.keys.auth,
         channels: dto.channels,
+        device_label: dto.device_label,
     };
     ctx.push_subscriptions.upsert(&subscription).await?;
 

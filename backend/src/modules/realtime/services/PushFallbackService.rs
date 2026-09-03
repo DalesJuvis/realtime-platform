@@ -1,15 +1,21 @@
 //! # PushFallbackService
 //!
 //! **Action:** Publishes a frame locally, fans it out across the cluster,
-//! and falls back to push notification when nobody is listening locally —
-//! both FCM/mobile (`PushPort`) and browser Web Push (`WebPushPort`).
+//! records it in the tenant's notification log, and falls back to push
+//! notification when nobody is listening locally — both FCM/mobile
+//! (`PushPort`) and browser Web Push (`WebPushPort`). Also exposes
+//! `send_test`, a direct one-subscription send used by the tenant-portal
+//! device list's "send test notification" button — the one place this
+//! service targets a device by identity instead of by channel.
 //! **Input:** Session/tenant IDs, a `ChannelKey`, a parsed `Frame`.
 //! **Output:** `FrameCommand` (always `None`, mirroring the dispatch contract).
 //! **Side effects:** Publishes via `ChannelRouterService`; broadcasts via
 //! `ClusterBroadcastPort`; submits jobs via `PushPort`/`WebPushPort`;
-//! queries `PushSubscriptionRepository`; records metrics.
+//! queries `PushSubscriptionRepository`; writes `NotificationRepository`;
+//! records metrics.
 //! **Dependencies:** `services::ChannelRouterService`, `push::ports::PushPort`,
 //! `push::ports::WebPushPort`, `repositories::PushSubscriptionRepository`,
+//! `portal::repositories::NotificationRepository`,
 //! `cluster::ports::ClusterBroadcastPort`, `metrics::services::MetricsService`.
 //!
 //! Shared logic between PUB and UNICAST (the former `publish_and_fanout`
@@ -32,6 +38,7 @@ use crate::entities::ChannelKey::{ChannelKey, SessionId, TenantId};
 use crate::entities::Frame::Frame;
 use crate::modules::cluster::ports::ClusterBroadcastPort::ClusterBroadcastPort;
 use crate::modules::metrics::services::MetricsService::MetricsService;
+use crate::modules::portal::repositories::NotificationRepository::NotificationRepository;
 use crate::modules::push::dto::PushJob::build_push_job;
 use crate::modules::push::dto::WebPushJob::build_web_push_job;
 use crate::modules::push::dto::WebPushSubscription::WebPushSubscription;
@@ -55,6 +62,10 @@ pub struct PushFallbackService {
     /// dependency. `Some` enables inter-instance fan-out.
     cluster: Option<Arc<dyn ClusterBroadcastPort>>,
     metrics: Arc<MetricsService>,
+    /// Every successfully published message is durably recorded here
+    /// (see the doc comment on the insert below), independent of whether
+    /// push fallback fires — the tenant-portal notification bell's feed.
+    notifications: Arc<NotificationRepository>,
 }
 
 impl PushFallbackService {
@@ -65,6 +76,7 @@ impl PushFallbackService {
         push_subscriptions: Arc<PushSubscriptionRepository>,
         cluster: Option<Arc<dyn ClusterBroadcastPort>>,
         metrics: Arc<MetricsService>,
+        notifications: Arc<NotificationRepository>,
     ) -> Arc<Self> {
         Arc::new(Self {
             channel_router,
@@ -73,6 +85,7 @@ impl PushFallbackService {
             push_subscriptions,
             cluster,
             metrics,
+            notifications,
         })
     }
 
@@ -92,6 +105,24 @@ impl PushFallbackService {
                 // interaction with the push fallback below.
                 if let Some(cluster) = &self.cluster {
                     cluster.broadcast(raw);
+                }
+
+                // Recorded for every publish, not gated on
+                // `local_subscribers == 0` like the push fallback below —
+                // this is the notification bell's full received-message
+                // log, not just a "you were away" inbox. Spawned for the
+                // same non-blocking reason as the Web Push lookup below:
+                // `NotificationRepository` is async (sqlx), and this
+                // function must stay synchronous for the WS/TCP frame loop.
+                {
+                    let notifications = self.notifications.clone();
+                    let channel_id = key.channel_id.clone();
+                    let payload = frame.payload().to_string();
+                    tokio::spawn(async move {
+                        if let Err(err) = notifications.insert(tenant_id, &channel_id, &payload).await {
+                            tracing::warn!(%tenant_id, %channel_id, error = %err, "failed to persist notification");
+                        }
+                    });
                 }
 
                 if local_subscribers == 0 {
@@ -143,6 +174,21 @@ impl PushFallbackService {
                 tracing::debug!(%session_id, error = %err, "PUB/UNICAST rejected");
                 FrameCommand::None
             }
+        }
+    }
+
+    /// Sends one Web Push message straight to a single subscription,
+    /// bypassing channel matching entirely — the tenant-portal device
+    /// list's "send test notification" button, not part of the normal
+    /// publish path. Returns `false` (nothing sent, not an error) when
+    /// Web Push isn't configured on this instance at all.
+    pub fn send_test(&self, tenant_id: TenantId, subscription: WebPushSubscription, payload: &str) -> bool {
+        match &self.web_push {
+            Some(web_push) => {
+                web_push.submit(build_web_push_job(tenant_id, "test", payload, vec![subscription]));
+                true
+            }
+            None => false,
         }
     }
 }

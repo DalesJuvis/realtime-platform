@@ -25,6 +25,14 @@ pub struct RegisterPushSubscriptionDto {
     /// Channel ids/patterns this subscription wants pushed while it has
     /// no live WS connection — same `orders:*` glob syntax as `SUB`.
     pub channels: Vec<String>,
+    /// Caller-supplied, human-readable device name ("Chrome on Windows",
+    /// "Safari on iPhone") — optional, so a caller that doesn't bother
+    /// computing one just gets an unlabeled row rather than a rejected
+    /// request. `endpoint` alone already makes one `sub` having several
+    /// devices work correctly (separate rows); this only makes them
+    /// identifiable when listed.
+    #[serde(default)]
+    pub device_label: Option<String>,
 }
 
 #[derive(Deserialize)]
