@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { Badge } from '@components/ui/badge'
 import { DataTable } from '@components/DataTable/DataTable'
 import { formatDate } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { Invoice, InvoiceStatus } from '@entities/Invoice.entity'
 
@@ -36,34 +37,36 @@ const MOCK_INVOICES: Invoice[] = [
   { id: '12', reference: 'INV-2025-0001', period: 'Sep 2025', amount: 4900, currency: 'XOF', status: 'paid', issued_at: '2025-09-01T09:00:00Z' },
 ]
 
-const columns: ColumnDef<Invoice>[] = [
-  { key: 'reference', header: 'Reference', sortable: true },
-  { key: 'period', header: 'Period' },
-  {
-    key: 'amount',
-    header: 'Amount',
-    sortable: true,
-    align: 'right',
-    renderCell: (_v, row) => `${row.amount.toLocaleString('en-US')} ${row.currency}`,
-  },
-  {
-    key: 'status',
-    header: 'Status',
-    renderCell: (_v, row) => (
-      <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
-        {row.status}
-      </Badge>
-    ),
-  },
-  { key: 'issued_at', header: 'Issued', sortable: true, renderCell: (_v, row) => formatDate(row.issued_at) },
-]
-
 export default function BillingPage() {
+  const { t } = useTranslation()
+
+  const columns: ColumnDef<Invoice>[] = [
+    { key: 'reference', header: t.billing.columns.reference, sortable: true },
+    { key: 'period', header: t.billing.columns.period },
+    {
+      key: 'amount',
+      header: t.billing.columns.amount,
+      sortable: true,
+      align: 'right',
+      renderCell: (_v, row) => `${row.amount.toLocaleString('en-US')} ${row.currency}`,
+    },
+    {
+      key: 'status',
+      header: t.common.status,
+      renderCell: (_v, row) => (
+        <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
+          {t.billing.statusOptions[row.status]}
+        </Badge>
+      ),
+    },
+    { key: 'issued_at', header: t.billing.columns.issued, sortable: true, renderCell: (_v, row) => formatDate(row.issued_at) },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-        <p className="text-sm text-muted-foreground">Invoices for this workspace's plan — sample data, not yet wired to a real billing backend.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.billing.pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.billing.pageSubtitle}</p>
       </div>
 
       <DataTable
@@ -75,19 +78,19 @@ export default function BillingPage() {
         filters={[
           {
             key: 'status',
-            label: 'Status',
+            label: t.common.status,
             options: [
-              { value: 'paid', label: 'Paid' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'failed', label: 'Failed' },
+              { value: 'paid', label: t.billing.statusOptions.paid },
+              { value: 'pending', label: t.billing.statusOptions.pending },
+              { value: 'failed', label: t.billing.statusOptions.failed },
             ],
           },
         ]}
         rowActions={() => [
           {
-            label: 'Download PDF',
+            label: t.billing.downloadPdf,
             icon: Download,
-            onClick: () => { toast.info('Invoice PDFs are not available yet.') },
+            onClick: () => { toast.info(t.billing.pdfNotAvailable) },
           },
         ]}
       />

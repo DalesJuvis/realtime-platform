@@ -13,6 +13,7 @@ import { CheckCircle2, Circle, X } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
 import { Button } from '@components/ui/button'
 import { cn } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import { useOnboardingStore } from '@store/onboarding.store'
 import { getKeysAction } from '@actions/keys/getKeys.action'
 import { getChannelsAction } from '@actions/channels/getChannels.action'
@@ -25,6 +26,7 @@ interface SetupStep {
 }
 
 export function SetupGuideCard() {
+  const { t } = useTranslation()
   const dismissed = useOnboardingStore((s) => s.setupGuideDismissed)
   const dismiss = useOnboardingStore((s) => s.dismissSetupGuide)
   const [steps, setSteps] = useState<SetupStep[] | null>(null)
@@ -39,9 +41,9 @@ export function SetupGuideCard() {
       getTemplatesAction().catch(() => []),
     ]).then(([hasKeys, channels, templates]) => {
       setSteps([
-        { label: 'Generate your API keys', done: hasKeys, to: '/settings' },
-        { label: 'Publish to a channel', done: channels.length > 0, to: '/channels' },
-        { label: 'Save a message template', done: templates.length > 0, to: '/templates' },
+        { label: t.cards.stepGenerateApiKeys, done: hasKeys, to: '/settings' },
+        { label: t.cards.stepPublishToChannel, done: channels.length > 0, to: '/channels' },
+        { label: t.cards.stepSaveTemplate, done: templates.length > 0, to: '/templates' },
       ])
     })
   }, [])
@@ -53,8 +55,8 @@ export function SetupGuideCard() {
   return (
     <Card className="rounded-sm border-none bg-primary/5 shadow-none">
       <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Setup guide</CardTitle>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={dismiss} aria-label="Dismiss setup guide">
+        <CardTitle className="text-base">{t.cards.setupGuideTitle}</CardTitle>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={dismiss} aria-label={t.cards.dismissSetupGuide}>
           <X className="h-4 w-4" />
         </Button>
       </CardHeader>
@@ -63,9 +65,7 @@ export function SetupGuideCard() {
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {steps.filter((s) => s.done).length} of {steps.length} complete
-          </p>
+          <p className="text-xs text-muted-foreground">{t.cards.ofComplete(steps.filter((s) => s.done).length, steps.length)}</p>
         </div>
 
         <ul className="space-y-3">

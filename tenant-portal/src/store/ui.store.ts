@@ -1,12 +1,13 @@
 /**
  * # UiStore
  *
- * Persisted UI chrome state — sidebar collapse (defaults to expanded) and
- * `DataTable`'s default rows-per-page (defaults to 10, editable in
- * Settings → Preferences) — both remembered across reloads via
- * `localStorage`. Client-side only, unlike saas-admin's equivalent
- * (`tenant.page_size`, synced server-side): this is a per-browser UI
- * convenience, not something that needs to follow the tenant across devices.
+ * Persisted UI chrome state — sidebar collapse (defaults to expanded),
+ * `DataTable`'s default rows-per-page (defaults to 10), and `OverviewPage`'s
+ * metrics poll interval (defaults to 5s) — all editable in Settings →
+ * Preferences and remembered across reloads via `localStorage`. Client-side
+ * only, unlike saas-admin's equivalent (`tenant.page_size`, synced
+ * server-side): this is a per-browser UI convenience, not something that
+ * needs to follow the tenant across devices.
  */
 
 import { create } from 'zustand'
@@ -19,6 +20,12 @@ interface UiState {
 
   readonly pageSize: number
   setPageSize: (pageSize: number) => void
+
+  /** How often `OverviewPage` polls `getOverviewAction`/`getChannelsAction`/
+   * `getTemplatesAction` — editable in Settings → Preferences. Defaults to
+   * the platform's original hardcoded 5s cadence. */
+  readonly metricsRefreshIntervalMs: number
+  setMetricsRefreshIntervalMs: (ms: number) => void
 
   /**
    * Kiosk/TV-style "just the metrics" view (`OverviewPage`'s focus-mode
@@ -44,6 +51,9 @@ export const useUiStore = create<UiState>()(
       pageSize: 10,
       setPageSize: (pageSize) => set({ pageSize }),
 
+      metricsRefreshIntervalMs: 5_000,
+      setMetricsRefreshIntervalMs: (ms) => set({ metricsRefreshIntervalMs: ms }),
+
       focusMode: false,
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
       setFocusMode: (focusMode) => set({ focusMode }),
@@ -51,7 +61,11 @@ export const useUiStore = create<UiState>()(
     {
       name: 'ui-storage',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ sidebarOpen: state.sidebarOpen, pageSize: state.pageSize }),
+      partialize: (state) => ({
+        sidebarOpen: state.sidebarOpen,
+        pageSize: state.pageSize,
+        metricsRefreshIntervalMs: state.metricsRefreshIntervalMs,
+      }),
     },
   ),
 )

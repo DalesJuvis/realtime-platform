@@ -3,13 +3,16 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
+import { PasswordInput } from '@components/shared/PasswordInput'
 import { usePortalAuthStore } from '@store/portalAuth.store'
 import { loginAction } from '@actions/auth/login.action'
 import { errorMessage } from '@lib/errors'
 import { env } from '@lib/env'
+import { useTranslation } from '@lib/i18n'
 import { GoogleButton } from './GoogleButton'
 
 export function LoginForm() {
+  const { t } = useTranslation()
   const setSession = usePortalAuthStore((s) => s.setSession)
   const navigate = useNavigate()
 
@@ -28,7 +31,7 @@ export function LoginForm() {
       setSession(env.defaultApiUrl, accessToken)
       navigate('/overview', { replace: true })
     } catch (err) {
-      setError(errorMessage(err, 'Sign in failed.'))
+      setError(errorMessage(err, t.auth.signInFailed))
     } finally {
       setSubmitting(false)
     }
@@ -37,8 +40,8 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="text-sm text-muted-foreground">Access your tenant's realtime portal.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.auth.signInTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.auth.signInSubtitle}</p>
       </div>
 
       <GoogleButton />
@@ -48,13 +51,13 @@ export function LoginForm() {
           <span className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">Or with email</span>
+          <span className="bg-card px-2 text-muted-foreground">{t.auth.orWithEmail}</span>
         </div>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t.auth.email}</Label>
           <Input
             id="email"
             type="email"
@@ -65,10 +68,9 @@ export function LoginForm() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
-          <Input
+          <Label htmlFor="password">{t.auth.password}</Label>
+          <PasswordInput
             id="password"
-            type="password"
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -80,18 +82,18 @@ export function LoginForm() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? 'Signing in…' : 'Sign in'}
+        {isSubmitting ? t.auth.signingIn : t.auth.signIn}
       </Button>
 
       <p className="text-center text-xs text-muted-foreground">
-        No account yet?{' '}
+        {t.auth.noAccountYet}{' '}
         <Link to="/register" className="font-medium text-primary hover:underline">
-          Create one
+          {t.auth.createOne}
         </Link>
       </p>
       <p className="text-center text-xs text-muted-foreground">
         <Link to="/docs" className="font-medium text-primary hover:underline">
-          Read the docs
+          {t.auth.readTheDocs}
         </Link>
       </p>
     </form>

@@ -24,42 +24,51 @@ import { updateTemplateAction } from '@actions/templates/updateTemplate.action'
 import { deleteTemplateAction } from '@actions/templates/deleteTemplate.action'
 import { errorMessage } from '@lib/errors'
 import { copyToClipboard, formatDateTime } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { Template } from '@entities/Template.entity'
+import type { templates as templatesEn } from '@lib/i18n/en/templates'
 
-const columns: ColumnDef<Template>[] = [
-  {
-    key: 'name',
-    header: 'Name',
-    sortable: true,
-    renderCell: (_v, row) => (
-      <span className="flex items-center gap-2 font-medium">
-        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-        {row.name}
-      </span>
-    ),
-  },
-  {
-    key: 'id',
-    header: 'ID',
-    // Used as `template_id` when publishing this template (from the
-    // Broadcasting page, or a connected SDK's `publishTemplate()`) — a
-    // dedicated, copyable column rather than only reachable from the
-    // row-actions menu.
-    renderCell: (_v, row) => (
-      <div className="flex items-center gap-1">
-        <span className="max-w-[10rem] truncate font-mono text-xs text-muted-foreground">{row.id}</span>
-        <CopyButton value={row.id} label="Template ID" />
-      </div>
-    ),
-  },
-  {
-    key: 'body',
-    header: 'Body',
-    renderCell: (_v, row) => <span className="line-clamp-1 text-muted-foreground">{row.body}</span>,
-  },
-  { key: 'updated_at', header: 'Updated', sortable: true, renderCell: (_v, row) => formatDateTime(row.updated_at) },
-]
+function buildColumns(t: { templates: typeof templatesEn; common: { name: string } }): ColumnDef<Template>[] {
+  return [
+    {
+      key: 'name',
+      header: t.common.name,
+      sortable: true,
+      renderCell: (_v, row) => (
+        <span className="flex items-center gap-2 font-medium">
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {row.name}
+        </span>
+      ),
+    },
+    {
+      key: 'id',
+      header: t.templates.columnId,
+      // Used as `template_id` when publishing this template (from the
+      // Broadcasting page, or a connected SDK's `publishTemplate()`) — a
+      // dedicated, copyable column rather than only reachable from the
+      // row-actions menu.
+      renderCell: (_v, row) => (
+        <div className="flex items-center gap-1">
+          <span className="max-w-[10rem] truncate font-mono text-xs text-muted-foreground">{row.id}</span>
+          <CopyButton value={row.id} label={t.templates.templateIdLabel} />
+        </div>
+      ),
+    },
+    {
+      key: 'body',
+      header: t.templates.columnBody,
+      renderCell: (_v, row) => <span className="line-clamp-1 text-muted-foreground">{row.body}</span>,
+    },
+    {
+      key: 'updated_at',
+      header: t.templates.columnUpdated,
+      sortable: true,
+      renderCell: (_v, row) => formatDateTime(row.updated_at),
+    },
+  ]
+}
 
 // TinyMCE edits rich HTML, but `Template.body` is opaque plain text (see
 // its own doc comment) that flows straight into the Broadcasting page's
@@ -88,6 +97,7 @@ function plainTextToHtml(text: string): string {
 function TemplateForm({ editing, onSaved }: { editing: Template | null; onSaved: () => void }) {
   const dialog = useDialog()
   const isDarkMode = useIsDarkMode()
+  const { t } = useTranslation()
   const [name, setName] = useState(editing?.name ?? '')
   const [bodyHtml, setBodyHtml] = useState(editing ? plainTextToHtml(editing.body) : '')
   const [isSaving, setSaving] = useState(false)
@@ -96,22 +106,22 @@ function TemplateForm({ editing, onSaved }: { editing: Template | null; onSaved:
     event.preventDefault()
     const body = htmlToPlainText(bodyHtml)
     if (!body) {
-      toast.error('Template body cannot be empty.')
+      toast.error(t.templates.bodyRequired)
       return
     }
     setSaving(true)
     try {
       if (editing) {
         await updateTemplateAction(editing.id, { name: name.trim(), body })
-        toast.success('Template updated.')
+        toast.success(t.templates.updated)
       } else {
         await createTemplateAction({ name: name.trim(), body })
-        toast.success('Template created.')
+        toast.success(t.templates.created)
       }
       dialog.closeAll()
       onSaved()
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to save template.'))
+      toast.error(errorMessage(err, t.templates.saveFailed))
     } finally {
       setSaving(false)
     }
@@ -120,11 +130,11 @@ function TemplateForm({ editing, onSaved }: { editing: Template | null; onSaved:
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="templateName">Name</Label>
+        <Label htmlFor="templateName">{t.common.name}</Label>
         <Input id="templateName" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="templateBody">Body</Label>
+        <Label htmlFor="templateBody">{t.templates.bodyLabel}</Label>
         <div className="overflow-hidden rounded-md border border-input">
           <Editor
             id="templateBody"
@@ -139,22 +149,20 @@ function TemplateForm({ editing, onSaved }: { editing: Template | null; onSaved:
               branding: false,
               plugins: 'lists link autolink',
               toolbar: 'bold italic underline | bullist numlist | link | removeformat',
-              placeholder: 'Hi {{name}}, your order has shipped!',
+              placeholder: t.templates.bodyPlaceholder,
               skin: isDarkMode ? 'oxide-dark' : 'oxide',
               content_css: isDarkMode ? 'dark' : 'default',
             }}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Formatting is a drafting aid only — saved as plain text, same as it's sent from Broadcasting.
-        </p>
+        <p className="text-xs text-muted-foreground">{t.templates.formattingCaption}</p>
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => dialog.closeAll()}>
-          Cancel
+          {t.common.cancel}
         </Button>
         <Button type="submit" disabled={isSaving}>
-          {isSaving ? 'Saving…' : 'Save template'}
+          {isSaving ? t.common.saving : t.templates.saveTemplate}
         </Button>
       </div>
     </form>
@@ -163,19 +171,21 @@ function TemplateForm({ editing, onSaved }: { editing: Template | null; onSaved:
 
 export default function TemplatesPage() {
   const dialog = useDialog()
+  const { t } = useTranslation()
   const [refreshKey, setRefreshKey] = useState(0)
   const source = useMemo(() => ({ type: 'request' as const, fn: getTemplatesAction }), [])
+  const columns = useMemo(() => buildColumns(t), [t])
 
   function openCreate() {
     dialog.openDialog(<TemplateForm editing={null} onSaved={() => setRefreshKey((k) => k + 1)} />, {
-      title: 'New template',
+      title: t.templates.newTemplate,
       size: 'lg',
     })
   }
 
   function openEdit(template: Template) {
     dialog.openDialog(<TemplateForm editing={template} onSaved={() => setRefreshKey((k) => k + 1)} />, {
-      title: 'Edit template',
+      title: t.templates.editTitle,
       size: 'lg',
     })
   }
@@ -183,19 +193,19 @@ export default function TemplatesPage() {
   function confirmDelete(template: Template) {
     dialog.openDialog(
       <ConfirmDialog
-        message={`Delete "${template.name}"? This can't be undone.`}
-        confirmLabel="Delete"
+        message={t.templates.deleteConfirmMessage(template.name)}
+        confirmLabel={t.common.delete}
         onConfirm={async () => {
           try {
             await deleteTemplateAction(template.id)
-            toast.success('Template deleted.')
+            toast.success(t.templates.deleted)
             setRefreshKey((k) => k + 1)
           } catch (err) {
-            toast.error(errorMessage(err, 'Failed to delete template.'))
+            toast.error(errorMessage(err, t.templates.deleteFailed))
           }
         }}
       />,
-      { title: 'Delete template' },
+      { title: t.templates.deleteTitle },
     )
   }
 
@@ -203,12 +213,12 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Templates</h1>
-          <p className="text-sm text-muted-foreground">Reusable message bodies for the Broadcasting page.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.templates.pageTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.templates.pageSubtitle}</p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="h-4 w-4" />
-          New template
+          {t.templates.newTemplate}
         </Button>
       </div>
 
@@ -221,24 +231,24 @@ export default function TemplatesPage() {
         exportFilename="templates"
         rowActions={(row) => [
           {
-            label: 'Copy ID',
+            label: t.templates.copyId,
             icon: Copy,
             onClick: async () => {
               try {
                 await copyToClipboard(row.id)
-                toast.success('Template ID copied.')
+                toast.success(t.common.copied(t.templates.templateIdLabel))
               } catch {
-                toast.error('Failed to copy template ID.')
+                toast.error(t.common.copyFailed(t.templates.templateIdLabel))
               }
             },
           },
           {
-            label: 'Edit',
+            label: t.common.edit,
             icon: Pencil,
             onClick: () => openEdit(row),
           },
           {
-            label: 'Delete',
+            label: t.common.delete,
             icon: Trash2,
             variant: 'destructive',
             onClick: () => confirmDelete(row),
@@ -247,7 +257,7 @@ export default function TemplatesPage() {
         renderEmpty={() => (
           <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
             <FileText className="h-6 w-6" />
-            No templates yet — create one to reuse it from Broadcasting.
+            {t.templates.emptyState}
           </div>
         )}
       />

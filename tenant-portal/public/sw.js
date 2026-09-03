@@ -1,10 +1,13 @@
 /**
- * `sw.js` — Service worker: PWA installability + a minimal offline app
- * shell. No `push`/`notificationclick` handlers here — unlike
- * `web-client` (the end-user chat/notifications reference client), this
- * portal doesn't subscribe itself to Web Push; it's where a tenant
- * *manages* their workspace, not where they'd receive their own
- * platform's notifications.
+ * `sw.js` — Service worker: PWA installability, a minimal offline app
+ * shell, and (per `registerPortalPush.action.ts`) real Web Push — a
+ * tenant admin can opt in from Settings to be notified of their own
+ * tenant's channel activity even with this dashboard closed. Previously
+ * this file deliberately had no `push` handler, on the reasoning that
+ * "this is where you manage the workspace, not where you'd receive its
+ * notifications" — revisited: an admin who's stepped away from the
+ * dashboard is exactly who wants to know something happened on their
+ * tenant without needing the tab open.
  *
  * **Offline scope, honestly:** caches the navigation shell (`/`) so a
  * reload while offline doesn't hard-fail, not a full asset precache —
@@ -47,5 +50,32 @@ self.addEventListener('fetch', (event) => {
   if (event.request.mode !== 'navigate') return
   event.respondWith(
     fetch(event.request).catch(() => caches.match('/').then((cached) => cached ?? Response.error())),
+  )
+})
+
+// The browser has already decrypted the Web Push payload (RFC 8291) by
+// the time this fires — `event.data` is the plain message text this
+// platform's own backend forwards as-is (see `WebPushAdapter`/
+// `PushFallbackService`), no envelope format imposed on top.
+self.addEventListener('push', (event) => {
+  const payload = event.data ? event.data.text() : 'New activity'
+  event.waitUntil(
+    self.registration.showNotification('mio', {
+      body: payload,
+      icon: '/favicon.svg',
+      tag: 'mio-portal-push',
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) return client.focus()
+      }
+      return self.clients.openWindow('/')
+    }),
   )
 })

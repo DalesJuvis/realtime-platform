@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { Button, type ButtonProps } from '@components/ui/button'
 import { useDialog } from '@providers/DialogProvider'
+import { useTranslation } from '@lib/i18n'
 
 export function ConfirmDialog({
   message,
@@ -22,6 +23,7 @@ export function ConfirmDialog({
   onConfirm: () => Promise<void>
 }) {
   const dialog = useDialog()
+  const { t } = useTranslation()
   const [isSubmitting, setSubmitting] = useState(false)
 
   return (
@@ -30,7 +32,7 @@ export function ConfirmDialog({
 
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => dialog.closeAll()}>
-          Cancel
+          {t.common.cancel}
         </Button>
         <Button
           variant={confirmVariant}

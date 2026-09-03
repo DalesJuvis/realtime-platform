@@ -1,0 +1,25 @@
+import type { nav as en } from '../en/nav'
+
+export const nav = {
+  accountSection: 'Votre compte',
+  overview: "Vue d'ensemble",
+  channels: 'Canaux',
+  broadcasting: 'Diffusion',
+  templates: 'Modèles',
+  apiKeys: 'Clés API',
+  devices: 'Appareils',
+  billing: 'Facturation',
+  subscriptions: 'Abonnements',
+  checkout: 'Paiement',
+  reports: 'Rapports',
+  docs: 'Documentation',
+  settings: 'Paramètres',
+  environment: 'Environnement',
+  environmentDevelopment: 'Développement',
+  environmentProduction: 'Production',
+  environmentFixedTooltip: "Fixé par VITE_APP_ENV à la compilation — il n'y a pas de mode bac à sable à activer ici au démarrage.",
+  signOut: 'Déconnexion',
+  collapseSidebar: 'Réduire la barre latérale',
+  expandSidebar: 'Agrandir la barre latérale',
+  closeMenu: 'Fermer le menu',
+} as const satisfies typeof en

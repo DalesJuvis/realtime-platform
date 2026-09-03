@@ -1,0 +1,36 @@
+/** Shared, cross-page vocabulary — reach for these before adding a
+ * page-local duplicate of "Save"/"Cancel"/etc. Interpolated entries are
+ * functions, not template strings with placeholders — type-checked call
+ * sites beat a string-parsing engine for two languages. */
+export const common = {
+  save: 'Save',
+  saving: 'Saving…',
+  cancel: 'Cancel',
+  delete: 'Delete',
+  deleting: 'Deleting…',
+  edit: 'Edit',
+  close: 'Close',
+  confirm: 'Confirm',
+  create: 'Create',
+  new: 'New',
+  loading: 'Loading…',
+  copy: 'Copy',
+  copied: (label: string) => `${label} copied.`,
+  copyFailed: (label: string) => `Failed to copy ${label.toLowerCase()}.`,
+  yes: 'Yes',
+  no: 'No',
+  name: 'Name',
+  value: 'Value',
+  description: 'Description',
+  status: 'Status',
+  actions: 'Actions',
+  back: 'Back',
+  retry: 'Retry',
+  enabled: 'Enabled',
+  disabled: 'Disabled',
+  active: 'Active',
+  inactive: 'Inactive',
+  unknown: 'Unknown',
+  genericError: 'Something went wrong.',
+  requiredField: 'This field is required.',
+}

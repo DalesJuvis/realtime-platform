@@ -13,6 +13,7 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { AnimatePresence, motion, type TargetAndTransition } from 'framer-motion'
 import { cn, randomId } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 
 export type DialogAnimation = 'slide-up' | 'fade' | 'scale'
 export type DialogSize = 'sm' | 'md' | 'lg' | 'xl'
@@ -69,6 +70,7 @@ export function useDialog(): DialogContextValue {
 }
 
 export function DialogProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const [stack, setStack] = useState<DialogInstance[]>([])
 
   const openDialog = useCallback((component: ReactNode, options: DialogOptions = {}): string => {
@@ -142,7 +144,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                       <button
                         onClick={() => closeDialog(dialog.id)}
                         className="ml-auto rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        aria-label="Close dialog"
+                        aria-label={t.dialogs.closeAriaLabel}
                       >
                         ✕
                       </button>

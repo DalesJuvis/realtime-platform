@@ -15,6 +15,12 @@
  * documented "not yet verified" caveats — see `sdk-rust`/`sdk-android`'s
  * own status callouts) rather than a rewritten summary, so it can't drift
  * into claiming more than each SDK actually delivers.
+ *
+ * i18n: only prose (titles/descriptions/labels/caveats/explanatory text)
+ * is translated via `useTranslation()` (`t.docs.*`) — every `code={...}`
+ * snippet, inline `<code>` identifier, install command, file path, env
+ * var name, and HTTP/error code stays in English/as-is regardless of the
+ * active language, per standard API-docs practice.
  */
 
 import { useEffect, useState } from 'react'
@@ -26,6 +32,7 @@ import { CodeBlock } from '@components/shared/CodeBlock'
 import { getKeysAction } from '@actions/keys/getKeys.action'
 import { env } from '@lib/env'
 import { deriveWsHost } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { CodeLanguage } from '@lib/prism'
 
 function Caveat({ children }: { children: React.ReactNode }) {
@@ -41,10 +48,10 @@ function Section({
   title,
   description,
   install,
-  installLabel = 'Install',
+  installLabel,
   installLanguage = 'bash',
   code,
-  codeLabel = 'Quick start',
+  codeLabel,
   language,
   caveat,
   children,
@@ -60,6 +67,7 @@ function Section({
   caveat?: React.ReactNode
   children?: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <Card className="rounded-sm shadow-none">
       <CardHeader>
@@ -67,8 +75,8 @@ function Section({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {install && <CodeBlock label={installLabel} code={install} language={installLanguage} />}
-        <CodeBlock label={codeLabel} code={code} language={language} />
+        {install && <CodeBlock label={installLabel ?? t.docs.labelInstall} code={install} language={installLanguage} />}
+        <CodeBlock label={codeLabel ?? t.docs.labelQuickStart} code={code} language={language} />
         {children}
         {caveat && <Caveat>{caveat}</Caveat>}
       </CardContent>
@@ -77,6 +85,7 @@ function Section({
 }
 
 export default function DocsPage() {
+  const { t } = useTranslation()
   const [tenantId, setTenantId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -105,28 +114,26 @@ export default function DocsPage() {
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <BookOpen className="h-5 w-5 text-muted-foreground" />
-          Docs
+          {t.docs.pageTitle}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          SDKs and API reference for this workspace — snippets below are filled in with your real tenant ID and API host.
-        </p>
+        <p className="text-sm text-muted-foreground">{t.docs.pageSubtitle}</p>
       </div>
 
       <Tabs defaultValue="getting-started" className="flex flex-col gap-6 lg:flex-row">
         <TabsList className="h-auto w-full shrink-0 flex-row flex-wrap justify-start gap-1 bg-transparent p-0 lg:w-56 lg:flex-col lg:items-stretch">
-          <TabsTrigger value="getting-started" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Getting started</TabsTrigger>
-          <TabsTrigger value="rest-api" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">REST API</TabsTrigger>
-          <TabsTrigger value="web-push" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Web Push</TabsTrigger>
-          <TabsTrigger value="advanced" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Advanced features</TabsTrigger>
-          <TabsTrigger value="typescript" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">JavaScript / TypeScript</TabsTrigger>
-          <TabsTrigger value="react" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React</TabsTrigger>
-          <TabsTrigger value="react-native" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">React Native</TabsTrigger>
-          <TabsTrigger value="python" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Python</TabsTrigger>
-          <TabsTrigger value="rust" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Rust</TabsTrigger>
-          <TabsTrigger value="android" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Android (Kotlin/Java)</TabsTrigger>
-          <TabsTrigger value="wordpress" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">WordPress</TabsTrigger>
-          <TabsTrigger value="laravel" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Laravel</TabsTrigger>
-          <TabsTrigger value="embed" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">Embed script (any site)</TabsTrigger>
+          <TabsTrigger value="getting-started" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabGettingStarted}</TabsTrigger>
+          <TabsTrigger value="rest-api" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabRestApi}</TabsTrigger>
+          <TabsTrigger value="web-push" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabWebPush}</TabsTrigger>
+          <TabsTrigger value="advanced" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabAdvanced}</TabsTrigger>
+          <TabsTrigger value="typescript" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabTypescript}</TabsTrigger>
+          <TabsTrigger value="react" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabReact}</TabsTrigger>
+          <TabsTrigger value="react-native" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabReactNative}</TabsTrigger>
+          <TabsTrigger value="python" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabPython}</TabsTrigger>
+          <TabsTrigger value="rust" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabRust}</TabsTrigger>
+          <TabsTrigger value="android" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabAndroid}</TabsTrigger>
+          <TabsTrigger value="wordpress" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabWordpress}</TabsTrigger>
+          <TabsTrigger value="laravel" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabLaravel}</TabsTrigger>
+          <TabsTrigger value="embed" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabEmbed}</TabsTrigger>
         </TabsList>
 
         <div className="min-w-0 flex-1 space-y-6">
@@ -135,39 +142,40 @@ export default function DocsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <KeyRound className="h-4 w-4" />
-                  Every SDK needs two things
+                  {t.docs.gsTwoThingsTitle}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p>
-                  <strong className="text-foreground">Your tenant ID</strong> — public, safe to embed:{' '}
+                  <strong className="text-foreground">{t.docs.gsTenantIdLabel}</strong> {t.docs.gsTenantIdText}{' '}
                   <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">{tid}</code>
                 </p>
                 <p>
-                  <strong className="text-foreground">A client token</strong> — signed server-side, scoped to one user
-                  (the <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">sub</code>).
-                  Mint one from{' '}
+                  <strong className="text-foreground">{t.docs.gsClientTokenLabel}</strong> {t.docs.gsClientTokenText1}{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">sub</code>
+                  {t.docs.gsClientTokenText2}{' '}
+                  {t.docs.gsMintOneFrom}{' '}
                   <Link to="/overview" className="font-medium text-primary hover:underline">
-                    Overview
+                    {t.docs.gsOverviewLink}
                   </Link>{' '}
-                  or{' '}
+                  {t.docs.gsOr}{' '}
                   <Link to="/keys" className="font-medium text-primary hover:underline">
-                    API Keys
+                    {t.docs.gsApiKeysLink}
                   </Link>{' '}
-                  — never generate one yourself, and never ship your tenant secret to a browser/mobile app.
+                  {t.docs.gsNeverGenerate}
                 </p>
               </CardContent>
             </Card>
             <Card className="rounded-sm shadow-none">
               <CardHeader>
-                <CardTitle className="text-base">Your API host</CardTitle>
-                <CardDescription>What every SDK snippet below connects to.</CardDescription>
+                <CardTitle className="text-base">{t.docs.gsApiHostTitle}</CardTitle>
+                <CardDescription>{t.docs.gsApiHostDescription}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <CodeBlock label="WebSocket URL (SDKs)" code={wsUrl} />
-                <CodeBlock label="Portal API URL (REST)" code={apiUrl} />
+                <CodeBlock label={t.docs.labelWsUrl} code={wsUrl} />
+                <CodeBlock label={t.docs.labelPortalApiUrl} code={apiUrl} />
                 <p className="text-xs text-muted-foreground">
-                  You never set this yourself — every mint-token call below returns it as <code className="rounded bg-muted px-1 py-0.5 font-mono">ws_url</code>, pass it straight into the SDK.
+                  {t.docs.gsApiHostNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">ws_url</code>{t.docs.gsApiHostNoteSuffix}
                 </p>
               </CardContent>
             </Card>
@@ -175,22 +183,22 @@ export default function DocsPage() {
 
           <TabsContent value="rest-api" className="mt-0 space-y-4">
             <Section
-              title="Mint a token"
-              description="Call this from your own backend only — your tenant secret never leaves it. The resulting token is what you hand to an end user's SDK/browser/app. secret accepts your primary secret (Settings) or any additional key pair's secret from API Keys — either works identically here."
+              title={t.docs.restApiMintTokenTitle}
+              description={t.docs.restApiMintTokenDescription}
               code={`POST ${apiUrl}/api/v1/auth/tokens
 Content-Type: application/json
 
 { "tenant_id": "${tid}", "secret": "<your-tenant-secret>", "sub": "user-42", "ttl_secs": 3600 }`}
-              codeLabel="Request"
+              codeLabel={t.docs.labelRequest}
               language="http"
             >
               <CodeBlock
-                label="Response"
+                label={t.docs.labelResponse}
                 language="json"
                 code={`{ "success": true, "data": { "token": "…", "expires_in": 3600, "ws_url": "${wsUrl}" }, "trace_id": "…" }`}
               />
               <p className="text-xs text-muted-foreground">
-                Full request/derivation/response sequence:{' '}
+                {t.docs.restApiMintTokenSequencePrefix}{' '}
                 <a
                   href="https://github.com/DalesJuvis/realtime-platform/blob/master/diagrams/auth/issue-client-token/version.md"
                   target="_blank"
@@ -202,34 +210,30 @@ Content-Type: application/json
                 .
               </p>
               <p className="text-xs text-muted-foreground">
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">ttl_secs</code> defaults to 3600 and is
-                capped at 2,592,000 (30 days) — a higher value is silently clamped, never rejected. There's no
-                automated renewal once a token expires; for a token hand-pasted into a static site with no backend
-                of its own, mint a longer-lived one from Overview's "Mint token" instead of relying on the 1-hour
-                default.
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">ttl_secs</code> {t.docs.restApiMintTokenTtlNote}
               </p>
             </Section>
             <Section
-              title="Publish over HTTP"
-              description="For a backend with no persistent connection open — a cron job, a webhook handler. Authenticated with a token already minted above, never the raw secret."
+              title={t.docs.restApiPublishTitle}
+              description={t.docs.restApiPublishDescription}
               code={`POST ${apiUrl}/api/v1/messages
 Content-Type: application/json
 Authorization: Bearer <token from /api/v1/auth/tokens>
 
 { "tenant_id": "${tid}", "channel_id": "orders:42", "payload": "order created" }`}
-              codeLabel="Request"
+              codeLabel={t.docs.labelRequest}
               language="http"
-              caveat="No chunking on this endpoint — unlike a connected SDK client, payload must fit in 211 UTF-8 bytes (one protocol frame) or it returns 400 INVALID_REQUEST. Split larger messages into multiple calls, or use a connected SDK client instead."
+              caveat={t.docs.restApiPublishCaveat}
             >
               <CodeBlock
-                label="Response"
+                label={t.docs.labelResponse}
                 language="json"
                 code={`{ "success": true, "data": { "published": true }, "trace_id": "…" }`}
               />
             </Section>
             <Section
-              title="Publish a saved template over HTTP"
-              description="Sends one of this workspace's Templates by id instead of a raw payload — {{variable}} placeholders are filled in server-side, so the caller never needs the template's own text or the full template list, only the template_id and the values to fill in."
+              title={t.docs.restApiPublishTemplateTitle}
+              description={t.docs.restApiPublishTemplateDescription}
               code={`POST ${apiUrl}/api/v1/messages/template
 Content-Type: application/json
 Authorization: Bearer <token from /api/v1/auth/tokens>
@@ -240,27 +244,28 @@ Authorization: Bearer <token from /api/v1/auth/tokens>
   "template_id": "<template id from Templates>",
   "variables": { "name": "Ada", "order_id": "42" }
 }`}
-              codeLabel="Request"
+              codeLabel={t.docs.labelRequest}
               language="http"
-              caveat="Same 211-byte limit as above, checked after interpolation — 400 INVALID_REQUEST if the rendered text doesn't fit, shorten the template or the values. An unknown or foreign-tenant template_id returns 404 TEMPLATE_NOT_FOUND. A variable with no matching entry renders as an empty string rather than leaving the {{placeholder}} in the sent text."
+              caveat={t.docs.restApiPublishTemplateCaveat}
             >
               <CodeBlock
-                label="Response"
+                label={t.docs.labelResponse}
                 language="json"
                 code={`{ "success": true, "data": { "published": true }, "trace_id": "…" }`}
               />
               <p className="text-xs text-muted-foreground">
-                Every connected SDK below wraps this as{' '}
+                {t.docs.restApiPublishTemplateWrapperPrefix}{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">publishTemplate(channelId, templateId, variables)</code>{' '}
-                (or that SDK's own naming convention) alongside its existing <code className="rounded bg-muted px-1 py-0.5 font-mono">publish()</code> — see each SDK's own tab.
+                {t.docs.restApiPublishTemplateWrapperMiddle} <code className="rounded bg-muted px-1 py-0.5 font-mono">publish()</code>{' '}
+                {t.docs.restApiPublishTemplateWrapperSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="web-push" className="mt-0 space-y-4">
             <Section
-              title="Background notifications (tab open, hidden)"
-              description="Works today, no server setup needed — shows a native Notification whenever a message arrives while the tab is hidden or unfocused."
+              title={t.docs.webPushBackgroundTitle}
+              description={t.docs.webPushBackgroundDescription}
               install="npm install @mio/realtime-sdk"
               code={`import { attachBackgroundNotifications, requestNotificationPermission } from '@mio/realtime-sdk'
 
@@ -273,12 +278,13 @@ attachBackgroundNotifications(client, {
               language="typescript"
             >
               <p className="text-xs text-muted-foreground">
-                For per-channel control instead, call <code className="rounded bg-muted px-1 py-0.5 font-mono">showBackgroundNotification(message, options)</code> directly from a <code className="rounded bg-muted px-1 py-0.5 font-mono">subscribe()</code> callback — same options, same gating.
+                {t.docs.webPushBackgroundNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">showBackgroundNotification(message, options)</code>{' '}
+                {t.docs.webPushBackgroundNoteMiddle} <code className="rounded bg-muted px-1 py-0.5 font-mono">subscribe()</code> {t.docs.webPushBackgroundNoteSuffix}
               </p>
             </Section>
             <Section
-              title="Push notifications (tab or browser closed)"
-              description="Needs a Service Worker in your app and a backend that sends real encrypted Web Push (VAPID) to the subscription below — see this platform's push_subscriptions endpoint."
+              title={t.docs.webPushPushTitle}
+              description={t.docs.webPushPushDescription}
               language="typescript"
               code={`import { registerPushServiceWorker, subscribeToPush } from '@mio/realtime-sdk'
 
@@ -296,81 +302,83 @@ await fetch('${apiUrl}/api/v1/push/subscriptions', {
     channels: ['orders:*'],
   }),
 })`}
-              caveat="Delivery to a fully-quit browser (not just a closed tab) still depends on the OS/browser waking it for the push — outside any SDK's or server's control."
+              caveat={t.docs.webPushPushCaveat}
             />
           </TabsContent>
 
           <TabsContent value="advanced" className="mt-0 space-y-4">
             <p className="text-sm text-muted-foreground">
-              Available identically in every persistently-connected SDK — TypeScript, Python, Rust, Android — once <code className="rounded bg-muted px-1 py-0.5 font-mono">client</code> is
-              constructed as shown in each SDK's own tab. Not available in the lightweight WordPress browser client (<code className="rounded bg-muted px-1 py-0.5 font-mono">mio-client.js</code>/
-              <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-embed.js</code> — deliberately trimmed) or the stateless REST endpoints.
+              {t.docs.advancedIntroPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">client</code>{' '}
+              {t.docs.advancedIntroMiddle}<code className="rounded bg-muted px-1 py-0.5 font-mono">mio-client.js</code>/
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-embed.js</code> {t.docs.advancedIntroSuffix}
             </p>
             <Section
-              title="Wildcard subscribe"
-              description="Subscribe to a whole family of channels with a trailing * — every matching channelId routes to the same handler."
+              title={t.docs.advancedWildcardTitle}
+              description={t.docs.advancedWildcardDescription}
               language="typescript"
               code={`client.subscribe('orders:*', (message) => console.log(message.channelId, message.payload))`}
             />
             <Section
-              title="Unicast — direct to one user"
-              description="Sends to one connected user instead of a channel's subscribers. userId reuses the frame's channelId field, so it inherits the same 24-byte limit."
+              title={t.docs.advancedUnicastTitle}
+              description={t.docs.advancedUnicastDescription}
               language="typescript"
               code={`client.unicast('user-42', 'you have a new order')`}
             >
               <p className="text-xs text-muted-foreground">
-                Same method, other SDKs: Python — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.unicast(...)</code>; Rust/Android —{' '}
+                {t.docs.advancedSameMethodPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.unicast(...)</code>{t.docs.advancedSameMethodSeparator}{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">client.unicast(...)</code>.
               </p>
             </Section>
             <Section
-              title="Replay — catch up on channel history"
-              description="Requests everything published to a channel since sinceUnixSeconds (0 = all available history). Replayed messages arrive through the same subscribe() handler already registered for that channel — no separate callback."
+              title={t.docs.advancedReplayTitle}
+              description={t.docs.advancedReplayDescription}
               language="typescript"
               code={`client.subscribe('orders:42', (message) => console.log(message.payload))
 client.replay('orders:42', 0)`}
-              caveat="Not supported on a wildcard pattern (orders:*) — the server silently ignores a REPLAY request for anything but an exact channel ID."
+              caveat={t.docs.advancedReplayCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Same method, other SDKs: Python — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.replay(...)</code>; Rust/Android —{' '}
+                {t.docs.advancedSameMethodPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.replay(...)</code>{t.docs.advancedSameMethodSeparator}{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">client.replay(...)</code>.
               </p>
               <p className="text-xs text-muted-foreground">
-                How much history is available is a deployment detail, not a client-side setting — by default each channel keeps only its most recent 50 messages in memory (gone on a restart). With{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">REDIS_URL</code> set on the server, history is durably persisted to Redis instead, capped at{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">HISTORY_STREAM_MAXLEN</code> (default 1000) and surviving restarts — <code className="rounded bg-muted px-1 py-0.5 font-mono">replay()</code> itself doesn't change.
+                {t.docs.advancedReplayHistoryPrefix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">REDIS_URL</code> {t.docs.advancedReplayHistoryMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">HISTORY_STREAM_MAXLEN</code> {t.docs.advancedReplayHistorySuffix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">replay()</code> {t.docs.advancedReplayHistoryEnd}
               </p>
             </Section>
             <Section
-              title="Automatic chunking — TypeScript only"
-              description="Only sdk-typescript's publish()/unicast() transparently split a payload larger than 211 bytes across multiple frames and reassemble it before subscribe() fires. Python/Rust/Android have no chunking module at all — their publish()/unicast() silently truncate an oversized payload at encode time instead: no exception, no error, the tail of the message is just gone."
+              title={t.docs.advancedChunkingTitle}
+              description={t.docs.advancedChunkingDescription}
               language="typescript"
               code={`// TypeScript only — this just works:
 client.publish('orders:42', veryLongDescription) // > 211 UTF-8 bytes, chunked automatically
 
 // Python/Rust/Android: check the size yourself first, or split it —
 // publish()/unicast() there truncate silently, they don't chunk or throw.`}
-              caveat="POST /api/v1/messages and PHP's Client::publish()/emitEvent() take the opposite, safer approach: they reject an oversized payload with an error before any network call, rather than truncating or chunking."
+              caveat={t.docs.advancedChunkingCaveat}
             />
             <Section
-              title="Named events, socket.io-style — client.channel()"
-              description="TypeScript only for now (Python/Rust/Android don't have this yet — their subscribe()/publish() work unchanged). A channel-scoped handle with on(event, handler)/emit(event, data), for a channel that carries more than one type of message."
+              title={t.docs.advancedEventsTitle}
+              description={t.docs.advancedEventsDescription}
               language="typescript"
               code={`const orders = client.channel('orders:42')
 orders.on('order.created', (data) => console.log(data.orderId))
 orders.emit('order.created', { orderId: 123 })`}
-              caveat="Not a protocol change — emit() is a publish() whose payload encodes {event, data} as JSON; on() filters subscribe() for messages matching that shape and event name, silently ignoring anything else on the channel rather than erroring on it."
+              caveat={t.docs.advancedEventsCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Same envelope as WordPress/Laravel's <code className="rounded bg-muted px-1 py-0.5 font-mono">Client::emitEvent()</code> — an event emitted server-side is received exactly the same way, cross-SDK.
+                {t.docs.advancedEventsEnvelopePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">Client::emitEvent()</code>{' '}
+                {t.docs.advancedEventsEnvelopeSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="typescript" className="mt-0 space-y-4">
             <Section
-              title="JavaScript / TypeScript"
-              description="Browser, Node.js, and the base for the React/React Native bindings."
+              title={t.docs.tsTitle}
+              description={t.docs.tsDescription}
               install={'npm install @mio/realtime-sdk\n# Node.js only (pre-v22): WebSocket isn\'t global — the SDK loads this itself, no import needed\nnpm install ws'}
               language="typescript"
               code={`import { createRealtimeClient } from '@mio/realtime-sdk'
@@ -397,28 +405,32 @@ client.on('authFailed', ({ code, reason }) => {
 // later:
 unsubscribe()
 client.disconnect()`}
-              caveat="No AUTH acknowledgement in the protocol — the 'authenticated' event fires optimistically right after sending. Watch 'authFailed' to detect an auth failure specifically (the server sends a dedicated close code, 4001, for exactly this) rather than inferring it from a generic 'close'."
+              caveat={t.docs.tsCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                For silent renewal instead of handling <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code> yourself, replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">getToken: async () =&gt; ({'{'} token, wsUrl {'}'})</code> — called before every connection attempt (including automatically after an <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code>), calling <b>your own backend</b>, never mio's API directly.
+                {t.docs.tsGetTokenPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code> {t.docs.tsGetTokenMiddle1}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> {t.docs.tsGetTokenMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">getToken: async () =&gt; ({'{'} token, wsUrl {'}'})</code>{' '}
+                {t.docs.tsGetTokenMiddle3} <code className="rounded bg-muted px-1 py-0.5 font-mono">authFailed</code>{t.docs.tsGetTokenMiddle4}{' '}
+                <b>{t.docs.tsGetTokenYourOwnBackend}</b>{t.docs.tsGetTokenSuffix}
               </p>
             </Section>
             <Section
-              title="Publish a saved template"
-              description="Fills in {{variable}} placeholders server-side and publishes the result — see the REST API tab for the endpoint this wraps."
+              title={t.docs.tsPublishTemplateTitle}
+              description={t.docs.tsPublishTemplateDescription}
               language="typescript"
               code={`await client.publishTemplate('orders:42', '<template id from Templates>', {
   name: 'Ada',
   order_id: '42',
 })`}
-              caveat="Goes over HTTP, not the open WS frame stream — works even before connect() or without an open connection, as long as a token (or getToken) is configured. Unlike publish()/unicast(), it is not queued for a not-yet-open socket; each call fires immediately."
+              caveat={t.docs.tsPublishTemplateCaveat}
             />
           </TabsContent>
 
           <TabsContent value="react" className="mt-0 space-y-4">
             <Section
-              title="React"
-              description="Context + hooks over the TypeScript SDK — no manual useEffect/subscribe/unsubscribe boilerplate."
+              title={t.docs.reactTitle}
+              description={t.docs.reactDescription}
               install="npm install @mio/realtime-sdk-react @mio/realtime-sdk"
               language="jsx"
               code={`import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react'
@@ -444,22 +456,22 @@ function OrdersFeed() {
 }`}
             >
               <p className="text-xs text-muted-foreground">
-                Also available: <code className="rounded bg-muted px-1 py-0.5 font-mono">useSubscription</code> (effect-only, no
-                re-render), <code className="rounded bg-muted px-1 py-0.5 font-mono">useConnectionState</code>,{' '}
+                {t.docs.reactAlsoAvailablePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">useSubscription</code>{' '}
+                {t.docs.reactAlsoAvailableParenthetical} <code className="rounded bg-muted px-1 py-0.5 font-mono">useConnectionState</code>,{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">useBackgroundNotifications</code>,{' '}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">usePushSubscription</code>.
               </p>
               <p className="text-xs text-muted-foreground">
-                Publish a saved template: <code className="rounded bg-muted px-1 py-0.5 font-mono">useChannel(...).publishTemplate(templateId, variables)</code>, or standalone via{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate(channelId)</code> — same HTTP call as the REST API tab, {'{{'}variable{'}}'} filled in server-side.
+                {t.docs.reactPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">useChannel(...).publishTemplate(templateId, variables)</code>{t.docs.reactPublishTemplateMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate(channelId)</code> {t.docs.reactPublishTemplateSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="react-native" className="mt-0 space-y-4">
             <Section
-              title="React Native"
-              description="Re-exports the React SDK's hooks/components as-is (none touch the DOM) and adds AppState-aware reconnection — necessary because a backgrounded RN app can be fully suspended by the OS, unlike a browser tab."
+              title={t.docs.rnTitle}
+              description={t.docs.rnDescription}
               install="npm install @mio/realtime-sdk-react-native @mio/realtime-sdk"
               language="jsx"
               code={`import { RealtimeProvider, useChannel } from '@mio/realtime-sdk-react-native'
@@ -478,18 +490,19 @@ function OrdersFeed() {
   const { messages, publish } = useChannel('orders:42', { limit: 100 })
   // ... same API as @mio/realtime-sdk-react
 }`}
-              caveat="Notification hooks (useBackgroundNotifications/usePushSubscription) are deliberately NOT re-exported here — they wrap browser-only Notification/PushManager APIs that don't exist in React Native. Native push needs a different mechanism (e.g. @react-native-firebase/messaging)."
+              caveat={t.docs.rnCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">publishTemplate</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate</code> are re-exported unchanged from <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk-react</code> — see the React tab.
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">publishTemplate</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">usePublishTemplate</code> {t.docs.rnReexportSuffix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk-react</code> {t.docs.rnReexportEnd}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="python" className="mt-0 space-y-4">
             <Section
-              title="Python"
-              description="asyncio-based client."
+              title={t.docs.pythonTitle}
+              description={t.docs.pythonDescription}
               install="pip install realtime-sdk  # or `pip install -e .` from sdk-python/ in this repo"
               language="python"
               code={`import asyncio
@@ -508,19 +521,19 @@ async def main():
         await asyncio.sleep(3600)
 
 asyncio.run(main())`}
-              caveat="The WebSocket client (client.py) is documented as not yet runtime-tested by its authors — only the pure-stdlib protocol codec has real test coverage. Verify against a live connection before production use."
+              caveat={t.docs.pythonCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.publish_template("orders:42", template_id, {'{'}"name": "Ada"{'}'})</code>.
-                Unlike the WS client above, this one call is mock-tested (an HTTP request, not a live socket) — see <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-python/README.md</code>.
+                {t.docs.pythonPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">await client.publish_template("orders:42", template_id, {'{'}"name": "Ada"{'}'})</code>.
+                {t.docs.pythonPublishTemplateMiddle} <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-python/README.md</code>{t.docs.pythonPublishTemplateSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="rust" className="mt-0 space-y-4">
             <Section
-              title="Rust"
-              description="Tokio-based client."
+              title={t.docs.rustTitle}
+              description={t.docs.rustDescription}
               install={'[dependencies]\nrealtime-sdk = { path = "../sdk-rust" } # or git/crates.io once published\ntokio = { version = "1", features = ["full"] }'}
               installLabel="Cargo.toml"
               installLanguage="toml"
@@ -546,18 +559,20 @@ async fn main() {
 
     client.publish("orders:42", "order created").unwrap();
 }`}
-              caveat="This SDK is documented as not yet compiled by its authors (no Rust toolchain was available when it was written) — run cargo build yourself and treat it as a first draft, not a validated artifact."
+              caveat={t.docs.rustCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publish_template("orders:42", template_id, &amp;variables).await.unwrap();</code> (an HTTP call, independent of the WS connection above). Unlike the rest of this SDK, <code className="rounded bg-muted px-1 py-0.5 font-mono">publish_template</code> and its <code className="rounded bg-muted px-1 py-0.5 font-mono">cargo build</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">cargo test</code> were actually run and pass.
+                {t.docs.rustPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publish_template("orders:42", template_id, &amp;variables).await.unwrap();</code>{' '}
+                {t.docs.rustPublishTemplateMiddle} <code className="rounded bg-muted px-1 py-0.5 font-mono">publish_template</code> {t.docs.rustPublishTemplateMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">cargo build</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">cargo test</code> {t.docs.rustPublishTemplateSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="android" className="mt-0 space-y-4">
             <Section
-              title="Android — Kotlin"
-              description="Gradle library module, OkHttp-based. No Maven artifact published yet — integrate as a local module."
+              title={t.docs.androidKotlinTitle}
+              description={t.docs.androidKotlinDescription}
               language="kotlin"
               code={`val client = RealtimeClient(
     RealtimeClientConfig(
@@ -577,19 +592,23 @@ client.publish("orders:42", "order created")
 // later:
 subscription.close()
 client.disconnect()`}
-              caveat="Not yet compiled by its authors (no kotlinc/full JDK available when written) — run ./gradlew build test yourself. Callbacks fire on OkHttp's own thread, not the Android main thread — dispatch to the UI thread yourself."
+              caveat={t.docs.androidKotlinCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Watch <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code> for an invalid/expired token — without <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code>, the client never auto-reconnects after this. Replace <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> with <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider = TokenProvider {'{'} ... {'}'}</code> for silent renewal — called synchronously on the client's own background thread (safe to block on your backend call) before every connection attempt.
+                {t.docs.androidWatchPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code> {t.docs.androidWatchMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code>{t.docs.androidWatchMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> {t.docs.androidWatchMiddle3}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider = TokenProvider {'{'} ... {'}'}</code> {t.docs.androidWatchSuffix}
               </p>
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — callback-based like the rest of this client, not a suspend fun:{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, mapOf("name" to "Ada")) {'{'} result -&gt; ... {'}'}</code>. Runs over HTTP via the same <code className="rounded bg-muted px-1 py-0.5 font-mono">OkHttpClient</code> already configured, independent of the WS connection.
+                {t.docs.androidPublishTemplatePrefix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, mapOf("name" to "Ada")) {'{'} result -&gt; ... {'}'}</code>
+                {t.docs.androidPublishTemplateSuffix} <code className="rounded bg-muted px-1 py-0.5 font-mono">OkHttpClient</code> {t.docs.androidPublishTemplateEnd}
               </p>
             </Section>
             <Section
-              title="Android — Java"
-              description="Same client, Java-friendly surface (SAM interfaces, @JvmOverloads)."
+              title={t.docs.androidJavaTitle}
+              description={t.docs.androidJavaDescription}
               language="java"
               code={`RealtimeClientConfig config = new RealtimeClientConfig(
     "${wsUrl}", // from your mint-token response's ws_url
@@ -605,18 +624,22 @@ client.connect();
 client.publish("orders:42", "order created");`}
             >
               <p className="text-xs text-muted-foreground">
-                Same <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> silent-renewal story as Kotlin above — Java has no named/optional arguments, so pass <code className="rounded bg-muted px-1 py-0.5 font-mono">null</code> for <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> and fill in every parameter through <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> explicitly (see the README for the full example).
+                {t.docs.androidJavaAuthPrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">ConnectionEvent.AuthFailed</code>/<code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code>{' '}
+                {t.docs.androidJavaAuthMiddle} <code className="rounded bg-muted px-1 py-0.5 font-mono">null</code> {t.docs.androidJavaAuthMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">token</code> {t.docs.androidJavaAuthSuffix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">tokenProvider</code> {t.docs.androidJavaAuthEnd}
               </p>
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, result -&gt; {'{'} ... {'}'});</code> (an overload without the <code className="rounded bg-muted px-1 py-0.5 font-mono">variables</code> map also exists).
+                {t.docs.androidJavaPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">client.publishTemplate("orders:42", templateId, result -&gt; {'{'} ... {'}'});</code>{' '}
+                {t.docs.androidJavaPublishTemplateSuffix} <code className="rounded bg-muted px-1 py-0.5 font-mono">variables</code> {t.docs.androidJavaPublishTemplateEnd}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="wordpress" className="mt-0 space-y-4">
             <Section
-              title="WordPress — server side (PHP)"
-              description="Mint tokens and publish from PHP hooks (save_post, a cron job, ...). Configure Settings > mio Realtime in your WP admin with this tenant's ID and secret first."
+              title={t.docs.wpServerTitle}
+              description={t.docs.wpServerDescription}
               install="composer require mio/realtime-wordpress  # or copy sdk-wordpress/ into wp-content/plugins/"
               language="php"
               code={`use Mio\\Realtime\\Client;
@@ -628,28 +651,28 @@ $client->publish('orders:42', 'order created', $minted->token);
 
 // Named event, same envelope client.channel(id).on() decodes in the browser:
 $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);`}
-              caveat="Client::publish()/emitEvent() do not chunk — payload over 211 UTF-8 bytes throws before any network call. Never return $secret to the browser — only $minted->token should leave PHP."
+              caveat={t.docs.wpServerCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — <code className="rounded bg-muted px-1 py-0.5 font-mono">$client-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>. Same tenant-scoped lookup and server-side {'{{'}variable{'}}'} filling as the REST API tab — no local size check here, the 211-byte cap is enforced server-side after interpolation.
+                {t.docs.wpServerPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">$client-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>{t.docs.wpServerPublishTemplateSuffix}
               </p>
             </Section>
             <Section
-              title="WordPress — on the page"
-              description="A shortcode renders a live-updating feed, backed by a real WebSocket connection in the visitor's browser."
+              title={t.docs.wpPageTitle}
+              description={t.docs.wpPageDescription}
               code={`[mio_realtime channel="orders:42" limit="20" replay="true"]`}
-              codeLabel="Add to any page or post"
+              codeLabel={t.docs.labelAddToPage}
             >
               <p className="text-xs text-muted-foreground">
-                Functional starting point, not a themed component — style <code className="rounded bg-muted px-1 py-0.5 font-mono">.mio-realtime-feed</code> yourself.
+                {t.docs.wpPageNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">.mio-realtime-feed</code> {t.docs.wpPageNoteSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="laravel" className="mt-0 space-y-4">
             <Section
-              title="Laravel"
-              description="Same framework-independent Mio\Realtime\Client PHP class WordPress uses — it calls zero WordPress functions itself — wired into Laravel's service container: a service provider, a facade, and Laravel's own HTTP client in place of wp_remote_post."
+              title={t.docs.laravelTitle}
+              description={t.docs.laravelDescription}
               install={`composer require mio/realtime-laravel\nphp artisan vendor:publish --tag=mio-realtime-config`}
               language="php"
               code={`use Mio\\Realtime\\Laravel\\Facades\\MioRealtime;
@@ -659,7 +682,7 @@ MioRealtime::publish('orders:42', 'order created', $minted->token);
 
 // Named event, same envelope client.channel(id).on() decodes:
 MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 123]);`}
-              caveat="Same HTTP-only publish path as WordPress — no persistent WebSocket connection, no chunking. publish() throws before any network call if $payload exceeds 211 UTF-8 bytes."
+              caveat={t.docs.laravelCaveat}
             >
               <CodeBlock
                 label=".env"
@@ -667,20 +690,22 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
                 code={`MIO_REALTIME_API_URL=${apiUrl}\nMIO_REALTIME_TENANT_ID=${tid}\nMIO_REALTIME_SECRET=<your-tenant-secret>`}
               />
               <p className="text-xs text-muted-foreground">
-                Or resolve <code className="rounded bg-muted px-1 py-0.5 font-mono">Mio\Realtime\Client</code> directly via the container instead of the facade — both reach the same
-                bound singleton. See <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-laravel/README.md</code> for why this package depends on{' '}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">mio/realtime-wordpress</code> (naming leftover, not a functional coupling).
+                {t.docs.laravelResolvePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">Mio\Realtime\Client</code> {t.docs.laravelResolveMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-laravel/README.md</code> {t.docs.laravelResolveMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">mio/realtime-wordpress</code> {t.docs.laravelResolveSuffix}
               </p>
               <p className="text-xs text-muted-foreground">
-                Publish a saved template — not on the <code className="rounded bg-muted px-1 py-0.5 font-mono">MioRealtime</code> facade yet, resolve <code className="rounded bg-muted px-1 py-0.5 font-mono">LaravelHttpTransport</code> from the container instead: <code className="rounded bg-muted px-1 py-0.5 font-mono">app(\Mio\Realtime\Laravel\LaravelHttpTransport::class)-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>.
+                {t.docs.laravelPublishTemplatePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">MioRealtime</code> {t.docs.laravelPublishTemplateMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">LaravelHttpTransport</code> {t.docs.laravelPublishTemplateMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">app(\Mio\Realtime\Laravel\LaravelHttpTransport::class)-&gt;publishTemplate('orders:42', $templateId, $minted-&gt;token, ['name' =&gt; 'Ada']);</code>{t.docs.laravelPublishTemplateSuffix}
               </p>
             </Section>
           </TabsContent>
 
           <TabsContent value="embed" className="mt-0 space-y-4">
             <Section
-              title="mio-embed.js — no plugin, no build step"
-              description="Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind."
+              title={t.docs.embedScriptTitle}
+              description={t.docs.embedScriptDescription}
               language="markup"
               code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
@@ -689,17 +714,18 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
   data-channel="orders:42"
   data-replay="true"
 ></script>`}
-              caveat="Pin the version: @v0.1.8 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party."
+              caveat={t.docs.embedScriptCaveat}
             >
               <p className="text-xs text-muted-foreground">
-                No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified <code className="rounded bg-muted px-1 py-0.5 font-mono">.min.js</code> build
-                (<code className="rounded bg-muted px-1 py-0.5 font-mono">npm run build</code> in <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-wordpress/</code>) — plain <code className="rounded bg-muted px-1 py-0.5 font-mono">.js</code> source stays in the repo for reading.
-                The <code className="rounded bg-muted px-1 py-0.5 font-mono">vanilla-client/</code> directory in this repo is a working local test harness for it.
+                {t.docs.embedScriptNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">.min.js</code> {t.docs.embedScriptNoteMiddle}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">npm run build</code> {t.docs.embedScriptNoteMiddle2}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">sdk-wordpress/</code>{t.docs.embedScriptNoteMiddle3} <code className="rounded bg-muted px-1 py-0.5 font-mono">.js</code>{' '}
+                {t.docs.embedScriptNoteMiddle4} <code className="rounded bg-muted px-1 py-0.5 font-mono">vanilla-client/</code> {t.docs.embedScriptNoteEnd}
               </p>
             </Section>
             <Section
-              title="mio-protocol.js + mio-client.js — building your own page logic"
-              description="For anything beyond the auto-rendered feed above — custom UI, multiple channels, your own publish form — load the two files mio-embed.js bundles and drive MioRealtimeClient yourself."
+              title={t.docs.embedCustomTitle}
+              description={t.docs.embedCustomDescription}
               language="markup"
               code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
@@ -717,12 +743,12 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
 </script>`}
             >
               <p className="text-xs text-muted-foreground">
-                Not from this CDN: <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-shortcode.js</code> — it only makes sense wired up by the WordPress plugin itself.
+                {t.docs.embedCustomNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-shortcode.js</code> {t.docs.embedCustomNoteSuffix}
               </p>
             </Section>
             <Section
-              title="Background notifications — tab hidden or unfocused"
-              description="Per-channel, directly in a subscribe() callback — native browser Notification API only, no server setup, no Service Worker, no VAPID keys. Same window.MioEmbedClient API if you're using mio-embed.js instead."
+              title={t.docs.embedBgTitle}
+              description={t.docs.embedBgDescription}
               language="markup"
               code={`<script>
   document.getElementById('enable-notifs').addEventListener('click', function () {
@@ -738,10 +764,11 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
 </script>`}
             >
               <p className="text-xs text-muted-foreground">
-                Prefer one call for every subscribed channel instead of per-channel control? <code className="rounded bg-muted px-1 py-0.5 font-mono">window.MioRealtimeClient.attachBackgroundNotifications(client, options)</code> wires the same logic to the client's own <code className="rounded bg-muted px-1 py-0.5 font-mono">'message'</code> event.
+                {t.docs.embedBgNote1Prefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">window.MioRealtimeClient.attachBackgroundNotifications(client, options)</code>{' '}
+                {t.docs.embedBgNote1Suffix} <code className="rounded bg-muted px-1 py-0.5 font-mono">'message'</code> {t.docs.embedBgNote1End}
               </p>
               <p className="text-xs text-muted-foreground">
-                For notifications that also work with the tab or browser fully closed, that needs real Web Push (Service Worker + VAPID keys) — see this page's Web Push tab for the full <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk</code> version.
+                {t.docs.embedBgNote2Prefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">@mio/realtime-sdk</code> {t.docs.embedBgNote2Suffix}
               </p>
             </Section>
           </TabsContent>

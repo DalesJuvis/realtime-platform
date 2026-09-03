@@ -8,6 +8,7 @@
  */
 
 import { Button } from '@components/ui/button'
+import { useTranslation } from '@lib/i18n'
 
 function GoogleIcon() {
   return (
@@ -33,11 +34,12 @@ function GoogleIcon() {
 }
 
 export function GoogleButton() {
+  const { t } = useTranslation()
   return (
-    <Button type="button" variant="outline" className="w-full" disabled title="Coming soon">
+    <Button type="button" variant="outline" className="w-full" disabled title={t.auth.comingSoon}>
       <GoogleIcon />
-      Continue with Google
-      <span className="ml-auto text-xs text-muted-foreground">Soon</span>
+      {t.auth.continueWithGoogle}
+      <span className="ml-auto text-xs text-muted-foreground">{t.auth.soon}</span>
     </Button>
   )
 }

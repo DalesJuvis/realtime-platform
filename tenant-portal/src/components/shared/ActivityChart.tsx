@@ -23,6 +23,7 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
+import { useTranslation } from '@lib/i18n'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
 
@@ -37,12 +38,13 @@ const GRID_COLOR = 'rgba(148, 163, 184, 0.15)'
 const TICK_COLOR = 'rgba(148, 163, 184, 0.9)'
 
 export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
+  const { t } = useTranslation()
   const data = useMemo(
     () => ({
       labels: samples.map((s) => s.label),
       datasets: [
         {
-          label: 'Active sessions',
+          label: t.overview.activeSessionsLabel,
           data: samples.map((s) => s.sessions),
           borderColor: '#f97316',
           backgroundColor: 'rgba(249, 115, 22, 0.12)',
@@ -52,7 +54,7 @@ export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
           borderWidth: 2,
         },
         {
-          label: 'Messages processed',
+          label: t.overview.messagesProcessedLabel,
           data: samples.map((s) => s.messages),
           borderColor: '#38bdf8',
           backgroundColor: 'rgba(56, 189, 248, 0.08)',
@@ -62,7 +64,7 @@ export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
           borderWidth: 2,
         },
         {
-          label: 'Rate limited',
+          label: t.overview.rateLimitedLabel,
           data: samples.map((s) => s.rateLimited),
           borderColor: '#f43f5e',
           backgroundColor: 'rgba(244, 63, 94, 0.08)',
@@ -73,7 +75,7 @@ export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
         },
       ],
     }),
-    [samples],
+    [samples, t],
   )
 
   const options = useMemo(
@@ -99,7 +101,7 @@ export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
   if (samples.length < 2) {
     return (
       <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
-        Collecting live samples — the chart fills in as data comes in.
+        {t.overview.collectingSamples}
       </div>
     )
   }

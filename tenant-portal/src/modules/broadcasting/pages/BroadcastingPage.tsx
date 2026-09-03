@@ -23,6 +23,7 @@ import { Badge } from '@components/ui/badge'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import { useDialog } from '@providers/DialogProvider'
+import { useTranslation } from '@lib/i18n'
 import { sendBroadcastAction } from '@actions/broadcast/sendBroadcast.action'
 import { getTemplatesAction } from '@actions/templates/getTemplates.action'
 import { getChannelsAction } from '@actions/channels/getChannels.action'
@@ -66,6 +67,7 @@ function TemplateVariablesForm({
   onFilled: (payload: string) => void
 }) {
   const dialog = useDialog()
+  const { t } = useTranslation()
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(variables.map((name) => [name, ''])))
 
   function handleSubmit(event: FormEvent) {
@@ -89,9 +91,9 @@ function TemplateVariablesForm({
       ))}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => dialog.closeAll()}>
-          Cancel
+          {t.common.cancel}
         </Button>
-        <Button type="submit">Insert</Button>
+        <Button type="submit">{t.broadcasting.insert}</Button>
       </div>
     </form>
   )
@@ -111,6 +113,7 @@ function deviceReceives(device: Device, channelId: string): boolean {
 
 export default function BroadcastingPage() {
   const dialog = useDialog()
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   // Prefilled by the sidebar's channel list — see AppSidebar's goToChannel().
   const [channelId, setChannelId] = useState(searchParams.get('channel') ?? '')
@@ -140,14 +143,14 @@ export default function BroadcastingPage() {
   useEffect(() => {
     getDevicesAction()
       .then(setDevices)
-      .catch((err) => toast.error(errorMessage(err, 'Failed to load connected devices.')))
-  }, [])
+      .catch((err) => toast.error(errorMessage(err, t.broadcasting.loadDevicesError)))
+  }, [t.broadcasting.loadDevicesError])
 
   useEffect(() => {
     getChannelsAction()
       .then(setChannels)
-      .catch((err) => toast.error(errorMessage(err, 'Failed to load channels.')))
-  }, [])
+      .catch((err) => toast.error(errorMessage(err, t.broadcasting.loadChannelsError)))
+  }, [t.broadcasting.loadChannelsError])
 
   useEffect(() => {
     const trimmed = channelId.trim()
@@ -218,10 +221,10 @@ export default function BroadcastingPage() {
   const wasOverLimitRef = useRef(false)
   useEffect(() => {
     if (overLimit && !wasOverLimitRef.current) {
-      toast.warning(`Over the ${MAX_PAYLOAD_BYTES}-byte payload limit — keep writing, but trim it before you can send.`)
+      toast.warning(t.broadcasting.overLimitWarning(MAX_PAYLOAD_BYTES))
     }
     wasOverLimitRef.current = overLimit
-  }, [overLimit])
+  }, [overLimit, t.broadcasting])
 
   const matchingDevices = useMemo(() => {
     const trimmed = channelId.trim()
@@ -247,7 +250,11 @@ export default function BroadcastingPage() {
     }
     dialog.openDialog(
       <TemplateVariablesForm body={template.body} variables={variables} onFilled={setPayload} />,
-      { title: `Fill in "${template.name}"`, description: 'These placeholders were found in the template.', size: 'sm' },
+      {
+        title: t.broadcasting.fillTemplateDialogTitle(template.name),
+        description: t.broadcasting.fillTemplateDialogDescription,
+        size: 'sm',
+      },
     )
   }
 
@@ -282,7 +289,7 @@ export default function BroadcastingPage() {
     event.target.value = '' // allow re-selecting the same file later
     if (!file) return
     setAttachedFileName(file.name)
-    toast.info('Heads up: the wire protocol carries text only (211 UTF-8 bytes, no binary frames) — the filename below is a visual note, the file itself is never sent.')
+    toast.info(t.broadcasting.attachmentNote(MAX_PAYLOAD_BYTES))
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -299,11 +306,11 @@ export default function BroadcastingPage() {
       await sendBroadcastAction({ channelId: targetChannel, payload })
       setLastReach({ channelId: targetChannel, count: reachCount })
       setSentHistory((prev) => [{ id: randomId(), payload, sentAt: new Date().toISOString() }, ...prev])
-      toast.success(`Published to "${targetChannel}" — ${reachCount} device${reachCount === 1 ? '' : 's'} currently subscribed.`)
+      toast.success(t.broadcasting.publishSuccess(targetChannel, reachCount))
       setPayload('')
       setAttachedFileName(null)
     } catch (err) {
-      toast.error(errorMessage(err, 'Failed to send broadcast.'))
+      toast.error(errorMessage(err, t.broadcasting.sendError))
     } finally {
       setSending(false)
     }
@@ -312,16 +319,18 @@ export default function BroadcastingPage() {
   return (
     <div className="space-y-6 pb-28">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Broadcasting</h1>
-        <p className="text-sm text-muted-foreground">Publish a message to any channel right now.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.broadcasting.pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.broadcasting.pageDescription}</p>
       </div>
 
       {lastReach && (
         <div className="flex items-center gap-2 rounded-md border border-emerald-600/20 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
           <Radio className="h-4 w-4 shrink-0" />
           <span>
-            Last broadcast to <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-xs dark:bg-white/10">{lastReach.channelId}</code> reached{' '}
-            <span className="font-semibold tabular-nums">{lastReach.count}</span> device{lastReach.count === 1 ? '' : 's'}.
+            {t.broadcasting.lastBroadcastPrefix}{' '}
+            <code className="rounded bg-black/5 px-1 py-0.5 font-mono text-xs dark:bg-white/10">{lastReach.channelId}</code>{' '}
+            {t.broadcasting.lastBroadcastMiddle}{' '}
+            <span className="font-semibold tabular-nums">{lastReach.count}</span> {t.broadcasting.lastBroadcastSuffix(lastReach.count)}
           </span>
         </div>
       )}
@@ -329,21 +338,22 @@ export default function BroadcastingPage() {
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle className="text-base">Sent history</CardTitle>
+            <CardTitle className="text-base">{t.broadcasting.sentHistoryTitle}</CardTitle>
             <CardDescription>
               {channelId.trim() ? (
                 <>
-                  Messages sent to <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{channelId.trim()}</code> this
-                  session — clears when you change the channel.
+                  {t.broadcasting.sentHistoryDescriptionPrefix}{' '}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{channelId.trim()}</code>{' '}
+                  {t.broadcasting.sentHistoryDescriptionSuffix}
                 </>
               ) : (
-                'Type a channel in the composer below to start a history for it.'
+                t.broadcasting.sentHistoryDescriptionEmpty
               )}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {sentHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing sent to this channel yet.</p>
+              <p className="text-sm text-muted-foreground">{t.broadcasting.sentHistoryEmpty}</p>
             ) : (
               <ul className="space-y-2">
                 {sentHistory.map((entry) => (
@@ -359,21 +369,18 @@ export default function BroadcastingPage() {
 
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle className="text-base">Reach</CardTitle>
-            <CardDescription>
-              Devices currently subscribed to this channel — a live snapshot, not a delivery receipt (the protocol
-              has no per-message ACK).
-            </CardDescription>
+            <CardTitle className="text-base">{t.broadcasting.reachTitle}</CardTitle>
+            <CardDescription>{t.broadcasting.reachDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-semibold tabular-nums">{matchingDevices.length}</span>
-              <span className="text-sm text-muted-foreground">device{matchingDevices.length === 1 ? '' : 's'}</span>
+              <span className="text-sm text-muted-foreground">{t.broadcasting.reachUnit(matchingDevices.length)}</span>
             </div>
             {!channelId.trim() ? (
-              <p className="text-sm text-muted-foreground">Enter a channel to see who's listening.</p>
+              <p className="text-sm text-muted-foreground">{t.broadcasting.reachNoChannel}</p>
             ) : matchingDevices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No devices currently subscribed to this channel.</p>
+              <p className="text-sm text-muted-foreground">{t.broadcasting.reachNoDevices}</p>
             ) : (
               <ul className="space-y-1.5">
                 {matchingDevices.map((device) => (
@@ -394,12 +401,12 @@ export default function BroadcastingPage() {
 
         <Card className="rounded-sm border border-[orangered]/25 bg-primary/5 shadow-none">
           <CardHeader>
-            <CardTitle className="text-base">Templates</CardTitle>
-            <CardDescription>Click one to load it into the composer.</CardDescription>
+            <CardTitle className="text-base">{t.broadcasting.templatesTitle}</CardTitle>
+            <CardDescription>{t.broadcasting.templatesDescription}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {templates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No saved templates yet.</p>
+              <p className="text-sm text-muted-foreground">{t.broadcasting.templatesEmpty}</p>
             ) : (
               templates.map((template) => (
                 <button
@@ -445,14 +452,16 @@ export default function BroadcastingPage() {
                 }}
                 onFocus={() => setChannelOpen(true)}
                 onClick={(e) => e.stopPropagation()}
-                placeholder="Search or type a channel…"
-                aria-label="Channel"
+                placeholder={t.broadcasting.channelInputPlaceholder}
+                aria-label={t.broadcasting.channelInputAriaLabel}
                 maxLength={24}
                 required
                 className="min-w-0 flex-1 bg-transparent font-mono text-xs font-medium text-foreground outline-none placeholder:font-normal placeholder:text-muted-foreground"
               />
               {channelId.trim() && (
-                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{matchingDevices.length} listening</span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {t.broadcasting.listeningCount(matchingDevices.length)}
+                </span>
               )}
               <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', channelOpen && 'rotate-180')} />
             </button>
@@ -486,7 +495,7 @@ export default function BroadcastingPage() {
               <button
                 type="button"
                 onClick={() => setAttachedFileName(null)}
-                aria-label="Remove attachment"
+                aria-label={t.broadcasting.removeAttachmentAriaLabel}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -499,8 +508,8 @@ export default function BroadcastingPage() {
               ref={textareaRef}
               value={payload}
               onChange={(e) => setPayload(e.target.value)}
-              placeholder="Message this channel…"
-              aria-label="Message"
+              placeholder={t.broadcasting.messagePlaceholder}
+              aria-label={t.broadcasting.messageAriaLabel}
               rows={1}
               required
               className="max-h-40 min-h-[2.5rem] w-full resize-none bg-transparent px-2 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
@@ -518,13 +527,13 @@ export default function BroadcastingPage() {
                   size="icon"
                   onClick={() => setVariableOpen((v) => !v)}
                   className="h-9 w-9 rounded-full text-muted-foreground"
-                  aria-label="Insert a template variable"
+                  aria-label={t.broadcasting.insertVariableAriaLabel}
                 >
                   <Braces className="h-4 w-4" />
                 </Button>
                 {variableOpen && (
                   <div className="absolute bottom-0 right-full z-10 mr-3 w-64 rounded-xl border border-border bg-card/95 p-3 text-foreground shadow-lg backdrop-blur-md">
-                    <p className="mb-2 text-xs font-semibold text-foreground">Insert variable</p>
+                    <p className="mb-2 text-xs font-semibold text-foreground">{t.broadcasting.insertVariableHeading}</p>
 
                     {usedVariables.length > 0 ? (
                       <form onSubmit={applyVariableValues} className="mb-3 space-y-2">
@@ -537,18 +546,18 @@ export default function BroadcastingPage() {
                               id={`var-value-${name}`}
                               value={variableValues[name] ?? ''}
                               onChange={(e) => setVariableValues((prev) => ({ ...prev, [name]: e.target.value }))}
-                              placeholder="value"
+                              placeholder={t.broadcasting.variableValuePlaceholder}
                               autoFocus={i === 0}
                               className="w-full rounded-md border border-input bg-transparent px-2.5 py-1.5 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                             />
                           </div>
                         ))}
                         <Button type="submit" size="sm" className="h-7 w-full text-xs">
-                          Apply values
+                          {t.broadcasting.applyValues}
                         </Button>
                       </form>
                     ) : (
-                      <p className="mb-3 text-xs text-muted-foreground">No variable in this message yet.</p>
+                      <p className="mb-3 text-xs text-muted-foreground">{t.broadcasting.noVariableYet}</p>
                     )}
 
                     <form
@@ -562,12 +571,12 @@ export default function BroadcastingPage() {
                         value={variableName}
                         onChange={(e) => setVariableName(e.target.value)}
                         placeholder="variableName"
-                        aria-label="New variable name"
+                        aria-label={t.broadcasting.newVariableNameAriaLabel}
                         autoFocus={usedVariables.length === 0}
                         className="min-w-0 flex-1 rounded-md border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none placeholder:font-sans placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                       />
                       <Button type="submit" size="sm" disabled={!variableName.trim()} className="h-7 shrink-0 px-2 text-xs">
-                        Insert
+                        {t.broadcasting.insert}
                       </Button>
                     </form>
                   </div>
@@ -581,7 +590,7 @@ export default function BroadcastingPage() {
                   size="icon"
                   onClick={handleAttachClick}
                   className="h-9 w-9 shrink-0 rounded-full text-muted-foreground"
-                  aria-label="Attach a file"
+                  aria-label={t.broadcasting.attachFileAriaLabel}
                 >
                   <Paperclip className="h-4 w-4" />
                 </Button>
@@ -594,7 +603,7 @@ export default function BroadcastingPage() {
                     size="icon"
                     onClick={() => setEmojiOpen((v) => !v)}
                     className="h-9 w-9 rounded-full text-muted-foreground"
-                    aria-label="Insert emoji"
+                    aria-label={t.broadcasting.insertEmojiAriaLabel}
                   >
                     <Smile className="h-4 w-4" />
                   </Button>
@@ -607,16 +616,16 @@ export default function BroadcastingPage() {
                       <div className="relative shrink-0 p-2">
                         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                         <EmojiPicker.Search
-                          placeholder="Search emoji…"
+                          placeholder={t.broadcasting.emojiSearchPlaceholder}
                           className="w-full rounded-md border border-input bg-transparent py-1.5 pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                         />
                       </div>
                       <EmojiPicker.Viewport className="min-h-0 flex-1 overflow-y-auto">
                         <EmojiPicker.Loading className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                          Loading…
+                          {t.common.loading}
                         </EmojiPicker.Loading>
                         <EmojiPicker.Empty className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                          No emoji found.
+                          {t.broadcasting.noEmojiFound}
                         </EmojiPicker.Empty>
                         <EmojiPicker.List
                           className="select-none pb-1.5"
@@ -657,7 +666,7 @@ export default function BroadcastingPage() {
                   size="icon"
                   disabled={isSending || overLimit || !channelId.trim() || !payload}
                   className="h-9 w-9 shrink-0 rounded-full"
-                  aria-label={isSending ? 'Sending…' : 'Send broadcast'}
+                  aria-label={isSending ? t.broadcasting.sendingAriaLabel : t.broadcasting.sendBroadcastAriaLabel}
                 >
                   <Send className="h-4 w-4" />
                 </Button>
@@ -666,7 +675,7 @@ export default function BroadcastingPage() {
           </div>
 
           <p className={`px-4 pb-2 text-right text-[10px] tabular-nums ${overLimit ? 'text-destructive' : 'text-muted-foreground'}`}>
-            {payloadBytes} / {MAX_PAYLOAD_BYTES} bytes
+            {t.broadcasting.byteCounter(payloadBytes, MAX_PAYLOAD_BYTES)}
           </p>
         </form>
       </div>

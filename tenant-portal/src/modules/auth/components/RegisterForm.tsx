@@ -14,8 +14,10 @@ import { usePortalAuthStore } from '@store/portalAuth.store'
 import { registerAction } from '@actions/auth/register.action'
 import { errorMessage } from '@lib/errors'
 import { env } from '@lib/env'
+import { useTranslation } from '@lib/i18n'
 
 export function RegisterForm() {
+  const { t } = useTranslation()
   const setSession = usePortalAuthStore((s) => s.setSession)
   const navigate = useNavigate()
 
@@ -38,7 +40,7 @@ export function RegisterForm() {
       setSession(env.defaultApiUrl, accessToken)
       navigate('/overview', { replace: true })
     } catch (err) {
-      setError(errorMessage(err, 'Registration failed.'))
+      setError(errorMessage(err, t.auth.joinFailed))
     } finally {
       setSubmitting(false)
     }
@@ -47,13 +49,13 @@ export function RegisterForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Join an existing tenant</h1>
-        <p className="text-sm text-muted-foreground">Prove you own this tenant to set up portal login.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.auth.joinTenantTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.auth.joinTenantSubtitle}</p>
       </div>
 
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="tenantId">Tenant ID</Label>
+          <Label htmlFor="tenantId">{t.auth.tenantId}</Label>
           <Input
             id="tenantId"
             value={tenantId}
@@ -64,22 +66,22 @@ export function RegisterForm() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="secret">Tenant secret</Label>
+          <Label htmlFor="secret">{t.auth.tenantSecret}</Label>
           <Input
             id="secret"
             type="password"
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
-            placeholder="issued once by the platform admin"
+            placeholder={t.auth.tenantSecretPlaceholder}
             required
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t.auth.email}</Label>
           <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t.auth.password}</Label>
           <Input
             id="password"
             type="password"
@@ -93,20 +95,20 @@ export function RegisterForm() {
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? 'Joining…' : 'Join tenant'}
+        {isSubmitting ? t.auth.joining : t.auth.joinTenant}
       </Button>
 
       <div className="space-y-1 text-center text-xs text-muted-foreground">
         <p>
-          Already have an account?{' '}
+          {t.auth.alreadyHaveAccount}{' '}
           <Link to="/login" className="font-medium text-primary hover:underline">
-            Sign in
+            {t.auth.signIn}
           </Link>
         </p>
         <p>
-          New to the platform?{' '}
+          {t.auth.newToThePlatform}{' '}
           <Link to="/register" className="font-medium text-primary hover:underline">
-            Create a workspace
+            {t.auth.createAWorkspace}
           </Link>
         </p>
       </div>

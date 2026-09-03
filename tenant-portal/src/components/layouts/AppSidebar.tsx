@@ -41,9 +41,11 @@ import {
   ChevronsRight,
   X,
   BookOpen,
+  Smartphone,
 } from 'lucide-react'
 import { cn } from '@lib/utils'
 import { env } from '@lib/env'
+import { useTranslation } from '@lib/i18n'
 import { usePortalAuthStore } from '@store/portalAuth.store'
 import { useUiStore } from '@store/ui.store'
 import { Button } from '@components/ui/button'
@@ -51,20 +53,7 @@ import { Badge } from '@components/ui/badge'
 import { Avatar, AvatarFallback } from '@components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip'
 import { MioLogo } from '@components/shared/MioLogo'
-
-const NAV = [
-  { to: '/overview', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/channels', label: 'Channels', icon: Hash },
-  { to: '/broadcasting', label: 'Broadcasting', icon: Send },
-  { to: '/templates', label: 'Templates', icon: FileText },
-  { to: '/keys', label: 'API Keys', icon: KeyRound },
-  { to: '/billing', label: 'Billing', icon: Receipt },
-  { to: '/subscriptions', label: 'Subscriptions', icon: Repeat },
-  { to: '/checkout', label: 'Checkout', icon: Link2 },
-  { to: '/reports', label: 'Reports', icon: FileBarChart },
-  { to: '/docs', label: 'Docs', icon: BookOpen },
-  { to: '/settings', label: 'Settings', icon: Settings },
-]
+import { NotificationBell } from '@components/shared/NotificationBell'
 
 function NavItem({
   to,
@@ -135,6 +124,7 @@ export function AppSidebar({
   mobileOpen: boolean
   onMobileClose: () => void
 }) {
+  const { t } = useTranslation()
   const email = usePortalAuthStore((s) => s.email)
   const tenantId = usePortalAuthStore((s) => s.tenantId)
   const logout = usePortalAuthStore((s) => s.logout)
@@ -144,6 +134,21 @@ export function AppSidebar({
   const collapsed = !sidebarOpen
   const iconOnly = collapsed && !mobileOpen
   const isProduction = env.appEnv === 'production'
+
+  const NAV = [
+    { to: '/overview', label: t.nav.overview, icon: LayoutDashboard, end: true },
+    { to: '/channels', label: t.nav.channels, icon: Hash },
+    { to: '/broadcasting', label: t.nav.broadcasting, icon: Send },
+    { to: '/templates', label: t.nav.templates, icon: FileText },
+    { to: '/keys', label: t.nav.apiKeys, icon: KeyRound },
+    { to: '/devices', label: t.nav.devices, icon: Smartphone },
+    { to: '/billing', label: t.nav.billing, icon: Receipt },
+    { to: '/subscriptions', label: t.nav.subscriptions, icon: Repeat },
+    { to: '/checkout', label: t.nav.checkout, icon: Link2 },
+    { to: '/reports', label: t.nav.reports, icon: FileBarChart },
+    { to: '/docs', label: t.nav.docs, icon: BookOpen },
+    { to: '/settings', label: t.nav.settings, icon: Settings },
+  ]
 
   return (
     <>
@@ -172,13 +177,18 @@ export function AppSidebar({
         <div className={cn('flex items-center gap-2 px-5 py-5', iconOnly && 'justify-center px-0')}>
           <MioLogo className="h-8 w-8 shrink-0" />
           {!iconOnly && <span className="truncate text-lg font-semibold tracking-tight">mio</span>}
+          {!iconOnly && (
+            <div className="ml-auto hidden lg:block">
+              <NotificationBell contentSide="right" contentAlign="start" />
+            </div>
+          )}
           {mobileOpen && (
             <Button
               variant="ghost"
               size="icon"
               className="ml-auto lg:hidden"
               onClick={onMobileClose}
-              aria-label="Close menu"
+              aria-label={t.nav.closeMenu}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -188,7 +198,7 @@ export function AppSidebar({
         <nav className="scrollbar-thin flex-1 space-y-1 overflow-x-hidden overflow-y-auto px-2 py-2">
           {!iconOnly && (
             <p className="truncate px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
-              Your account
+              {t.nav.accountSection}
             </p>
           )}
           {NAV.map((item) => (
@@ -203,7 +213,7 @@ export function AppSidebar({
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-muted/40 p-3">
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Environment</p>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">{t.nav.environment}</p>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex gap-1 rounded-md border border-border bg-background p-1">
@@ -215,7 +225,7 @@ export function AppSidebar({
                         : 'text-muted-foreground',
                     )}
                   >
-                    Development
+                    {t.nav.environmentDevelopment}
                   </span>
                   <span
                     className={cn(
@@ -225,13 +235,11 @@ export function AppSidebar({
                         : 'text-muted-foreground',
                     )}
                   >
-                    Production
+                    {t.nav.environmentProduction}
                   </span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top">
-                Fixed by VITE_APP_ENV at build time — there's no sandbox mode here to switch into at runtime.
-              </TooltipContent>
+              <TooltipContent side="top">{t.nav.environmentFixedTooltip}</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -240,6 +248,7 @@ export function AppSidebar({
       <div className="border-t border-border p-3">
         {iconOnly ? (
           <div className="flex flex-col items-center gap-2">
+            <NotificationBell contentSide="right" contentAlign="start" />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Avatar className="h-8 w-8">
@@ -250,13 +259,13 @@ export function AppSidebar({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Expand sidebar">
+                <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={t.nav.expandSidebar}>
                   <ChevronsRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Expand sidebar</TooltipContent>
+              <TooltipContent side="right">{t.nav.expandSidebar}</TooltipContent>
             </Tooltip>
-            <Button variant="ghost" size="icon" onClick={logout} aria-label="Sign out">
+            <Button variant="ghost" size="icon" onClick={logout} aria-label={t.nav.signOut}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -274,16 +283,16 @@ export function AppSidebar({
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="sm" className="flex-1 justify-start" onClick={logout}>
                 <LogOut className="h-4 w-4" />
-                Sign out
+                {t.nav.signOut}
               </Button>
               <div className="hidden lg:block">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Collapse sidebar">
+                    <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={t.nav.collapseSidebar}>
                       <ChevronsLeft className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">Collapse sidebar</TooltipContent>
+                  <TooltipContent side="right">{t.nav.collapseSidebar}</TooltipContent>
                 </Tooltip>
               </div>
             </div>

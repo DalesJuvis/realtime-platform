@@ -11,19 +11,14 @@ import { Download } from 'lucide-react'
 import { Badge } from '@components/ui/badge'
 import { DataTable } from '@components/DataTable/DataTable'
 import { formatDateTime } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { ColumnDef } from '@entities/DataTable.entity'
-import type { Report, ReportStatus, ReportType } from '@entities/Report.entity'
+import type { Report, ReportStatus } from '@entities/Report.entity'
 
 const STATUS_VARIANT: Record<ReportStatus, 'success' | 'warning' | 'destructive'> = {
   ready: 'success',
   processing: 'warning',
   failed: 'destructive',
-}
-
-const TYPE_LABEL: Record<ReportType, string> = {
-  usage: 'Usage',
-  activity: 'Activity',
-  billing: 'Billing',
 }
 
 const MOCK_REPORTS: Report[] = [
@@ -37,28 +32,30 @@ const MOCK_REPORTS: Report[] = [
   { id: '8', name: 'September usage report', type: 'usage', period: 'Sep 2026', status: 'processing', generated_at: '2026-08-27T09:12:00Z' },
 ]
 
-const columns: ColumnDef<Report>[] = [
-  { key: 'name', header: 'Report', sortable: true },
-  { key: 'type', header: 'Type', renderCell: (_v, row) => TYPE_LABEL[row.type] },
-  { key: 'period', header: 'Period' },
-  {
-    key: 'status',
-    header: 'Status',
-    renderCell: (_v, row) => (
-      <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
-        {row.status}
-      </Badge>
-    ),
-  },
-  { key: 'generated_at', header: 'Generated', sortable: true, renderCell: (_v, row) => formatDateTime(row.generated_at) },
-]
-
 export default function ReportsPage() {
+  const { t } = useTranslation()
+
+  const columns: ColumnDef<Report>[] = [
+    { key: 'name', header: t.reports.columns.name, sortable: true },
+    { key: 'type', header: t.reports.columns.type, renderCell: (_v, row) => t.reports.typeOptions[row.type] },
+    { key: 'period', header: t.reports.columns.period },
+    {
+      key: 'status',
+      header: t.common.status,
+      renderCell: (_v, row) => (
+        <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
+          {t.reports.statusOptions[row.status]}
+        </Badge>
+      ),
+    },
+    { key: 'generated_at', header: t.reports.columns.generated, sortable: true, renderCell: (_v, row) => formatDateTime(row.generated_at) },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-        <p className="text-sm text-muted-foreground">Exportable activity and usage reports — sample data, not yet wired to a real report generator.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.reports.pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.reports.pageSubtitle}</p>
       </div>
 
       <DataTable
@@ -70,29 +67,29 @@ export default function ReportsPage() {
         filters={[
           {
             key: 'type',
-            label: 'Type',
+            label: t.reports.typeFilterLabel,
             options: [
-              { value: 'usage', label: 'Usage' },
-              { value: 'activity', label: 'Activity' },
-              { value: 'billing', label: 'Billing' },
+              { value: 'usage', label: t.reports.typeOptions.usage },
+              { value: 'activity', label: t.reports.typeOptions.activity },
+              { value: 'billing', label: t.reports.typeOptions.billing },
             ],
           },
           {
             key: 'status',
-            label: 'Status',
+            label: t.common.status,
             options: [
-              { value: 'ready', label: 'Ready' },
-              { value: 'processing', label: 'Processing' },
-              { value: 'failed', label: 'Failed' },
+              { value: 'ready', label: t.reports.statusOptions.ready },
+              { value: 'processing', label: t.reports.statusOptions.processing },
+              { value: 'failed', label: t.reports.statusOptions.failed },
             ],
           },
         ]}
         rowActions={(row) => [
           {
-            label: 'Download',
+            label: t.reports.download,
             icon: Download,
             disabled: row.status !== 'ready',
-            onClick: () => { toast.info('Report downloads are not available yet.') },
+            onClick: () => { toast.info(t.reports.downloadNotAvailable) },
           },
         ]}
       />

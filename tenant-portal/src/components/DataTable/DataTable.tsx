@@ -18,6 +18,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { cn, downloadBlob, toCsv } from '@lib/utils'
 import { errorMessage } from '@lib/errors'
+import { useTranslation } from '@lib/i18n'
 import { useUiStore } from '@store/ui.store'
 import { SkeletonTable } from '@components/ui/Skeleton'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@components/ui/table'
@@ -52,6 +53,7 @@ export function DataTable<TRow extends object>({
   rowActions,
   filters,
 }: DataTableProps<TRow>) {
+  const { t } = useTranslation()
   const preferredPageSize = useUiStore((s) => s.pageSize)
   const pageSize = pageSizeProp ?? preferredPageSize
 
@@ -207,7 +209,7 @@ export function DataTable<TRow extends object>({
                     <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                       type="search"
-                      placeholder="Search…"
+                      placeholder={t.dataTable.searchPlaceholder}
                       value={search}
                       onChange={(e) => {
                         setSearch(e.target.value)
@@ -230,7 +232,7 @@ export function DataTable<TRow extends object>({
                       <SelectValue placeholder={f.label} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All {f.label.toLowerCase()}</SelectItem>
+                      <SelectItem value="all">{t.dataTable.allOf(f.label)}</SelectItem>
                       {f.options.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
@@ -243,18 +245,18 @@ export function DataTable<TRow extends object>({
               {selectable && sorted.length > 0 && selectedRows.length === 0 && (
                 <Button type="button" variant="outline" size="sm" onClick={() => exportRows(sorted)}>
                   <Download className="h-4 w-4" />
-                  Export all
+                  {t.dataTable.exportAll}
                 </Button>
               )}
             </div>
 
             {selectable && selectedRows.length > 0 && (
               <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 px-4 py-2">
-                <span className="text-sm font-medium">{selectedRows.length} selected</span>
+                <span className="text-sm font-medium">{t.dataTable.selected(selectedRows.length)}</span>
                 <div className="flex items-center gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => exportRows(selectedRows)}>
                     <Download className="h-4 w-4" />
-                    Export selected
+                    {t.dataTable.exportSelected}
                   </Button>
                   {bulkActions?.map((action) => {
                     const applicableCount = action.isAvailable
@@ -277,7 +279,7 @@ export function DataTable<TRow extends object>({
                   })}
                 </div>
                 <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => setSelectedIds(new Set())}>
-                  Clear
+                  {t.dataTable.clear}
                 </Button>
               </div>
             )}
@@ -340,7 +342,7 @@ export function DataTable<TRow extends object>({
             ) : paginated.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length + extraCols} className="py-12 text-center text-muted-foreground">
-                  {renderEmpty ? renderEmpty() : 'No results found.'}
+                  {renderEmpty ? renderEmpty() : t.dataTable.noResults}
                 </TableCell>
               </TableRow>
             ) : (
@@ -413,7 +415,7 @@ export function DataTable<TRow extends object>({
 
       {pagination && !isLoading && sorted.length > 0 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{sorted.length} results</span>
+          <span>{t.dataTable.resultsCount(sorted.length)}</span>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               <ChevronLeft className="h-4 w-4" />

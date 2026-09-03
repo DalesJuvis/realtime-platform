@@ -10,6 +10,7 @@ import { Copy, XCircle } from 'lucide-react'
 import { Badge } from '@components/ui/badge'
 import { DataTable } from '@components/DataTable/DataTable'
 import { formatDateTime } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { CheckoutSession, CheckoutStatus } from '@entities/CheckoutSession.entity'
 
@@ -29,28 +30,30 @@ const MOCK_SESSIONS: CheckoutSession[] = [
   { id: '7', reference: 'CS-5F4A6E', channel: 'API', status: 'completed', created_at: '2026-08-22T07:48:00Z', expires_at: '2026-08-22T08:48:00Z' },
 ]
 
-const columns: ColumnDef<CheckoutSession>[] = [
-  { key: 'reference', header: 'Reference', sortable: true },
-  { key: 'channel', header: 'Channel' },
-  {
-    key: 'status',
-    header: 'Status',
-    renderCell: (_v, row) => (
-      <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
-        {row.status}
-      </Badge>
-    ),
-  },
-  { key: 'created_at', header: 'Created', sortable: true, renderCell: (_v, row) => formatDateTime(row.created_at) },
-  { key: 'expires_at', header: 'Expires', renderCell: (_v, row) => formatDateTime(row.expires_at) },
-]
-
 export default function CheckoutPage() {
+  const { t } = useTranslation()
+
+  const columns: ColumnDef<CheckoutSession>[] = [
+    { key: 'reference', header: t.checkout.columns.reference, sortable: true },
+    { key: 'channel', header: t.checkout.columns.channel },
+    {
+      key: 'status',
+      header: t.common.status,
+      renderCell: (_v, row) => (
+        <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
+          {t.checkout.statusOptions[row.status]}
+        </Badge>
+      ),
+    },
+    { key: 'created_at', header: t.checkout.columns.created, sortable: true, renderCell: (_v, row) => formatDateTime(row.created_at) },
+    { key: 'expires_at', header: t.checkout.columns.expires, renderCell: (_v, row) => formatDateTime(row.expires_at) },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Checkout</h1>
-        <p className="text-sm text-muted-foreground">Hosted sessions for this workspace — sample data, not yet a real feature.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.checkout.pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.checkout.pageSubtitle}</p>
       </div>
 
       <DataTable
@@ -62,36 +65,36 @@ export default function CheckoutPage() {
         filters={[
           {
             key: 'channel',
-            label: 'Channel',
+            label: t.checkout.channelFilterLabel,
             options: [
-              { value: 'Web', label: 'Web' },
-              { value: 'Mobile', label: 'Mobile' },
-              { value: 'API', label: 'API' },
+              { value: 'Web', label: t.checkout.channelOptions.Web },
+              { value: 'Mobile', label: t.checkout.channelOptions.Mobile },
+              { value: 'API', label: t.checkout.channelOptions.API },
             ],
           },
           {
             key: 'status',
-            label: 'Status',
+            label: t.common.status,
             options: [
-              { value: 'active', label: 'Active' },
-              { value: 'completed', label: 'Completed' },
-              { value: 'expired', label: 'Expired' },
+              { value: 'active', label: t.checkout.statusOptions.active },
+              { value: 'completed', label: t.checkout.statusOptions.completed },
+              { value: 'expired', label: t.checkout.statusOptions.expired },
             ],
           },
         ]}
         rowActions={(row) => [
           {
-            label: 'Copy link',
+            label: t.checkout.copyLink,
             icon: Copy,
             hidden: row.status !== 'active',
-            onClick: () => { toast.info('Session links are not available yet.') },
+            onClick: () => { toast.info(t.checkout.copyNotAvailable) },
           },
           {
-            label: 'Expire now',
+            label: t.checkout.expireNow,
             icon: XCircle,
             variant: 'destructive',
             hidden: row.status !== 'active',
-            onClick: () => { toast.info('Session management is not available yet.') },
+            onClick: () => { toast.info(t.checkout.expireNotAvailable) },
           },
         ]}
       />

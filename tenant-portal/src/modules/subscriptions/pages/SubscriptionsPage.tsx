@@ -10,6 +10,7 @@ import { Ban } from 'lucide-react'
 import { Badge } from '@components/ui/badge'
 import { DataTable } from '@components/DataTable/DataTable'
 import { formatDate } from '@lib/utils'
+import { useTranslation } from '@lib/i18n'
 import type { ColumnDef } from '@entities/DataTable.entity'
 import type { SubscriptionEvent, SubscriptionStatus } from '@entities/SubscriptionEvent.entity'
 
@@ -26,34 +27,36 @@ const MOCK_SUBSCRIPTIONS: SubscriptionEvent[] = [
   { id: '4', plan: 'Free', status: 'canceled', price: 0, currency: 'XOF', started_at: '2025-06-10T00:00:00Z', renews_at: null },
 ]
 
-const columns: ColumnDef<SubscriptionEvent>[] = [
-  { key: 'plan', header: 'Plan', sortable: true },
-  {
-    key: 'status',
-    header: 'Status',
-    renderCell: (_v, row) => (
-      <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
-        {row.status.replace('_', ' ')}
-      </Badge>
-    ),
-  },
-  {
-    key: 'price',
-    header: 'Price',
-    sortable: true,
-    align: 'right',
-    renderCell: (_v, row) => (row.price === 0 ? 'Free' : `${row.price.toLocaleString('en-US')} ${row.currency}/mo`),
-  },
-  { key: 'started_at', header: 'Started', sortable: true, renderCell: (_v, row) => formatDate(row.started_at) },
-  { key: 'renews_at', header: 'Renews', renderCell: (_v, row) => (row.renews_at ? formatDate(row.renews_at) : '—') },
-]
-
 export default function SubscriptionsPage() {
+  const { t } = useTranslation()
+
+  const columns: ColumnDef<SubscriptionEvent>[] = [
+    { key: 'plan', header: t.subscriptions.columns.plan, sortable: true },
+    {
+      key: 'status',
+      header: t.common.status,
+      renderCell: (_v, row) => (
+        <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
+          {t.subscriptions.statusOptions[row.status]}
+        </Badge>
+      ),
+    },
+    {
+      key: 'price',
+      header: t.subscriptions.columns.price,
+      sortable: true,
+      align: 'right',
+      renderCell: (_v, row) => (row.price === 0 ? t.subscriptions.free : t.subscriptions.monthlyPrice(`${row.price.toLocaleString('en-US')} ${row.currency}`)),
+    },
+    { key: 'started_at', header: t.subscriptions.columns.started, sortable: true, renderCell: (_v, row) => formatDate(row.started_at) },
+    { key: 'renews_at', header: t.subscriptions.columns.renews, renderCell: (_v, row) => (row.renews_at ? formatDate(row.renews_at) : '—') },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Subscriptions</h1>
-        <p className="text-sm text-muted-foreground">This workspace's plan history — sample data, not yet wired to a real billing backend.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t.subscriptions.pageTitle}</h1>
+        <p className="text-sm text-muted-foreground">{t.subscriptions.pageSubtitle}</p>
       </div>
 
       <DataTable
@@ -65,21 +68,21 @@ export default function SubscriptionsPage() {
         filters={[
           {
             key: 'status',
-            label: 'Status',
+            label: t.common.status,
             options: [
-              { value: 'active', label: 'Active' },
-              { value: 'canceled', label: 'Canceled' },
-              { value: 'past_due', label: 'Past due' },
+              { value: 'active', label: t.subscriptions.statusOptions.active },
+              { value: 'canceled', label: t.subscriptions.statusOptions.canceled },
+              { value: 'past_due', label: t.subscriptions.statusOptions.past_due },
             ],
           },
         ]}
         rowActions={(row) => [
           {
-            label: 'Cancel plan',
+            label: t.subscriptions.cancelPlan,
             icon: Ban,
             variant: 'destructive',
             hidden: row.status !== 'active',
-            onClick: () => { toast.info('Plan cancellation is not available yet.') },
+            onClick: () => { toast.info(t.subscriptions.cancelNotAvailable) },
           },
         ]}
       />
