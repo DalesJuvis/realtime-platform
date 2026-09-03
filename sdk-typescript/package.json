@@ -1,6 +1,6 @@
 {
   "name": "@mio/realtime-sdk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "SDK client TypeScript/JS pour le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets), avec reconnexion automatique et pattern Adapter pour permuter vers Firebase/PubNub.",
   "type": "module",
   "main": "dist/index.cjs.js",

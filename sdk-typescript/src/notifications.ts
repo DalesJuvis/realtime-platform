@@ -202,6 +202,116 @@ export function guessDeviceLabel(): string {
   return browser ?? os ?? "Unknown device";
 }
 
+/**
+ * Propriétés d'un appel à `registerWebPushSubscription()` — tout ce dont
+ * l'appelant a besoin est passé ici, rien n'est codé en dur : aucun champ
+ * de configuration global, aucune variable de module. Un script d'un
+ * site tiers peut donc appeler cette fonction directement, avec ses
+ * propres identifiants, sans dépendre d'un état déjà initialisé ailleurs.
+ */
+export interface WebPushRegistrationOptions {
+  /** URL de base de votre instance mio, sans slash final
+   * (ex. `"https://mio.example.com"`). */
+  apiBaseUrl: string;
+  /** Jeton client (`Authorization: Bearer`) — jamais le secret du tenant.
+   * À miner côté serveur via `POST /api/v1/auth/tokens` (ou l'équivalent
+   * authentifié par session portail), jamais dans ce script. */
+  token: string;
+  tenantId: string;
+  /** Clé publique VAPID (base64url, point P-256 non compressé 65 octets)
+   * — visible sur la page Overview/Settings de votre instance mio. */
+  vapidPublicKey: string;
+  /** Canaux/motifs que cet abonnement veut recevoir hors ligne — même
+   * syntaxe glob `orders:*` que `SUB`. Défaut : `["*"]` (tous les canaux). */
+  channels?: string[];
+  /** URL du Service Worker, déjà déployé sur votre propre site — cette
+   * fonction l'enregistre via `registerPushServiceWorker`, elle n'en crée
+   * pas un pour vous. Défaut : `"/sw.js"`. */
+  swUrl?: string;
+  /** Libellé humainement lisible pour distinguer cet appareil dans une
+   * liste d'abonnements côté serveur. Défaut : `guessDeviceLabel()`. */
+  deviceLabel?: string;
+}
+
+export interface WebPushRegistrationResult {
+  subscription: PushSubscriptionInfo;
+  registered: true;
+}
+
+/**
+ * "Étend" `subscribeToPush()` en y ajoutant l'étape qui manque pour que
+ * l'abonnement serve à quelque chose : l'enregistrer côté serveur
+ * (`POST /api/v1/push/subscriptions`) — sans ça, le navigateur a bien un
+ * abonnement Push actif, mais aucun backend ne sait qu'il existe ni sur
+ * quels canaux le pousser. Un seul appel, toutes les données passées en
+ * propriétés (voir `WebPushRegistrationOptions`) : demande la permission,
+ * enregistre le Service Worker, s'abonne, puis inscrit l'abonnement.
+ *
+ * Lève une erreur explicite à chaque étape qui peut échouer (permission
+ * refusée, inscription serveur rejetée) plutôt que d'échouer silencieusement.
+ */
+export async function registerWebPushSubscription(
+  options: WebPushRegistrationOptions,
+): Promise<WebPushRegistrationResult> {
+  const permission = await requestNotificationPermission();
+  if (permission !== "granted") {
+    throw new Error(`Notification permission was "${permission}", not "granted".`);
+  }
+
+  const registration = await registerPushServiceWorker(options.swUrl ?? "/sw.js");
+  const subscription = await subscribeToPush(registration, options.vapidPublicKey);
+
+  const res = await fetch(`${options.apiBaseUrl}/api/v1/push/subscriptions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${options.token}` },
+    body: JSON.stringify({
+      tenant_id: options.tenantId,
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+      channels: options.channels ?? ["*"],
+      device_label: options.deviceLabel ?? guessDeviceLabel(),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Push subscription registration failed (${res.status}).`);
+  }
+
+  return { subscription, registered: true };
+}
+
+export interface WebPushUnregistrationOptions {
+  apiBaseUrl: string;
+  token: string;
+  tenantId: string;
+  swUrl?: string;
+}
+
+/**
+ * Contrepartie de `registerWebPushSubscription()` : résilie l'abonnement
+ * navigateur puis le retire côté serveur. Renvoie `false` sans rien
+ * appeler côté réseau s'il n'y avait aucun abonnement actif.
+ */
+export async function unregisterWebPushSubscription(
+  options: WebPushUnregistrationOptions,
+): Promise<boolean> {
+  const registration = await registerPushServiceWorker(options.swUrl ?? "/sw.js");
+  const existing = await registration.pushManager.getSubscription();
+  if (!existing) return false;
+
+  const endpoint = existing.endpoint;
+  await existing.unsubscribe();
+
+  const res = await fetch(`${options.apiBaseUrl}/api/v1/push/subscriptions`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${options.token}` },
+    body: JSON.stringify({ tenant_id: options.tenantId, endpoint }),
+  });
+  if (!res.ok) {
+    throw new Error(`Push subscription removal failed (${res.status}).`);
+  }
+  return true;
+}
+
 function toSubscriptionInfo(subscription: PushSubscription): PushSubscriptionInfo {
   const p256dh = subscription.getKey("p256dh");
   const auth = subscription.getKey("auth");

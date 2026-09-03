@@ -36,11 +36,16 @@ export {
   subscribeToPush,
   unsubscribeFromPush,
   guessDeviceLabel,
+  registerWebPushSubscription,
+  unregisterWebPushSubscription,
 } from "./notifications.js";
 export type {
   BackgroundNotificationOptions,
   PushSubscriptionInfo,
   PushSubscriptionKeys,
+  WebPushRegistrationOptions,
+  WebPushRegistrationResult,
+  WebPushUnregistrationOptions,
 } from "./notifications.js";
 
 import { RealtimeClient, type RealtimeClientConfig } from "./client.js";
