@@ -13,7 +13,7 @@ const path = require('path');
 const { minify } = require('terser');
 
 const JS_DIR = path.join(__dirname, '..', 'assets', 'js');
-const FILES = ['mio-protocol.js', 'mio-client.js', 'mio-shortcode.js', 'mio-embed.js'];
+const FILES = ['mio-protocol.js', 'mio-client.js', 'mio-shortcode.js', 'mio-embed.js', 'mio-vapid-subscription.js'];
 
 async function main() {
   for (const file of FILES) {
