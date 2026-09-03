@@ -342,7 +342,7 @@ No AUTH ack (see §1.6) — watch `close`, not just `authenticated`.
 
 `RealtimeMessage`: `{ channelId: string, payload: string, tenantId?: string, receivedAt: number }` — `receivedAt` is a client-side `Date.now()` timestamp, **not** server-stamped (the wire frame carries no timestamp field at all).
 
-Also exported: `isNotificationSupported()`, `requestNotificationPermission()`, `showBackgroundNotification(message, options)` (per-message, callable from any handler), `attachBackgroundNotifications(client, options)` (wired to the client's own `"message"` event, calls `showBackgroundNotification` internally), `registerPushServiceWorker(url)`, `subscribeToPush(registration, vapidPublicKey)`, `unsubscribeFromPush(subscription)` — see §9.
+Also exported: `isNotificationSupported()`, `requestNotificationPermission()`, `showBackgroundNotification(message, options)` (per-message, callable from any handler), `attachBackgroundNotifications(client, options)` (wired to the client's own `"message"` event, calls `showBackgroundNotification` internally), `registerWebPushSubscription(options)`/`unregisterWebPushSubscription(options)` (one call: permission + Service Worker + subscribe + server registration, credentials as properties), and the pieces they're built from — `registerPushServiceWorker(url)`, `subscribeToPush(registration, vapidPublicKey)`, `unsubscribeFromPush(subscription)`, `guessDeviceLabel()` — see §9.
 
 ### React (`@mio/realtime-sdk-react`)
 
@@ -534,10 +534,10 @@ $client->emitEvent('orders:42', 'order.created', $minted->token, ['orderId' => 1
 No chunking on `publish()`/`emitEvent()` — 211-byte cap, throws before
 any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
-`mio-embed.js`/`mio-protocol.js`/`mio-client.js` (dependency-free
-`<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js`,
-pin the tag, never `@master`).
+`mio-embed.js`/`mio-protocol.js`/`mio-client.js`/`mio-vapid-subscription.js`
+(dependency-free `<script>` tags, no PHP/build step — hosted via jsDelivr:
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js`,
+pin the tag, never `@master`; see §9 for `mio-vapid-subscription.js`).
 
 **Full API — `Mio\Realtime\Client`**
 
@@ -592,27 +592,40 @@ import { attachBackgroundNotifications, requestNotificationPermission } from '@m
 await requestNotificationPermission() // must be a user gesture, never on load
 attachBackgroundNotifications(client, { title: (m) => `#${m.channelId}` })
 
-// Closed tab/browser — needs a Service Worker + VAPID:
-import { registerPushServiceWorker, subscribeToPush } from '@mio/realtime-sdk'
-const registration = await registerPushServiceWorker('/sw.js')
-const subscription = await subscribeToPush(registration, vapidPublicKey)
-await fetch(`${apiUrl}/api/v1/push/subscriptions`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  body: JSON.stringify({ tenant_id, endpoint: subscription.endpoint, keys: subscription.keys, channels: ['orders:*'] }),
+// Closed tab/browser — needs a Service Worker + VAPID. One call: requests
+// permission, registers the Service Worker, subscribes, registers with
+// the server (POST /api/v1/push/subscriptions):
+import { registerWebPushSubscription } from '@mio/realtime-sdk'
+const { subscription } = await registerWebPushSubscription({
+  apiBaseUrl, token, tenantId, vapidPublicKey, channels: ['orders:*'], // channels defaults to ['*']
 })
+// Teardown: unregisterWebPushSubscription({ apiBaseUrl, token, tenantId })
 ```
-Delivery to a fully-quit browser still depends on the OS/browser waking
-it — outside any SDK's or server's control.
+Built from three separately-exported pieces for callers who want to
+assemble the flow themselves: `registerPushServiceWorker(url)`,
+`subscribeToPush(registration, vapidPublicKey)` (returns
+`{endpoint, keys: {p256dh, auth}}`), `guessDeviceLabel()` (UA-sniffed
+"Chrome on Windows"-style label, optional `device_label` on the POST body
+— lets one `sub` have several devices distinguishable in a list; `endpoint`
+was already the per-device key). Delivery to a fully-quit browser still
+depends on the OS/browser waking it — outside any SDK's or server's
+control.
+
+No build step? `sdk-wordpress/assets/js/mio-vapid-subscription.js` is the
+same flow as a single dependency-free `<script>` tag — every credential a
+`data-*` property, `data-button` (CSS selector) wired to
+`window.MioVapidSubscription.subscribe()` instead of auto-running on load
+(permission needs a user gesture). Hosted via jsDelivr like `mio-embed.js`
+(§ WordPress below): `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js`.
 
 ## 10. Compile/test status per component (don't overclaim reliability)
 
 | Component | Status |
 |---|---|
-| `backend/` | Compiled, tested (96/98 passing, 2 ignored live-Redis integration tests), deployed to production |
-| `sdk-typescript` | Compiled + tested (34/34), includes `channel()` |
+| `backend/` | Compiled, tested (123/125 passing, 2 ignored live-Redis integration tests), deployed to production |
+| `sdk-typescript` | Compiled + tested (43/43), includes `channel()`, `registerWebPushSubscription()` |
 | `sdk-react` / `sdk-react-native` | Compiled (`tsc` strict), hooks not runtime-tested against a live server |
-| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client tested (44/44); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
+| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client/vapid-subscription tested (56/56); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
 | `sdk-laravel` | `LaravelHttpTransport` tested (3/3); service provider/facade untested against a real app |
 | `sdk-python` | Protocol codec tested (13/13); `client.py` (network) untested |
 | `sdk-rust` | Written, not compiled by its authors |

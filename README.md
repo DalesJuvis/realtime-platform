@@ -15,7 +15,7 @@ sdk-react-native/    Bindings React Native (+ reconnexion AppState/réseau) sur 
 sdk-rust/            SDK Rust (Tokio)
 sdk-python/          SDK Python (asyncio)
 sdk-android/         SDK Kotlin/Java — Android + JVM
-sdk-wordpress/       Extension WordPress — client PHP (mint/publish/évènements HTTP) + shortcode JS live + mio-embed.js sans plugin
+sdk-wordpress/       Extension WordPress — client PHP (mint/publish/évènements HTTP) + shortcode JS live + mio-embed.js/mio-vapid-subscription.js sans plugin
 sdk-laravel/         Service provider + facade Laravel sur le même client PHP framework-independent que sdk-wordpress
 vanilla-client/       Harnais de test local pour mio-embed.js (live-server, zéro dépendance)
 web-client/          Client de chat + notifications (React/Vite/Tailwind/shadcn), PWA avec Web Push

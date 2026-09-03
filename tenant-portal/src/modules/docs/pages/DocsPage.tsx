@@ -286,24 +286,29 @@ attachBackgroundNotifications(client, {
               title={t.docs.webPushPushTitle}
               description={t.docs.webPushPushDescription}
               language="typescript"
-              code={`import { registerPushServiceWorker, subscribeToPush } from '@mio/realtime-sdk'
+              code={`import { registerWebPushSubscription } from '@mio/realtime-sdk'
 
-const registration = await registerPushServiceWorker('/sw.js')
-const subscription = await subscribeToPush(registration, vapidPublicKey)
-// subscription: { endpoint, keys: { p256dh, auth } }
-
-await fetch('${apiUrl}/api/v1/push/subscriptions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: \`Bearer \${token}\` },
-  body: JSON.stringify({
-    tenant_id: '${tid}',
-    endpoint: subscription.endpoint,
-    keys: subscription.keys,
-    channels: ['orders:*'],
-  }),
-})`}
+const { subscription } = await registerWebPushSubscription({
+  apiBaseUrl: '${apiUrl}',
+  token,          // minted server-side, never your tenant secret
+  tenantId: '${tid}',
+  vapidPublicKey,
+  channels: ['orders:*'], // defaults to ['*'] (every channel)
+})
+// subscription: { endpoint, keys: { p256dh, auth } }`}
               caveat={t.docs.webPushPushCaveat}
-            />
+            >
+              <p className="text-xs text-muted-foreground">
+                {t.docs.webPushPushNotePrefix}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">registerPushServiceWorker</code>,{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">subscribeToPush</code>{' '}
+                {t.docs.webPushPushNoteSuffix}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t.docs.webPushPushNoDevices} <code className="rounded bg-muted px-1 py-0.5 font-mono">mio-vapid-subscription.js</code>{' '}
+                {t.docs.webPushPushNoDevicesSuffix}
+              </p>
+            </Section>
           </TabsContent>
 
           <TabsContent value="advanced" className="mt-0 space-y-4">
@@ -707,7 +712,7 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               title={t.docs.embedScriptTitle}
               description={t.docs.embedScriptDescription}
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="${wsUrl}"
   data-tenant-id="${tid}"
   data-token="…"
@@ -724,11 +729,31 @@ MioRealtime::emitEvent('orders:42', 'order.created', $minted->token, ['orderId' 
               </p>
             </Section>
             <Section
+              title={t.docs.embedVapidTitle}
+              description={t.docs.embedVapidDescription}
+              language="markup"
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+  data-api-base-url="${apiUrl}"
+  data-tenant-id="${tid}"
+  data-token="…"
+  data-vapid-public-key="…"
+  data-channels="orders:*"
+  data-button="#enable-notifications"
+></script>
+<button id="enable-notifications">Enable notifications</button>`}
+              caveat={t.docs.embedVapidCaveat}
+            >
+              <p className="text-xs text-muted-foreground">
+                {t.docs.embedVapidNotePrefix} <code className="rounded bg-muted px-1 py-0.5 font-mono">mio:vapid-subscribed</code> {t.docs.embedVapidNoteMiddle}{' '}
+                <code className="rounded bg-muted px-1 py-0.5 font-mono">mio:vapid-subscription-error</code> {t.docs.embedVapidNoteSuffix}
+              </p>
+            </Section>
+            <Section
               title={t.docs.embedCustomTitle}
               description={t.docs.embedCustomDescription}
               language="markup"
-              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
+              code={`<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: '${wsUrl}', // the ws_url from your mint-token response

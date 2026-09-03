@@ -83,9 +83,14 @@ export const docs = {
 
   webPushPushTitle: 'Push notifications (tab or browser closed)',
   webPushPushDescription:
-    "Needs a Service Worker in your app and a backend that sends real encrypted Web Push (VAPID) to the subscription below — see this platform's push_subscriptions endpoint.",
+    "Needs a Service Worker in your app (registers it for you) and a backend that sends real encrypted Web Push (VAPID) to the subscription this call registers — see this platform's push_subscriptions endpoint.",
   webPushPushCaveat:
     "Delivery to a fully-quit browser (not just a closed tab) still depends on the OS/browser waking it for the push — outside any SDK's or server's control.",
+  webPushPushNotePrefix:
+    'registerWebPushSubscription() requests permission, registers your Service Worker, subscribes, and registers with the server in one call. Want to assemble those steps yourself instead? Use',
+  webPushPushNoteSuffix: 'directly — the same pieces this function is built from.',
+  webPushPushNoDevices: 'No plugin, no build step? See the vanilla',
+  webPushPushNoDevicesSuffix: 'embed on the Embed tab instead.',
 
   // Advanced
   advancedIntroPrefix:
@@ -250,7 +255,7 @@ export const docs = {
   embedScriptDescription:
     "Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind.",
   embedScriptCaveat:
-    "Pin the version: @v0.1.8 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party.",
+    "Pin the version: @v0.1.9 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party.",
   embedScriptNotePrefix:
     'No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified',
   embedScriptNoteMiddle: 'build (',
@@ -274,4 +279,15 @@ export const docs = {
   embedBgNote2Prefix:
     "For notifications that also work with the tab or browser fully closed, that needs real Web Push (Service Worker + VAPID keys) — see this page's Web Push tab for the full",
   embedBgNote2Suffix: 'version.',
+
+  embedVapidTitle: 'mio-vapid-subscription.js — Web Push, no plugin, no build step',
+  embedVapidDescription:
+    'Registers a visitor for real Web Push (tab or browser fully closed) with zero JS to write — wires a button of your choice to request permission, subscribe, and register with your mio backend. Same dependency-free, paste-it-in family as mio-embed.js above.',
+  embedVapidCaveat:
+    "Notification.requestPermission() only works from a user gesture in effectively every browser, so unlike the live-feed embed above, this file never subscribes anyone on page load — it waits for a click on data-button.",
+  embedVapidNotePrefix:
+    'On success/failure this dispatches',
+  embedVapidNoteMiddle: 'and',
+  embedVapidNoteSuffix:
+    'CustomEvents on the button element — listen for those to show your own feedback instead of this file imposing one. A Service Worker must already be deployed at data-sw-url (default /sw.js) with push and notificationclick handlers — see this platform\'s public/sw.js for a reference implementation.',
 }

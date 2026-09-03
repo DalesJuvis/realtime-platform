@@ -82,9 +82,14 @@ export const docs = {
 
   webPushPushTitle: 'Notifications push (onglet ou navigateur fermé)',
   webPushPushDescription:
-    "Nécessite un Service Worker dans votre application et un backend qui envoie de véritables notifications Web Push chiffrées (VAPID) vers l'abonnement ci-dessous — voir le endpoint push_subscriptions de cette plateforme.",
+    "Nécessite un Service Worker dans votre application (enregistré automatiquement) et un backend qui envoie de véritables notifications Web Push chiffrées (VAPID) vers l'abonnement enregistré par cet appel — voir le endpoint push_subscriptions de cette plateforme.",
   webPushPushCaveat:
     "La remise à un navigateur totalement fermé (pas seulement un onglet fermé) dépend toujours du réveil par l'OS/le navigateur pour la notification push — hors du contrôle de tout SDK ou serveur.",
+  webPushPushNotePrefix:
+    'registerWebPushSubscription() demande la permission, enregistre votre Service Worker, s\'abonne, puis enregistre auprès du serveur en un seul appel. Vous préférez assembler ces étapes vous-même ?',
+  webPushPushNoteSuffix: 'directement — les mêmes briques utilisées par cette fonction.',
+  webPushPushNoDevices: 'Aucun plugin, aucune étape de build ? Voir l\'embed vanilla',
+  webPushPushNoDevicesSuffix: "dans l'onglet Intégration.",
 
   // Advanced
   advancedIntroPrefix:
@@ -249,7 +254,7 @@ export const docs = {
   embedScriptDescription:
     "Pas spécifique à WordPress malgré son emplacement dans sdk-wordpress/assets/js/ — un fichier unique, sans dépendance, à coller dans n'importe quelle page HTML (un bloc HTML personnalisé, un header/footer de thème, le <head> d'un site statique). Ni PHP, ni framework d'aucune sorte.",
   embedScriptCaveat:
-    "Fixez la version : @v0.1.8 ci-dessus est un tag git — jsDelivr met agressivement en cache les références taguées, et un futur commit ne peut jamais modifier silencieusement ce qui est déjà intégré sur le site de quelqu'un. N'utilisez jamais @master dans une URL transmise à un tiers.",
+    "Fixez la version : @v0.1.9 ci-dessus est un tag git — jsDelivr met agressivement en cache les références taguées, et un futur commit ne peut jamais modifier silencieusement ce qui est déjà intégré sur le site de quelqu'un. N'utilisez jamais @master dans une URL transmise à un tiers.",
   embedScriptNotePrefix:
     "Aucun hébergement à mettre en place — servi directement depuis GitHub via jsDelivr, mis en cache mondialement. Utilise le build",
   embedScriptNoteMiddle: 'minifié avec terser (',
@@ -273,4 +278,14 @@ export const docs = {
   embedBgNote2Prefix:
     "Pour des notifications qui fonctionnent aussi navigateur ou onglet totalement fermé, il faut du vrai Web Push (Service Worker + clés VAPID) — voir l'onglet Web Push de cette page pour la version complète de",
   embedBgNote2Suffix: '.',
+
+  embedVapidTitle: 'mio-vapid-subscription.js — Web Push, sans plugin, sans étape de build',
+  embedVapidDescription:
+    "Abonne un visiteur à de vrais Web Push (onglet ou navigateur totalement fermé) sans écrire de JS — câble un bouton de votre choix pour demander la permission, s'abonner et enregistrer auprès de votre backend mio. Même famille sans dépendance, à coller directement, que mio-embed.js ci-dessus.",
+  embedVapidCaveat:
+    "Notification.requestPermission() ne fonctionne qu'à partir d'un geste utilisateur dans pratiquement tous les navigateurs — contrairement au flux en direct ci-dessus, ce fichier n'abonne donc jamais personne au chargement de la page : il attend un clic sur data-button.",
+  embedVapidNotePrefix: 'En cas de succès/échec, ceci déclenche',
+  embedVapidNoteMiddle: 'et',
+  embedVapidNoteSuffix:
+    "sur l'élément bouton — écoutez ces évènements pour afficher votre propre retour plutôt que de subir celui de ce fichier. Un Service Worker doit déjà être déployé à data-sw-url (défaut /sw.js) avec des gestionnaires push et notificationclick — voir public/sw.js de cette plateforme pour une implémentation de référence.",
 } satisfies typeof en

@@ -174,32 +174,36 @@ Also available with zero build step in the WordPress lightweight client
 
 ### Push notifications (tab or browser closed)
 
-Needs a Service Worker in your app and a backend that sends real
-encrypted Web Push (VAPID) to the subscription below — see this
-platform's `push_subscriptions` endpoint.
+Needs a Service Worker in your app (registered for you) and a backend
+that sends real encrypted Web Push (VAPID) to the subscription this call
+registers — see this platform's `push_subscriptions` endpoint.
 
 ```typescript
-import { registerPushServiceWorker, subscribeToPush } from '@mio/realtime-sdk'
+import { registerWebPushSubscription } from '@mio/realtime-sdk'
 
-const registration = await registerPushServiceWorker('/sw.js')
-const subscription = await subscribeToPush(registration, vapidPublicKey)
-// subscription: { endpoint, keys: { p256dh, auth } }
-
-await fetch('https://realtime.example.com:8090/api/v1/push/subscriptions', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-  body: JSON.stringify({
-    tenant_id: '<your-tenant-id>',
-    endpoint: subscription.endpoint,
-    keys: subscription.keys,
-    channels: ['orders:*'],
-  }),
+const { subscription } = await registerWebPushSubscription({
+  apiBaseUrl: 'https://realtime.example.com:8090',
+  token,          // minted server-side, never your tenant secret
+  tenantId: '<your-tenant-id>',
+  vapidPublicKey,
+  channels: ['orders:*'], // defaults to ['*'] (every channel)
 })
+// subscription: { endpoint, keys: { p256dh, auth } }
 ```
+
+One call: requests permission, registers your Service Worker, subscribes,
+then registers with the server. Want to assemble those steps yourself
+instead (e.g. to POST to your own backend rather than mio directly)? Use
+`registerPushServiceWorker`/`subscribeToPush` directly — the same pieces
+`registerWebPushSubscription` is built from. Symmetric teardown:
+`unregisterWebPushSubscription({ apiBaseUrl, token, tenantId })`.
 
 > **Caveat:** delivery to a fully-quit browser (not just a closed tab)
 > still depends on the OS/browser waking it for the push — outside any
 > SDK's or server's control.
+
+No plugin, no build step? `mio-vapid-subscription.js` is the same flow as
+a single dependency-free `<script>` tag — see "Embed script" below.
 
 ## Advanced features (connected SDKs)
 
@@ -714,7 +718,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -726,13 +730,49 @@ source — the plain `.js` files stay in the repo purely for reading:
 `data-ws-url` is the `ws_url` from the mint-token response — hand it
 through as-is, never assemble it from a host/port.
 
-> **Pin the version.** `@v0.1.8` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.9` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
 > this repo could break every site embedding it without warning. Cut a
 > new tag and bump the URL (running `npm run build` first, so the tagged
 > commit's `.min.js` files are current) when you want people to pick up a fix.
+
+### `mio-vapid-subscription.js` — Web Push, no plugin, no build step
+
+Same dependency-free, paste-it-in family as `mio-embed.js` above, but for
+Web Push registration instead of a live feed. Every credential is a
+property — either this `<script>` tag's own `data-*` attributes, or
+passed to `window.MioVapidSubscription.subscribe()`/`.unsubscribe()`
+directly:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+  data-api-base-url="https://realtime.example.com:8090"
+  data-tenant-id="<your-tenant-id>"
+  data-token="…"
+  data-vapid-public-key="…"
+  data-channels="orders:*"
+  data-button="#enable-notifications"
+></script>
+<button id="enable-notifications">Enable notifications</button>
+```
+
+`data-channels` is comma-separated (defaults to `*`, every channel).
+`data-sw-url` defaults to `/sw.js` (must already be deployed on your own
+site — this file registers it, it doesn't create one for you).
+
+> **Why this can't auto-run on page load, unlike `mio-embed.js`'s feed:**
+> `Notification.requestPermission()` only works from inside a user
+> gesture in effectively every browser. `data-button` wires that
+> element's click for you; call `window.MioVapidSubscription.subscribe(options)`
+> yourself if you'd rather trigger it from your own code. On
+> success/failure it dispatches `mio:vapid-subscribed`/
+> `mio:vapid-subscription-error` `CustomEvent`s on the button element —
+> listen for those to show your own feedback.
+
+Same version-pinning caveat as above — this file is minified and served
+from the same CDN/tag.
 
 ### `mio-protocol.js` + `mio-client.js` — building your own page logic
 
@@ -742,8 +782,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand

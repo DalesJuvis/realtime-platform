@@ -121,7 +121,7 @@ la version `.min.js` (build committé, `npm run build`), pas la source
 brute :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
@@ -189,8 +189,8 @@ Deux façons de s'en servir — **directement dans un callback `subscribe()`**
 (contrôle total, canal par canal) :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.8/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({ wsUrl: '…', tenantId: '…', token: '…' })
 
@@ -228,8 +228,46 @@ accordée, ni l'une ni l'autre ne fait quoi que ce soit plutôt que
 d'échouer. Pour des notifications qui fonctionnent aussi onglet/
 navigateur fermé, il faut du vrai Web Push (Service Worker + clés VAPID +
 `POST /api/v1/push/subscriptions`) — hors de portée de ce fichier
-volontairement minimal, voir `registerPushServiceWorker`/`subscribeToPush`
-dans le README de `sdk-typescript`.
+volontairement minimal, voir `mio-vapid-subscription.js` ci-dessous ou
+`registerWebPushSubscription` dans le README de `sdk-typescript`.
+
+### Web Push sans backend — `mio-vapid-subscription.js`
+
+Même famille que `mio-embed.js` ci-dessus (un seul fichier, sans
+dépendance, à coller directement), mais pour l'abonnement Web Push
+(notifications onglet/navigateur totalement fermé) plutôt qu'un flux en
+direct. Chaque identifiant est une propriété — soit en `data-*` sur ce
+`<script>`, soit passé directement à
+`window.MioVapidSubscription.subscribe()`/`.unsubscribe()` :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.9/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+  data-api-base-url="https://mio.gabonnettoyage.online"
+  data-tenant-id="12345678-9abc-def0-1122-334455667788"
+  data-token="…"
+  data-vapid-public-key="…"
+  data-channels="orders:*"
+  data-button="#enable-notifications"
+></script>
+<button id="enable-notifications">Activer les notifications</button>
+```
+
+`data-channels` est une liste séparée par des virgules (défaut `*`, tous
+les canaux). `data-sw-url` vaut `/sw.js` par défaut — doit déjà être
+déployé sur votre propre site, ce fichier l'enregistre, il ne le crée pas.
+
+**Pourquoi ça ne peut pas s'exécuter automatiquement au chargement**, à
+la différence du flux de `mio-embed.js` :
+`Notification.requestPermission()` ne fonctionne qu'à partir d'un geste
+utilisateur dans pratiquement tous les navigateurs. `data-button` câble le
+clic de cet élément pour vous ; appelez
+`window.MioVapidSubscription.subscribe(options)` vous-même si vous
+préférez déclencher ça depuis votre propre code. En cas de succès/échec,
+un `CustomEvent` `mio:vapid-subscribed`/`mio:vapid-subscription-error` est
+déclenché sur le bouton — écoutez-les pour afficher votre propre retour.
+
+Même mise en garde sur le versionnage que `mio-embed.js` ci-dessus — ce
+fichier est minifié et servi depuis le même CDN/tag.
 
 ## Fonctionnalités
 
@@ -246,6 +284,7 @@ dans le README de `sdk-typescript`.
 | Notifications en arrière-plan | `MioRealtimeClient.showBackgroundNotification(message, options?)` (JS, canal par canal) ou `.attachBackgroundNotifications(client, options?)` (tous canaux) — onglet caché/sans focus, aucun serveur |
 | Détection d'un jeton expiré/invalide | `client.on('authFailed', ({code, reason}) => ...)` (JS) — le client ne retente jamais automatiquement dans ce cas, même avec `reconnect` activé |
 | Widget prêt à l'emploi | `[mio_realtime channel="..."]` |
+| Abonnement Web Push (onglet/navigateur fermé) | `mio-vapid-subscription.js` — un seul `<script>`, identifiants en propriétés, `data-button` ou `window.MioVapidSubscription.subscribe(options)` |
 
 ## Limitations connues (documentées, pas cachées)
 
