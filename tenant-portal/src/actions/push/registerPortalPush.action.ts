@@ -24,18 +24,22 @@
  * `registerPushSubscription.action.ts` already applies with a plain
  * `fetch` there.
  *
- * Sends a `device_label` (see `guessDeviceLabel`) alongside the
- * subscription — `endpoint` was already what makes registering from a
+ * Sends a `device_label` (the SDK's own `guessDeviceLabel()`) alongside
+ * the subscription — `endpoint` was already what makes registering from a
  * second device (a phone, another browser) add a row instead of
  * overwriting the first one, this only makes the backend's stored rows
  * identifiable instead of a list of opaque push-service URLs.
  */
 
-import { registerPushServiceWorker, requestNotificationPermission, subscribeToPush } from '@mio/realtime-sdk'
+import {
+  registerPushServiceWorker,
+  requestNotificationPermission,
+  subscribeToPush,
+  guessDeviceLabel,
+} from '@mio/realtime-sdk'
 import { mintTokenAction } from '@actions/overview/mintToken.action'
 import { getKeysAction } from '@actions/keys/getKeys.action'
 import { env } from '@lib/env'
-import { guessDeviceLabel } from '@lib/utils'
 
 /** Not a real end-user identity — this subscription belongs to whoever
  * is signed into the portal for this tenant, not a specific `sub` the
