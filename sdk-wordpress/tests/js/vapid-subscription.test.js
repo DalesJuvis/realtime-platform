@@ -25,6 +25,13 @@ test('exports the documented shape', () => {
   assert.equal(typeof mio.unsubscribe, 'function');
   assert.equal(typeof mio.guessDeviceLabel, 'function');
   assert.equal(typeof mio.isNotificationSupported, 'function');
+  assert.equal(typeof mio.showPopup, 'function');
+});
+
+test('showPopup() is a no-op (returns a close() handle, touches nothing) outside a browser', () => {
+  const handle = mio.showPopup({ tenantId: 't', repromptIntervalDays: 3 });
+  assert.equal(typeof handle.close, 'function');
+  assert.doesNotThrow(() => handle.close());
 });
 
 test('isNotificationSupported is false in a plain Node environment', () => {

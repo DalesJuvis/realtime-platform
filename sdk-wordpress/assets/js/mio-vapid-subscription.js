@@ -49,6 +49,36 @@
  * (`event.detail.subscription` / `event.detail.error`) — listen for those
  * to show your own UI feedback instead of this file imposing one.
  *
+ * ## Usage — popup card, zero JS to write, zero button to build
+ * ```html
+ * <script src="https://your-site.example/mio-vapid-subscription.js"
+ *   data-mode="popup"
+ *   data-api-base-url="https://mio.gabonnettoyage.online"
+ *   data-tenant-id="12345678-9abc-def0-1122-334455667788"
+ *   data-token="…"
+ *   data-vapid-public-key="…"
+ *   data-channels="orders:*"
+ *   data-title="Enable notifications?"
+ *   data-description="Get notified about new orders."
+ *   data-confirm-label="Enable"
+ *   data-accent-color="#FF5E1A"
+ *   data-theme="light"
+ *   data-position="bottom-right"
+ *   data-reprompt-interval-days="3"
+ * ></script>
+ * ```
+ * A small floating card (in the spirit of a "Sign in with Google" account
+ * chooser — compact, one gesture, a clear loading state) appears once
+ * the DOM is ready — no `data-button`/pre-existing element needed. If the
+ * visitor dismisses it (× or Escape), `data-reprompt-interval-days` sets
+ * how long before it's shown again on a later visit (mirrors the
+ * `repromptIntervalDays` option of `showPopup()`, same defaults: `0` /
+ * omitted never re-shows once dismissed). Renders nothing at all if
+ * permission is already `"granted"`/`"denied"`. Call
+ * `window.MioVapidSubscription.showPopup(options)` yourself instead of
+ * `data-mode="popup"` for full control over *when* it appears (e.g. after
+ * a delay, or on a specific page only).
+ *
  * ## Usage — call it yourself
  * ```html
  * <script src="https://your-site.example/mio-vapid-subscription.js"></script>
@@ -231,16 +261,237 @@
     });
   }
 
+  var DISMISSED_AT_KEY_PREFIX = 'mio_push_popup_dismissed_at:';
+
+  function dismissedAtKey(tenantId) {
+    return DISMISSED_AT_KEY_PREFIX + tenantId;
+  }
+
+  function readDismissedAt(tenantId) {
+    try {
+      var raw = window.localStorage.getItem(dismissedAtKey(tenantId));
+      return raw ? Number(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeDismissedAt(tenantId) {
+    try {
+      window.localStorage.setItem(dismissedAtKey(tenantId), String(Date.now()));
+    } catch (e) {
+      // Storage unavailable — an unrecorded dismissal just reproposes the
+      // popup sooner than intended, never a visible error.
+    }
+  }
+
+  var POPUP_STYLE_ELEMENT_ID = 'mio-push-popup-styles';
+
+  function ensurePopupStylesInjected() {
+    if (document.getElementById(POPUP_STYLE_ELEMENT_ID)) return;
+    var style = document.createElement('style');
+    style.id = POPUP_STYLE_ELEMENT_ID;
+    style.textContent =
+      '@keyframes mio-push-popup-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }' +
+      '@keyframes mio-push-popup-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }' +
+      '.mio-push-popup-confirm:hover:not(:disabled) { filter: brightness(0.92); }' +
+      '.mio-push-popup-dismiss:hover { opacity: 1 !important; }';
+    document.head.appendChild(style);
+  }
+
+  function assignStyle(el, styles) {
+    for (var key in styles) {
+      if (Object.prototype.hasOwnProperty.call(styles, key)) el.style[key] = styles[key];
+    }
+  }
+
+  /**
+   * Shows a small floating card — in the spirit of the "Sign in with
+   * Google" account chooser (compact card, one gesture, a clear loading
+   * state) — instead of the browser's bare permission prompt with no
+   * context. One click on the confirm button does everything: requests
+   * permission, registers the service worker, subscribes, registers with
+   * your backend (see `subscribe()`, which this is only a presentation
+   * layer over).
+   *
+   * Renders nothing (returns an inert handle) if permission is already
+   * `"granted"`/`"denied"`, or was dismissed less than
+   * `options.repromptIntervalDays` days ago.
+   *
+   * @param {object} options Same shape as `subscribe()`, plus:
+   * @param {string} [options.title] Default "Enable notifications?".
+   * @param {string} [options.description] Default a generic explanation.
+   * @param {string} [options.confirmLabel] Default "Enable".
+   * @param {string} [options.dismissAriaLabel] Default "Dismiss".
+   * @param {string} [options.accentColor] Default '#FF5E1A'.
+   * @param {'light'|'dark'} [options.theme] Default 'light'.
+   * @param {'bottom-right'|'bottom-left'|'top-right'|'top-left'} [options.position] Default 'bottom-right'.
+   * @param {number} [options.repromptIntervalDays] Default 0 (never auto re-show once dismissed).
+   * @returns {{close: function(): void}}
+   */
+  function showPopup(options) {
+    var noop = { close: function () {} };
+    if (typeof document === 'undefined' || !isNotificationSupported()) return noop;
+    if (Notification.permission !== 'default') return noop;
+
+    var repromptDays = options.repromptIntervalDays || 0;
+    var dismissedAt = readDismissedAt(options.tenantId);
+    if (dismissedAt !== null) {
+      var intervalMs = repromptDays * 24 * 60 * 60 * 1000;
+      if (intervalMs <= 0 || Date.now() - dismissedAt < intervalMs) return noop;
+    }
+
+    ensurePopupStylesInjected();
+
+    var dark = options.theme === 'dark';
+    var accent = options.accentColor || '#FF5E1A';
+    var bg = dark ? '#1e1f26' : '#ffffff';
+    var fg = dark ? '#f3f3f5' : '#1a1a1a';
+    var muted = dark ? '#a3a3ab' : '#5f6368';
+    var border = dark ? '#33343d' : '#e0e0e0';
+
+    var pos = (options.position || 'bottom-right').split('-');
+    var overlayStyle = { position: 'fixed', zIndex: '2147483000', margin: '16px' };
+    overlayStyle[pos[0]] = '0';
+    overlayStyle[pos[1]] = '0';
+
+    var overlay = document.createElement('div');
+    assignStyle(overlay, overlayStyle);
+
+    var card = document.createElement('div');
+    assignStyle(card, {
+      width: '320px',
+      maxWidth: 'calc(100vw - 32px)',
+      background: bg,
+      color: fg,
+      border: '1px solid ' + border,
+      borderRadius: '12px',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+      padding: '16px',
+      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+      animation: 'mio-push-popup-in 0.2s ease-out',
+      position: 'relative',
+      overflow: 'hidden',
+      boxSizing: 'border-box',
+    });
+
+    var dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.textContent = '×';
+    dismissBtn.setAttribute('aria-label', options.dismissAriaLabel || 'Dismiss');
+    dismissBtn.className = 'mio-push-popup-dismiss';
+    assignStyle(dismissBtn, {
+      position: 'absolute', top: '8px', right: '8px', width: '24px', height: '24px', lineHeight: '24px',
+      textAlign: 'center', border: 'none', background: 'transparent', color: muted, fontSize: '18px',
+      cursor: 'pointer', opacity: '0.7', padding: '0',
+    });
+
+    var row = document.createElement('div');
+    assignStyle(row, { display: 'flex', gap: '12px', alignItems: 'flex-start', paddingRight: '20px' });
+
+    var icon = document.createElement('div');
+    icon.textContent = '🔔';
+    assignStyle(icon, { fontSize: '24px', lineHeight: '1', flexShrink: '0' });
+
+    var textCol = document.createElement('div');
+    assignStyle(textCol, { minWidth: '0' });
+
+    var titleEl = document.createElement('p');
+    titleEl.textContent = options.title || 'Enable notifications?';
+    assignStyle(titleEl, { margin: '0 0 4px', fontSize: '14px', fontWeight: '600' });
+
+    var descEl = document.createElement('p');
+    descEl.textContent = options.description || 'Get notified about new activity, even when this tab is closed.';
+    assignStyle(descEl, { margin: '0', fontSize: '13px', color: muted, lineHeight: '1.4' });
+
+    textCol.appendChild(titleEl);
+    textCol.appendChild(descEl);
+    row.appendChild(icon);
+    row.appendChild(textCol);
+
+    var confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'mio-push-popup-confirm';
+    confirmBtn.textContent = options.confirmLabel || 'Enable';
+    assignStyle(confirmBtn, {
+      marginTop: '14px', width: '100%', border: 'none', borderRadius: '999px', background: accent,
+      color: '#ffffff', fontSize: '14px', fontWeight: '600', padding: '10px 16px', cursor: 'pointer',
+    });
+
+    var progress = document.createElement('div');
+    assignStyle(progress, {
+      position: 'absolute', top: '0', left: '0', right: '0', height: '3px', overflow: 'hidden',
+      background: 'transparent', display: 'none',
+    });
+    var progressBar = document.createElement('div');
+    assignStyle(progressBar, {
+      width: '40%', height: '100%', background: accent,
+      animation: 'mio-push-popup-indeterminate 1s linear infinite',
+    });
+    progress.appendChild(progressBar);
+
+    card.appendChild(progress);
+    card.appendChild(dismissBtn);
+    card.appendChild(row);
+    card.appendChild(confirmBtn);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    confirmBtn.focus();
+
+    function remove() {
+      overlay.parentNode && overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKeyDown);
+    }
+
+    function dismiss() {
+      writeDismissedAt(options.tenantId);
+      remove();
+      if (options.onDismiss) options.onDismiss();
+    }
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') dismiss();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    dismissBtn.addEventListener('click', dismiss);
+
+    confirmBtn.addEventListener('click', function () {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = '…';
+      dismissBtn.style.display = 'none';
+      progress.style.display = 'block';
+
+      subscribe(options).then(function (result) {
+        remove();
+        if (options.onSubscribed) options.onSubscribed(result);
+      }, function (err) {
+        progress.style.display = 'none';
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = options.confirmLabel || 'Enable';
+        dismissBtn.style.display = '';
+        descEl.textContent = err && err.message ? err.message : String(err);
+        descEl.style.color = dark ? '#ff8a8a' : '#c5221f';
+        if (options.onError) options.onError(err);
+      });
+    });
+
+    return { close: remove };
+  }
+
   // ===========================================================================
-  // Auto-init — reads this <script> tag's own data-* attributes and, if
-  // data-button resolves to an element, wires its click to subscribe().
+  // Auto-init — reads this <script> tag's own data-* attributes. Two
+  // modes, data-mode="button" (default) or data-mode="popup":
+  // - "button": wires data-button's click to subscribe(), same as before.
+  // - "popup": shows the floating card (showPopup()) once the DOM is
+  //   ready — no data-button needed, this is the "no JS to write" path
+  //   for the popup style.
   // Never runs outside a browser (no `document`), and never runs without
-  // the required attributes — importing this file for its exports below
+  // the required credentials — importing this file for its exports below
   // without configuring it is inert, same guarantee as mio-embed.js.
   //
-  // Waits for DOMContentLoaded before looking up data-button when the
-  // document is still loading: a script pasted in <head> (the placement
-  // this file's own docs recommend, matching mio-embed.js's convention)
+  // Waits for DOMContentLoaded before touching the DOM when the document
+  // is still loading: a script pasted in <head> (the placement this
+  // file's own docs recommend, matching mio-embed.js's convention)
   // executes before <body>'s button element exists yet. An earlier
   // version looked the button up immediately and silently gave up if it
   // wasn't there yet — no error, no event, just a click handler that was
@@ -250,7 +501,10 @@
     if (typeof document === 'undefined' || !document.currentScript) return;
     var script = document.currentScript;
     var ds = script.dataset || {};
-    if (!ds.apiBaseUrl || !ds.tenantId || !ds.token || !ds.vapidPublicKey || !ds.button) return;
+    if (!ds.apiBaseUrl || !ds.tenantId || !ds.token || !ds.vapidPublicKey) return;
+
+    var mode = ds.mode || 'button';
+    if (mode === 'button' && !ds.button) return;
 
     var options = {
       apiBaseUrl: ds.apiBaseUrl,
@@ -260,6 +514,14 @@
       channels: ds.channels ? ds.channels.split(',').map(function (c) { return c.trim(); }) : ['*'],
       swUrl: ds.swUrl || '/sw.js',
       deviceLabel: ds.deviceLabel || undefined,
+      title: ds.title || undefined,
+      description: ds.description || undefined,
+      confirmLabel: ds.confirmLabel || undefined,
+      dismissAriaLabel: ds.dismissAriaLabel || undefined,
+      accentColor: ds.accentColor || undefined,
+      theme: ds.theme || undefined,
+      position: ds.position || undefined,
+      repromptIntervalDays: ds.repromptIntervalDays ? Number(ds.repromptIntervalDays) : undefined,
     };
 
     function wireButton() {
@@ -279,10 +541,15 @@
       });
     }
 
+    function init() {
+      if (mode === 'popup') showPopup(options);
+      else wireButton();
+    }
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', wireButton);
+      document.addEventListener('DOMContentLoaded', init);
     } else {
-      wireButton();
+      init();
     }
   }
 
@@ -291,6 +558,7 @@
     unsubscribe: unsubscribe,
     guessDeviceLabel: guessDeviceLabel,
     isNotificationSupported: isNotificationSupported,
+    showPopup: showPopup,
   };
 
   if (typeof module === 'object' && module.exports) {

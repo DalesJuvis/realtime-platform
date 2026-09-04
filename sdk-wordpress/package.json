@@ -1,7 +1,7 @@
 {
   "name": "mio-realtime-wordpress",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Test runner + minifier only — this package ships no JS dependencies to the WordPress site itself (assets/js/*.js are plain, dependency-free scripts; terser is a build-time-only devDependency).",
   "scripts": {
     "test": "node --test tests/js/protocol.test.js tests/js/client.test.js tests/js/embed.test.js tests/js/vapid-subscription.test.js",

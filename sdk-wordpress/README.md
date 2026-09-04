@@ -121,7 +121,7 @@ la version `.min.js` (build committé, `npm run build`), pas la source
 brute :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://mio.gabonnettoyage.online/ws"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
@@ -189,8 +189,8 @@ Deux façons de s'en servir — **directement dans un callback `subscribe()`**
 (contrôle total, canal par canal) :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({ wsUrl: '…', tenantId: '…', token: '…' })
 
@@ -241,7 +241,7 @@ direct. Chaque identifiant est une propriété — soit en `data-*` sur ce
 `window.MioVapidSubscription.subscribe()`/`.unsubscribe()` :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
   data-api-base-url="https://mio.gabonnettoyage.online"
   data-tenant-id="12345678-9abc-def0-1122-334455667788"
   data-token="…"
@@ -269,6 +269,36 @@ déclenché sur le bouton — écoutez-les pour afficher votre propre retour.
 Même mise en garde sur le versionnage que `mio-embed.js` ci-dessus — ce
 fichier est minifié et servi depuis le même CDN/tag.
 
+**`data-mode="popup"`** remplace le bouton par une carte flottante qui
+s'affiche d'elle-même (dans l'esprit "Se connecter avec Google") — plus
+besoin de `data-button` ni d'élément à créer :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+  data-mode="popup"
+  data-api-base-url="https://mio.gabonnettoyage.online"
+  data-tenant-id="12345678-9abc-def0-1122-334455667788"
+  data-token="…"
+  data-vapid-public-key="…"
+  data-channels="orders:*"
+  data-title="Activer les notifications ?"
+  data-description="Soyez averti des nouvelles commandes."
+  data-confirm-label="Activer"
+  data-accent-color="#FF5E1A"
+  data-theme="light"
+  data-position="bottom-right"
+  data-reprompt-interval-days="3"
+></script>
+```
+
+Ne s'affiche jamais si la permission est déjà `granted`/`denied` ; si le
+visiteur ferme la carte (× ou Échap), `data-reprompt-interval-days`
+contrôle après combien de jours elle réapparaît à une visite ultérieure
+(mémorisé dans `localStorage`, aucun réglage serveur — `0`/absent : ne se
+repropose jamais). Appelez `window.MioVapidSubscription.showPopup(options)`
+vous-même pour choisir précisément quand elle apparaît (après un délai,
+sur une page donnée…) plutôt que `data-mode="popup"`.
+
 ## Fonctionnalités
 
 | Fonctionnalité | API |
@@ -284,7 +314,7 @@ fichier est minifié et servi depuis le même CDN/tag.
 | Notifications en arrière-plan | `MioRealtimeClient.showBackgroundNotification(message, options?)` (JS, canal par canal) ou `.attachBackgroundNotifications(client, options?)` (tous canaux) — onglet caché/sans focus, aucun serveur |
 | Détection d'un jeton expiré/invalide | `client.on('authFailed', ({code, reason}) => ...)` (JS) — le client ne retente jamais automatiquement dans ce cas, même avec `reconnect` activé |
 | Widget prêt à l'emploi | `[mio_realtime channel="..."]` |
-| Abonnement Web Push (onglet/navigateur fermé) | `mio-vapid-subscription.js` — un seul `<script>`, identifiants en propriétés, `data-button` ou `window.MioVapidSubscription.subscribe(options)` |
+| Abonnement Web Push (onglet/navigateur fermé) | `mio-vapid-subscription.js` — un seul `<script>`, identifiants en propriétés, `data-button` (bouton) ou `data-mode="popup"` (carte auto-affichée), ou `window.MioVapidSubscription.subscribe(options)`/`.showPopup(options)` |
 
 ## Limitations connues (documentées, pas cachées)
 
