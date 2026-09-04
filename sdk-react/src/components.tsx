@@ -8,7 +8,7 @@
  * composants classe (où les hooks sont inutilisables).
  */
 
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useChannel, useConnectionState, type UseChannelOptions, type UseChannelResult } from "./hooks.js";
 import { useWebPushRegistration, type UseWebPushRegistrationResult } from "./notifications.js";
 import type { ConnectionState } from "./RealtimeContext.js";
@@ -64,16 +64,21 @@ const DEFAULT_PUSH_BUTTON_LABELS: Record<WebPushRegistrationStatusForLabels, str
 // just keeps the table above readable next to its own purpose.
 type WebPushRegistrationStatusForLabels = UseWebPushRegistrationResult["status"];
 
-export interface PushPermissionButtonProps extends WebPushRegistrationOptions {
+export interface PushPermissionButtonProps
+  extends WebPushRegistrationOptions,
+    Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick" | "children" | "type" | "className" | "disabled"> {
   /**
    * Two ways to use this component:
    * - Omit, or pass plain content (text/an icon) — rendered inside a
    *   real `<button>` this component manages for you (`onClick`,
-   *   `disabled`, `aria-*` all wired). `className` applies to that button.
+   *   `disabled`, `aria-*` all wired). `className`/`style`/any other
+   *   native `<button>` attribute (id, title, data-*, …) applies to that button.
    * - Pass a function instead — full control over what's rendered (your
    *   own component, a switch, anything), receiving the same state
    *   `useWebPushRegistration` returns. You then call `subscribe()`/
-   *   `unsubscribe()` yourself from whatever gesture you render.
+   *   `unsubscribe()` yourself from whatever gesture you render (native
+   *   button attributes passed here are ignored — there's no `<button>`
+   *   for them to apply to).
    */
   children?: ReactNode | ((state: UseWebPushRegistrationResult) => ReactNode);
   className?: string;
@@ -101,8 +106,28 @@ export interface PushPermissionButtonProps extends WebPushRegistrationOptions {
  * </PushPermissionButton>
  * ```
  */
-export function PushPermissionButton({ children, className, action = "toggle", ...options }: PushPermissionButtonProps) {
-  const state = useWebPushRegistration(options);
+export function PushPermissionButton({
+  children,
+  className,
+  action = "toggle",
+  apiBaseUrl,
+  token,
+  tenantId,
+  vapidPublicKey,
+  channels,
+  swUrl,
+  deviceLabel,
+  ...buttonProps
+}: PushPermissionButtonProps) {
+  const state = useWebPushRegistration({
+    apiBaseUrl,
+    token,
+    tenantId,
+    vapidPublicKey,
+    ...(channels !== undefined && { channels }),
+    ...(swUrl !== undefined && { swUrl }),
+    ...(deviceLabel !== undefined && { deviceLabel }),
+  });
 
   if (typeof children === "function") {
     return <>{children(state)}</>;
@@ -126,6 +151,7 @@ export function PushPermissionButton({ children, className, action = "toggle", .
       onClick={handleClick}
       disabled={isBusy || !state.isSupported}
       aria-pressed={state.status === "subscribed"}
+      {...buttonProps}
     >
       {children ?? DEFAULT_PUSH_BUTTON_LABELS[state.status]}
     </button>

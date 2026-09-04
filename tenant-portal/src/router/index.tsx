@@ -12,6 +12,7 @@ import BroadcastingPage from '@modules/broadcasting/pages/BroadcastingPage'
 import TemplatesPage from '@modules/templates/pages/TemplatesPage'
 import ApiKeysPage from '@modules/keys/pages/ApiKeysPage'
 import DevicesPage from '@modules/devices/pages/DevicesPage'
+import EmbedPage from '@modules/embed/pages/EmbedPage'
 import BillingPage from '@modules/billing/pages/BillingPage'
 import SubscriptionsPage from '@modules/subscriptions/pages/SubscriptionsPage'
 import CheckoutPage from '@modules/checkout/pages/CheckoutPage'
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
           { path: 'templates', element: <TemplatesPage /> },
           { path: 'keys', element: <ApiKeysPage /> },
           { path: 'devices', element: <DevicesPage /> },
+          { path: 'embed', element: <EmbedPage /> },
           { path: 'billing', element: <BillingPage /> },
           { path: 'subscriptions', element: <SubscriptionsPage /> },
           { path: 'checkout', element: <CheckoutPage /> },

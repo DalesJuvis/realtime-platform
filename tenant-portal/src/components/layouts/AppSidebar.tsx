@@ -42,6 +42,7 @@ import {
   X,
   BookOpen,
   Smartphone,
+  Wand2,
 } from 'lucide-react'
 import { cn } from '@lib/utils'
 import { env } from '@lib/env'
@@ -142,6 +143,7 @@ export function AppSidebar({
     { to: '/templates', label: t.nav.templates, icon: FileText },
     { to: '/keys', label: t.nav.apiKeys, icon: KeyRound },
     { to: '/devices', label: t.nav.devices, icon: Smartphone },
+    { to: '/embed', label: t.nav.embed, icon: Wand2 },
     { to: '/billing', label: t.nav.billing, icon: Receipt },
     { to: '/subscriptions', label: t.nav.subscriptions, icon: Repeat },
     { to: '/checkout', label: t.nav.checkout, icon: Link2 },

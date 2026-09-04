@@ -8,6 +8,7 @@ export const nav = {
   templates: 'Templates',
   apiKeys: 'API Keys',
   devices: 'Devices',
+  embed: 'Push Widget',
   billing: 'Billing',
   subscriptions: 'Subscriptions',
   checkout: 'Checkout',

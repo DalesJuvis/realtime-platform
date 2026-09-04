@@ -17,6 +17,7 @@ import { settings } from './settings'
 import { docs } from './docs'
 import { notificationBell } from './notificationBell'
 import { devices } from './devices'
+import { embed } from './embed'
 
 /** The canonical translation shape — `fr` is typechecked against this
  * (`satisfies typeof en` in each of its module files), so an English
@@ -42,4 +43,5 @@ export const en = {
   docs,
   notificationBell,
   devices,
+  embed,
 } as const
