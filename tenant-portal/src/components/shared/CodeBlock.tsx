@@ -67,7 +67,7 @@ export function CodeBlock({
       )}
       <div className="relative">
         {!label && <div className="absolute right-2 top-2"><CopyButton value={code} label="Snippet" /></div>}
-        <pre className="overflow-x-auto p-3 text-xs leading-relaxed" style={{ color: DRACULA_FOREGROUND }}>
+        <pre className="scrollbar-thin overflow-x-auto p-3 text-xs leading-relaxed" style={{ color: DRACULA_FOREGROUND }}>
           {highlighted ? (
             <code className={cn('font-mono', `language-${language}`)} dangerouslySetInnerHTML={{ __html: highlighted }} />
           ) : (

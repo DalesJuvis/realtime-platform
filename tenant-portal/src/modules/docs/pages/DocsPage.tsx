@@ -120,7 +120,7 @@ export default function DocsPage() {
       </div>
 
       <Tabs defaultValue="getting-started" className="flex flex-col gap-6 lg:flex-row">
-        <TabsList className="h-auto w-full shrink-0 flex-row flex-wrap justify-start gap-1 bg-transparent p-0 lg:sticky lg:top-16 lg:max-h-[calc(100dvh-4rem)] lg:w-56 lg:flex-col lg:items-stretch lg:overflow-y-auto lg:py-4">
+        <TabsList className="scrollbar-thin h-auto w-full shrink-0 flex-row flex-wrap justify-start gap-1 bg-transparent p-0 lg:sticky lg:top-16 lg:max-h-[calc(100dvh-4rem)] lg:w-56 lg:flex-col lg:items-stretch lg:overflow-y-auto lg:py-4">
           <TabsTrigger value="getting-started" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabGettingStarted}</TabsTrigger>
           <TabsTrigger value="rest-api" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabRestApi}</TabsTrigger>
           <TabsTrigger value="web-push" className="justify-start data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none">{t.docs.tabWebPush}</TabsTrigger>
