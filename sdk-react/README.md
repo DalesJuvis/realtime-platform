@@ -69,7 +69,9 @@ function OrdersFeed() {
 | `<ChannelSubscriber channelId>{state => ...}</ChannelSubscriber>` | Équivalent render-prop de `useChannel`, pour composition JSX ou composants classe. |
 | `<ConnectionIndicator labels?>` | Texte d'état de connexion minimal, non stylé — un point de départ, pas un composant themé. |
 | `useBackgroundNotifications(options?)` | Affiche une `Notification` navigateur pour chaque message reçu tant que l'onglet est caché/sans focus — voir `attachBackgroundNotifications` côté `sdk-typescript`. |
-| `usePushSubscription(serviceWorkerUrl, vapidPublicKey)` | Cycle de vie complet d'un abonnement Web Push : `{ status, subscription, error, subscribe, unsubscribe, isSupported }`. |
+| `usePushSubscription(serviceWorkerUrl, vapidPublicKey)` | Cycle de vie complet d'un abonnement Web Push, bas niveau (ne poste vers aucun backend) : `{ status, subscription, error, subscribe, unsubscribe, isSupported }`. |
+| `useWebPushRegistration(options)` | Comme ci-dessus, mais `subscribe()` inscrit aussi l'abonnement auprès de *ce* backend mio (`apiBaseUrl`/`token`/`tenantId`/`vapidPublicKey`/`channels?`) — un seul appel. |
+| `<PushPermissionButton {...options}>` | Le `<button>` "activer les notifications" prêt à l'emploi (stylable via `className`), ou entièrement custom via `children` render-prop — voir la section dédiée plus bas. |
 
 `channelId` accepte `null`/`undefined` partout (`useSubscription`,
 `useChannel`) : la souscription reste simplement inactive tant qu'il n'est
@@ -85,6 +87,43 @@ Utilisez `useSubscription` pour piloter un `ref`, un graphique impératif,
 ou tout ce qui n'a pas besoin d'un re-render React par message ;
 `useChannel` pour l'affichage direct (chat, flux, journal).
 
+## Custom "ask permission" UI — `<PushPermissionButton>`
+
+Two ways to use it, same component:
+
+```tsx
+import { PushPermissionButton } from '@mio/realtime-sdk-react'
+
+const pushOptions = {
+  apiBaseUrl: 'https://mio.example.com',
+  token,          // minted server-side, never your tenant secret
+  tenantId,
+  vapidPublicKey,
+  channels: ['orders:*'], // défaut : ['*']
+}
+
+// Rapide : votre propre libellé/icône, le <button> de ce composant
+<PushPermissionButton {...pushOptions} className="btn btn-primary">
+  <BellIcon /> Activer les alertes
+</PushPermissionButton>
+
+// Contrôle total : votre propre balisage, vous pilotez subscribe()/unsubscribe()
+<PushPermissionButton {...pushOptions}>
+  {(state) => (
+    <MySwitch
+      checked={state.status === 'subscribed'}
+      disabled={state.status === 'subscribing' || state.status === 'unsubscribing'}
+      onChange={state.status === 'subscribed' ? state.unsubscribe : state.subscribe}
+    />
+  )}
+</PushPermissionButton>
+```
+
+`children` en fonction reçoit exactement l'état de `useWebPushRegistration`
+(`{ status, subscription, error, subscribe, unsubscribe, isSupported }`) —
+consommez ce hook directement si vous ne voulez aucun élément rendu du
+tout (juste l'état, câblé à votre propre UI ailleurs dans l'arbre).
+
 ## `client` vs `config`
 
 `<RealtimeProvider client={monClient}>` accepte un `RealtimeClient` déjà
@@ -98,12 +137,14 @@ deux doit être fourni.
 
 Pas de génération de jeton (toujours côté serveur — voir le README de
 [`sdk-typescript`](../sdk-typescript)), pas de UI stylée au-delà de
-`<ConnectionIndicator>` (volontairement minimal, sans dépendance à un
-design system), pas de persistance des messages au-delà du buffer en
-mémoire de `useChannel`. Pour React Native spécifiquement (reconnexion
-`AppState`/réseau), voir
+`<ConnectionIndicator>`/`<PushPermissionButton>` (volontairement minimal,
+sans dépendance à un design system — voir la section dédiée ci-dessus pour
+comment leur passer votre propre balisage), pas de persistance des
+messages au-delà du buffer en mémoire de `useChannel`. Pour React Native
+spécifiquement (reconnexion `AppState`/réseau), voir
 [`@mio/realtime-sdk-react-native`](../sdk-react-native), qui réexporte
-tout ce package **sauf** `useBackgroundNotifications`/`usePushSubscription` —
+tout ce package **sauf** `useBackgroundNotifications`/`usePushSubscription`/
+`useWebPushRegistration`/`<PushPermissionButton>` —
 ils enveloppent les API navigateur `Notification`/`ServiceWorker`/
 `PushManager`, qui n'existent pas en React Native (notifications natives
 RN : un mécanisme entièrement différent, FCM/APNs via une lib comme
