@@ -6,12 +6,30 @@ export const embed = {
     'Personnalisez le bouton de notification pour votre propre site, puis copiez le code prêt à coller — pré-rempli avec les identifiants réels de ce tenant.',
 
   customizeTitle: 'Personnaliser',
+  modeLabel: 'Mode de sollicitation',
+  modeButton: "Bouton — le visiteur clique pour s'inscrire",
+  modePopup: 'Popup — apparaît seule, comme une carte "Se connecter avec Google"',
+  modeButtonHint: 'Un simple bouton que vous placez où vous voulez sur votre page.',
+  modePopupHint:
+    "S'affiche dès qu'elle est éligible (permission pas encore décidée) et, si rejetée, attend l'intervalle ci-dessous avant de réapparaître à une visite ultérieure — aucun backend requis, l'intervalle vit dans le code généré.",
   buttonTextLabel: 'Texte du bouton',
   backgroundColorLabel: 'Couleur de fond',
+  accentColorLabel: "Couleur d'accent",
   textColorLabel: 'Couleur du texte',
   cornerRadiusLabel: 'Arrondi des coins',
   channelsLabel: 'Canaux',
   channelsHint: 'Séparés par des virgules — ex. orders:*, ou * pour tous les canaux.',
+
+  popupTitleLabel: 'Titre du popup',
+  popupDescriptionLabel: 'Description du popup',
+  popupConfirmLabelLabel: 'Libellé du bouton de confirmation',
+  popupThemeLabel: 'Thème',
+  popupThemeLight: 'Clair',
+  popupThemeDark: 'Sombre',
+  popupPositionLabel: "Position à l'écran",
+  popupRepromptLabel: 'Reproposer après (jours)',
+  popupRepromptHint:
+    "Délai avant de réafficher le popup après qu'un visiteur l'ait rejeté. 0 = ne plus jamais le réafficher une fois rejeté.",
 
   previewTitle: 'Aperçu',
   previewNote: "Visuel uniquement — cliquer ici n'abonne rien.",
@@ -28,4 +46,10 @@ export const embed = {
   noToken: "Générez d'abord un jeton ci-dessous — le code généré en a besoin pour authentifier l'inscription.",
   tokenExpiresNote:
     'Ce jeton est intégré en texte brut partout où vous le collez — traitez-le comme une clé API publique, et régénérez-le (puis recopiez) une fois expiré.',
+
+  swTitle: 'Service worker',
+  swNote:
+    "Web Push a besoin d'un service worker déployé sur votre site pour le recevoir — en voici un prêt à l'emploi, câblé pour le format JSON envoyé par ce backend.",
+  swDownloadButton: 'Télécharger sw.js',
+  swDownloaded: 'sw.js téléchargé — déployez-le à la racine de votre site.',
 } satisfies typeof en

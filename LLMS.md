@@ -536,7 +536,7 @@ any network call if exceeded. Never let `$secret` leave PHP. Also
 ships `[mio_realtime channel="..."]` shortcode and standalone
 `mio-embed.js`/`mio-protocol.js`/`mio-client.js`/`mio-vapid-subscription.js`
 (dependency-free `<script>` tags, no PHP/build step — hosted via jsDelivr:
-`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-embed.min.js`,
+`https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-embed.min.js`,
 pin the tag, never `@master`; see §9 for `mio-vapid-subscription.js`).
 
 **Full API — `Mio\Realtime\Client`**
@@ -615,8 +615,16 @@ No build step? `sdk-wordpress/assets/js/mio-vapid-subscription.js` is the
 same flow as a single dependency-free `<script>` tag — every credential a
 `data-*` property, `data-button` (CSS selector) wired to
 `window.MioVapidSubscription.subscribe()` instead of auto-running on load
-(permission needs a user gesture). Hosted via jsDelivr like `mio-embed.js`
-(§ WordPress below): `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-vapid-subscription.min.js`.
+(permission needs a user gesture). `data-mode="popup"` swaps the button
+for a self-showing floating card (Google-account-chooser-style) with its
+own `data-title`/`data-description`/`data-confirm-label`/
+`data-accent-color`/`data-theme`/`data-position`/
+`data-reprompt-interval-days` (localStorage-tracked dismissal, no backend
+setting) — or call `window.MioVapidSubscription.showPopup(options)`
+directly. Same shape exists in `sdk-typescript`
+(`showPushPermissionPopup()`) and `sdk-react` (`<PushPermissionPopup>`).
+Hosted via jsDelivr like `mio-embed.js`
+(§ WordPress below): `https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-vapid-subscription.min.js`.
 
 ## 10. Compile/test status per component (don't overclaim reliability)
 
@@ -625,7 +633,7 @@ same flow as a single dependency-free `<script>` tag — every credential a
 | `backend/` | Compiled, tested (123/125 passing, 2 ignored live-Redis integration tests), deployed to production |
 | `sdk-typescript` | Compiled + tested (43/43), includes `channel()`, `registerWebPushSubscription()` |
 | `sdk-react` / `sdk-react-native` | Compiled (`tsc` strict), hooks not runtime-tested against a live server |
-| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client/vapid-subscription tested (56/56); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
+| `sdk-wordpress` | PHP `Client` tested (12/12 PHPUnit); JS codec/client/vapid-subscription tested (57/57); WordPress integration itself (routes, shortcode, settings page) untested against a real WordPress install |
 | `sdk-laravel` | `LaravelHttpTransport` tested (3/3); service provider/facade untested against a real app |
 | `sdk-python` | Protocol codec tested (13/13); `client.py` (network) untested |
 | `sdk-rust` | Written, not compiled by its authors |

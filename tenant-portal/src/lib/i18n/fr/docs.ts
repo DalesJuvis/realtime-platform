@@ -254,7 +254,7 @@ export const docs = {
   embedScriptDescription:
     "Pas spécifique à WordPress malgré son emplacement dans sdk-wordpress/assets/js/ — un fichier unique, sans dépendance, à coller dans n'importe quelle page HTML (un bloc HTML personnalisé, un header/footer de thème, le <head> d'un site statique). Ni PHP, ni framework d'aucune sorte.",
   embedScriptCaveat:
-    "Fixez la version : @v0.1.10 ci-dessus est un tag git — jsDelivr met agressivement en cache les références taguées, et un futur commit ne peut jamais modifier silencieusement ce qui est déjà intégré sur le site de quelqu'un. N'utilisez jamais @master dans une URL transmise à un tiers.",
+    "Fixez la version : @v0.1.11 ci-dessus est un tag git — jsDelivr met agressivement en cache les références taguées, et un futur commit ne peut jamais modifier silencieusement ce qui est déjà intégré sur le site de quelqu'un. N'utilisez jamais @master dans une URL transmise à un tiers.",
   embedScriptNotePrefix:
     "Aucun hébergement à mettre en place — servi directement depuis GitHub via jsDelivr, mis en cache mondialement. Utilise le build",
   embedScriptNoteMiddle: 'minifié avec terser (',

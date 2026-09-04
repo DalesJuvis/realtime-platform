@@ -255,7 +255,7 @@ export const docs = {
   embedScriptDescription:
     "Not WordPress-specific despite living in sdk-wordpress/assets/js/ — a single, dependency-free file for pasting into any HTML page (a Custom HTML block, a theme header/footer, a static site's <head>). No PHP, no framework of any kind.",
   embedScriptCaveat:
-    "Pin the version: @v0.1.10 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party.",
+    "Pin the version: @v0.1.11 above is a git tag — jsDelivr caches tagged refs aggressively, and a future commit can never silently change what's already embedded on someone's site. Never use @master in a URL handed to a third party.",
   embedScriptNotePrefix:
     'No hosting to set up — served straight from GitHub via jsDelivr, globally cached. Uses the committed, terser-minified',
   embedScriptNoteMiddle: 'build (',

@@ -718,7 +718,7 @@ build — a committed, terser-minified artifact (`npm run build` in
 source — the plain `.js` files stay in the repo purely for reading:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-embed.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-embed.min.js"
   data-ws-url="wss://realtime.example.com/ws"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -730,7 +730,7 @@ source — the plain `.js` files stay in the repo purely for reading:
 `data-ws-url` is the `ws_url` from the mint-token response — hand it
 through as-is, never assemble it from a host/port.
 
-> **Pin the version.** `@v0.1.10` above is a git tag — jsDelivr caches
+> **Pin the version.** `@v0.1.11` above is a git tag — jsDelivr caches
 > tagged refs aggressively (fast, and a future commit can never silently
 > change what's already embedded on someone's site). Never use `@master`
 > in a URL you hand to a third party: it's mutable, so a later change to
@@ -747,7 +747,7 @@ passed to `window.MioVapidSubscription.subscribe()`/`.unsubscribe()`
 directly:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
   data-api-base-url="https://realtime.example.com:8090"
   data-tenant-id="<your-tenant-id>"
   data-token="…"
@@ -774,6 +774,35 @@ site — this file registers it, it doesn't create one for you).
 Same version-pinning caveat as above — this file is minified and served
 from the same CDN/tag.
 
+**`data-mode="popup"`** swaps the button for a floating card that shows
+itself (in the spirit of a "Sign in with Google" account chooser) — no
+`data-button`/pre-existing element required:
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-vapid-subscription.min.js"
+  data-mode="popup"
+  data-api-base-url="https://realtime.example.com:8090"
+  data-tenant-id="<your-tenant-id>"
+  data-token="…"
+  data-vapid-public-key="…"
+  data-channels="orders:*"
+  data-title="Enable notifications?"
+  data-description="Get notified about new orders."
+  data-confirm-label="Enable"
+  data-accent-color="#FF5E1A"
+  data-theme="light"
+  data-position="bottom-right"
+  data-reprompt-interval-days="3"
+></script>
+```
+
+Never shows if permission is already `granted`/`denied`; if the visitor
+dismisses it (× or Escape), `data-reprompt-interval-days` sets how many
+days before it reappears on a later visit — tracked in `localStorage`,
+no server setting involved (`0`/omitted: never re-show once dismissed).
+Call `window.MioVapidSubscription.showPopup(options)` yourself to control
+exactly when it appears instead of `data-mode="popup"`.
+
 ### `mio-protocol.js` + `mio-client.js` — building your own page logic
 
 For anything beyond the auto-rendered feed above — custom UI around
@@ -782,8 +811,8 @@ messages, multiple channels, your own publish form — load the two files
 CDN, same tag, minified builds, loaded in dependency order:
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.10/sdk-wordpress/assets/js/mio-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-protocol.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/DalesJuvis/realtime-platform@v0.1.11/sdk-wordpress/assets/js/mio-client.min.js"></script>
 <script>
   var client = new window.MioRealtimeClient({
     wsUrl: 'wss://realtime.example.com/ws', // the ws_url from mint-token, never assembled by hand
