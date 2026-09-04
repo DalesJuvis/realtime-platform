@@ -26,6 +26,7 @@ import {
   Radio,
   Send,
   Smartphone,
+  Sparkles,
   Trash2,
   Upload,
 } from 'lucide-react'
@@ -58,7 +59,7 @@ import { changePasswordAction } from '@actions/account/changePassword.action'
 import { errorMessage } from '@lib/errors'
 import { copyToClipboard, formatDateTime, maskKey, workspaceNameFromEmail } from '@lib/utils'
 import { usePortalAuthStore } from '@store/portalAuth.store'
-import { useUiStore } from '@store/ui.store'
+import { useUiStore, type AiAssistantPosition } from '@store/ui.store'
 import { usePreferencesStore } from '@store/preferences.store'
 import type { Language } from '@lib/i18n'
 import type { KeyPair } from '@entities/KeyPair.entity'
@@ -158,7 +159,7 @@ function ProfileTab() {
   const displayName = profile?.name || workspaceNameFromEmail(email)
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
       <Card className="shadow-none">
         <CardHeader>
           <CardTitle className="text-base">{t.settings.workspaceLogoTitle}</CardTitle>
@@ -264,7 +265,7 @@ function SecurityTab() {
   }
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
       <Card className="shadow-none">
         <CardHeader>
           <CardTitle className="text-base">{t.settings.accountTitle}</CardTitle>
@@ -374,7 +375,7 @@ function KeysTab() {
   }
 
   return (
-    <Card className="max-w-xl shadow-none">
+    <Card className="shadow-none">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <KeyRound className="h-4 w-4" />
@@ -495,6 +496,8 @@ function PreferencesTab() {
   const setPageSize = useUiStore((s) => s.setPageSize)
   const metricsRefreshIntervalMs = useUiStore((s) => s.metricsRefreshIntervalMs)
   const setMetricsRefreshIntervalMs = useUiStore((s) => s.setMetricsRefreshIntervalMs)
+  const aiAssistantPosition = useUiStore((s) => s.aiAssistantPosition)
+  const setAiAssistantPosition = useUiStore((s) => s.setAiAssistantPosition)
   const language = usePreferencesStore((s) => s.language)
   const setLanguage = usePreferencesStore((s) => s.setLanguage)
 
@@ -587,11 +590,11 @@ function PreferencesTab() {
   }
 
   return (
-    <Card className="max-w-xl shadow-none">
+    <Card className="max-w-4xl shadow-none">
       <CardHeader>
         <CardTitle className="text-base">{t.settings.preferencesTitle}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
         <div className="space-y-2">
           <Label>{t.settings.rowsPerPage}</Label>
           <p className="text-sm text-muted-foreground">{t.settings.rowsPerPageHint}</p>
@@ -645,6 +648,26 @@ function PreferencesTab() {
             <SelectContent>
               <SelectItem value="en">{t.settings.languageEnglish}</SelectItem>
               <SelectItem value="fr">{t.settings.languageFrench}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />
+            {t.assistant.positionLabel}
+          </Label>
+          <p className="text-sm text-muted-foreground">{t.assistant.positionHint}</p>
+          <Select value={aiAssistantPosition} onValueChange={(v) => setAiAssistantPosition(v as AiAssistantPosition)}>
+            <SelectTrigger className="max-w-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="bottom-right">{t.assistant.positionBottomRight}</SelectItem>
+              <SelectItem value="bottom-left">{t.assistant.positionBottomLeft}</SelectItem>
+              <SelectItem value="top-right">{t.assistant.positionTopRight}</SelectItem>
+              <SelectItem value="top-left">{t.assistant.positionTopLeft}</SelectItem>
+              <SelectItem value="hidden">{t.assistant.positionHidden}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -758,11 +781,9 @@ export default function SettingsPage() {
         <TabsContent value="security">
           <SecurityTab />
         </TabsContent>
-        <TabsContent value="keys" className="space-y-6">
+        <TabsContent value="keys" className="grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 md:items-start">
           <KeysTab />
-          <div className="max-w-xl">
-            <VapidKeyCard />
-          </div>
+          <VapidKeyCard />
         </TabsContent>
         <TabsContent value="sessions">
           <SessionsTab />

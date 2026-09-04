@@ -19,6 +19,7 @@ import { docs } from './docs'
 import { notificationBell } from './notificationBell'
 import { devices } from './devices'
 import { embed } from './embed'
+import { assistant } from './assistant'
 
 export const fr = {
   common,
@@ -41,4 +42,5 @@ export const fr = {
   notificationBell,
   devices,
   embed,
+  assistant,
 } as const satisfies typeof en

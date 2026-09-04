@@ -49,4 +49,18 @@ export const embed = {
   swNote: 'Web Push needs a service worker deployed on your site to receive it — this is a ready-to-use one, wired for the JSON payload shape this backend sends.',
   swDownloadButton: 'Download sw.js',
   swDownloaded: 'sw.js downloaded — deploy it at your site\'s root.',
+
+  iconTitle: 'Notification icon',
+  iconNote: 'This is your workspace logo, shown next to the notification on desktop and Android — already baked into the sw.js below.',
+  iconMissingHint: 'No logo yet — upload one to include it as the notification icon below.',
+  iconUploadButton: 'Upload logo',
+  iconChangeButton: 'Change logo',
+  iconUploading: 'Uploading…',
+  iconUpdated: 'Logo updated — included in the generated service worker below.',
+  iconUploadFailed: 'Failed to upload logo.',
+
+  sampleTitleLabel: 'Sample title',
+  sampleBodyLabel: 'Sample description',
+  sampleHint: 'Preview only — the real title/description come from whatever you publish to the channel.',
+  notificationNow: 'now',
 }

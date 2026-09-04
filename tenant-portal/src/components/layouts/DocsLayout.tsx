@@ -18,8 +18,8 @@ export function DocsLayout() {
   const isAuthenticated = usePortalAuthStore((s) => s.isAuthenticated)
 
   return (
-    <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-20 h-16 border-b border-border bg-background">
+    <div className="flex h-svh flex-col bg-background">
+      <header className="h-16 shrink-0 border-b border-border bg-background">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center gap-2">
             <MioLogo className="h-7 w-7 shrink-0" />
@@ -30,8 +30,10 @@ export function DocsLayout() {
           </Link>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <Outlet />
+      <main className="scrollbar-thin flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <Outlet />
+        </div>
       </main>
     </div>
   )

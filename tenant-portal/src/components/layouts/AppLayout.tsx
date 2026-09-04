@@ -4,6 +4,7 @@ import { AppSidebar } from './AppSidebar'
 import { WorkspaceBanner } from './WorkspaceBanner'
 import { MobileHeader } from './MobileHeader'
 import { DevToolbar } from './DevToolbar'
+import { AiAssistantBlob } from '@components/shared/AiAssistantBlob'
 import { cn } from '@lib/utils'
 import { useUiStore } from '@store/ui.store'
 
@@ -45,6 +46,7 @@ export function AppLayout() {
       </div>
 
       <DevToolbar />
+      <AiAssistantBlob />
     </div>
   )
 }

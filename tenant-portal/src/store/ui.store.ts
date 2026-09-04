@@ -13,6 +13,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
+export type AiAssistantPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left' | 'hidden'
+
 interface UiState {
   readonly sidebarOpen: boolean
   toggleSidebar: () => void
@@ -39,6 +41,11 @@ interface UiState {
   readonly focusMode: boolean
   toggleFocusMode: () => void
   setFocusMode: (focusMode: boolean) => void
+
+  /** Corner the floating AI assistant blob (`AiAssistantBlob`) sits in —
+   * `'hidden'` turns it off entirely. Editable in Settings → Preferences. */
+  readonly aiAssistantPosition: AiAssistantPosition
+  setAiAssistantPosition: (position: AiAssistantPosition) => void
 }
 
 export const useUiStore = create<UiState>()(
@@ -57,6 +64,9 @@ export const useUiStore = create<UiState>()(
       focusMode: false,
       toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
       setFocusMode: (focusMode) => set({ focusMode }),
+
+      aiAssistantPosition: 'bottom-right',
+      setAiAssistantPosition: (aiAssistantPosition) => set({ aiAssistantPosition }),
     }),
     {
       name: 'ui-storage',
@@ -65,6 +75,7 @@ export const useUiStore = create<UiState>()(
         sidebarOpen: state.sidebarOpen,
         pageSize: state.pageSize,
         metricsRefreshIntervalMs: state.metricsRefreshIntervalMs,
+        aiAssistantPosition: state.aiAssistantPosition,
       }),
     },
   ),

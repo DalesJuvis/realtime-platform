@@ -52,4 +52,19 @@ export const embed = {
     "Web Push a besoin d'un service worker déployé sur votre site pour le recevoir — en voici un prêt à l'emploi, câblé pour le format JSON envoyé par ce backend.",
   swDownloadButton: 'Télécharger sw.js',
   swDownloaded: 'sw.js téléchargé — déployez-le à la racine de votre site.',
+
+  iconTitle: 'Icône de notification',
+  iconNote:
+    "C'est le logo de votre espace de travail, affiché à côté de la notification sur ordinateur et Android — déjà intégré dans le sw.js ci-dessous.",
+  iconMissingHint: "Pas encore de logo — importez-en un pour l'inclure comme icône de notification ci-dessous.",
+  iconUploadButton: 'Importer un logo',
+  iconChangeButton: 'Changer le logo',
+  iconUploading: 'Import en cours…',
+  iconUpdated: 'Logo mis à jour — inclus dans le service worker généré ci-dessous.',
+  iconUploadFailed: "Échec de l'import du logo.",
+
+  sampleTitleLabel: 'Titre exemple',
+  sampleBodyLabel: 'Description exemple',
+  sampleHint: 'Aperçu uniquement — le vrai titre/description viennent de ce que vous publiez sur le canal.',
+  notificationNow: 'maintenant',
 } satisfies typeof en
