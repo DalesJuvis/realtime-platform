@@ -23,6 +23,9 @@ export type {
   PushPermissionPopupProps,
 } from "./components.js";
 
+export { AiAssistantBlob } from "./AiAssistantBlob.js";
+export type { AiAssistantBlobProps, AiAssistantPosition, AiAssistantRecommendation } from "./AiAssistantBlob.js";
+
 export { useBackgroundNotifications, usePushSubscription, useWebPushRegistration } from "./notifications.js";
 export type {
   PushSubscriptionStatus,

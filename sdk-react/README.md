@@ -73,6 +73,7 @@ function OrdersFeed() {
 | `useWebPushRegistration(options)` | Comme ci-dessus, mais `subscribe()` inscrit aussi l'abonnement auprès de *ce* backend mio (`apiBaseUrl`/`token`/`tenantId`/`vapidPublicKey`/`channels?`) — un seul appel. |
 | `<PushPermissionButton {...options}>` | Le `<button>` "activer les notifications" prêt à l'emploi (stylable via `className`), ou entièrement custom via `children` render-prop — voir la section dédiée plus bas. |
 | `<PushPermissionPopup {...options}>` | Carte de permission qui s'affiche d'elle-même, dans l'esprit "Se connecter avec Google" — voir la section dédiée plus bas. |
+| `<AiAssistantBlob {...props}>` | Bulle assistante flottante, animée, avec suivi du curseur et état "mis de côté" — exportable dans n'importe quelle app React, voir la section dédiée plus bas. |
 
 `channelId` accepte `null`/`undefined` partout (`useSubscription`,
 `useChannel`) : la souscription reste simplement inactive tant qu'il n'est
@@ -152,6 +153,66 @@ Rendu `null` (rien affiché) si la permission est déjà
 `tenantId` — aucun réglage serveur). Afficher ce composant est sans
 risque sans geste utilisateur préalable — seul le clic sur son bouton de
 confirmation déclenche `Notification.requestPermission()`.
+
+## Assistant flottant — `<AiAssistantBlob>`
+
+Une petite sphère animée (flotte doucement, cligne des yeux, et suit le
+curseur du regard quand il approche) qui s'ouvre sur une carte de
+recommandation façon "Hi, {name}! I have a recommendation for you." —
+sans dépendance à react-router ni à un framework CSS : entièrement en
+styles inline, exportable dans **n'importe quelle** app React, pas
+seulement celle-ci.
+
+Ce composant ne fait *que* la présentation et l'interaction — il ne
+récupère rien lui-même et ne décide de rien à recommander. C'est votre
+app qui construit l'objet `recommendation` (à partir de vos propres
+données) et le lui passe :
+
+```tsx
+import { useEffect, useState } from 'react'
+import { AiAssistantBlob, type AiAssistantRecommendation } from '@mio/realtime-sdk-react'
+
+function Assistant() {
+  const [recommendation, setRecommendation] = useState<AiAssistantRecommendation | null>(null)
+
+  useEffect(() => {
+    // Exemple : vous décidez vous-même quoi recommander, à partir de
+    // vos propres données — ici l'aperçu du tenant sur le vrai backend
+    // de production utilisé pendant le développement de ce SDK.
+    fetch('https://mio.gabonnettoyage.online/api/v1/portal/overview', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((res) =>
+        setRecommendation({
+          category: 'Broadcasting',
+          stat: { value: String(res.data.messages_total), unit: 'messages' },
+          description: 'Messages delivered so far — nice work!',
+          cta: { label: 'View overview', href: '/overview' },
+        }),
+      )
+  }, [])
+
+  return (
+    <AiAssistantBlob
+      name="Jules"
+      recommendation={recommendation}
+      position="bottom-right"
+      onTaskSubmit={(task) => console.log('task:', task)}
+      storageKey="my-app-assistant" // persiste l'état "mis de côté" en localStorage
+    />
+  )
+}
+```
+
+**"Mettre de côté"** : un bouton dans le coin du panneau (à côté de
+fermer) fait glisser la bulle à mi-hauteur de l'écran, en grande partie
+hors champ — juste assez visible pour rester cliquable. Cliquer dessus
+la ramène à sa position normale. Cet état ("kept aside"/"docked") est
+géré entièrement en interne (aucune prop à contrôler) et persiste entre
+les rechargements uniquement si `storageKey` est fourni.
+
+`recommendation.cta` prend `href` et/ou `onClick` (jamais un composant
+`<Link>`) — utilisez `onClick` pour appeler votre propre routeur
+(`navigate(...)`), `href` pour un vrai lien, ou les deux.
 
 ## `client` vs `config`
 
