@@ -1,6 +1,6 @@
 {
   "name": "@mio/realtime-sdk-react",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Bindings React (contexte, hooks, composants) pour @mio/realtime-sdk — le moteur de notification et messagerie temps réel multi-tenant (protocole binaire 256 octets).",
   "type": "module",
   "main": "dist/index.js",

@@ -72,6 +72,7 @@ function OrdersFeed() {
 | `usePushSubscription(serviceWorkerUrl, vapidPublicKey)` | Cycle de vie complet d'un abonnement Web Push, bas niveau (ne poste vers aucun backend) : `{ status, subscription, error, subscribe, unsubscribe, isSupported }`. |
 | `useWebPushRegistration(options)` | Comme ci-dessus, mais `subscribe()` inscrit aussi l'abonnement auprès de *ce* backend mio (`apiBaseUrl`/`token`/`tenantId`/`vapidPublicKey`/`channels?`) — un seul appel. |
 | `<PushPermissionButton {...options}>` | Le `<button>` "activer les notifications" prêt à l'emploi (stylable via `className`), ou entièrement custom via `children` render-prop — voir la section dédiée plus bas. |
+| `<PushPermissionPopup {...options}>` | Carte de permission qui s'affiche d'elle-même, dans l'esprit "Se connecter avec Google" — voir la section dédiée plus bas. |
 
 `channelId` accepte `null`/`undefined` partout (`useSubscription`,
 `useChannel`) : la souscription reste simplement inactive tant qu'il n'est
@@ -123,6 +124,34 @@ const pushOptions = {
 (`{ status, subscription, error, subscribe, unsubscribe, isSupported }`) —
 consommez ce hook directement si vous ne voulez aucun élément rendu du
 tout (juste l'état, câblé à votre propre UI ailleurs dans l'arbre).
+
+## Popup de permission — `<PushPermissionPopup>`
+
+Alternative à `<PushPermissionButton>` : une carte compacte qui s'affiche
+d'elle-même (rien à placer dans votre JSX à part le composant), dans
+l'esprit du sélecteur de compte "Se connecter avec Google" :
+
+```tsx
+import { PushPermissionPopup } from '@mio/realtime-sdk-react'
+
+<PushPermissionPopup
+  {...pushOptions}
+  title="Activer les notifications ?"
+  description="Soyez averti des nouvelles commandes."
+  accentColor="#FF5E1A"
+  theme="light" // ou "dark"
+  position="bottom-right" // "bottom-left" | "top-right" | "top-left"
+  repromptIntervalDays={3} // 0 (défaut) : ne se repropose jamais après un rejet
+  onSubscribed={(subscription) => console.log('abonné', subscription)}
+/>
+```
+
+Rendu `null` (rien affiché) si la permission est déjà
+`"granted"`/`"denied"`, ou rejetée il y a moins de
+`repromptIntervalDays` jours (mémorisé dans `localStorage`, par
+`tenantId` — aucun réglage serveur). Afficher ce composant est sans
+risque sans geste utilisateur préalable — seul le clic sur son bouton de
+confirmation déclenche `Notification.requestPermission()`.
 
 ## `client` vs `config`
 

@@ -15,8 +15,13 @@ export {
 } from "./hooks.js";
 export type { UseChannelOptions, UseChannelResult } from "./hooks.js";
 
-export { ChannelSubscriber, ConnectionIndicator, PushPermissionButton } from "./components.js";
-export type { ChannelSubscriberProps, ConnectionIndicatorProps, PushPermissionButtonProps } from "./components.js";
+export { ChannelSubscriber, ConnectionIndicator, PushPermissionButton, PushPermissionPopup } from "./components.js";
+export type {
+  ChannelSubscriberProps,
+  ConnectionIndicatorProps,
+  PushPermissionButtonProps,
+  PushPermissionPopupProps,
+} from "./components.js";
 
 export { useBackgroundNotifications, usePushSubscription, useWebPushRegistration } from "./notifications.js";
 export type {
