@@ -38,6 +38,7 @@ export {
   guessDeviceLabel,
   registerWebPushSubscription,
   unregisterWebPushSubscription,
+  showPushPermissionPopup,
 } from "./notifications.js";
 export type {
   BackgroundNotificationOptions,
@@ -46,6 +47,8 @@ export type {
   WebPushRegistrationOptions,
   WebPushRegistrationResult,
   WebPushUnregistrationOptions,
+  PushPermissionPopupOptions,
+  PushPermissionPopupHandle,
 } from "./notifications.js";
 
 import { RealtimeClient, type RealtimeClientConfig } from "./client.js";

@@ -312,6 +312,268 @@ export async function unregisterWebPushSubscription(
   return true;
 }
 
+export interface PushPermissionPopupOptions extends WebPushRegistrationOptions {
+  title?: string;
+  description?: string;
+  confirmLabel?: string;
+  dismissAriaLabel?: string;
+  /** Couleur du bouton "Activer" et de la barre de progression. */
+  accentColor?: string;
+  theme?: "light" | "dark";
+  position?: "bottom-right" | "bottom-left" | "top-right" | "top-left";
+  /** Jours avant de reproposer le popup après un rejet (X/Échap) — mémorisé
+   * dans localStorage, par tenant. `0` ou absent : ne se repropose jamais
+   * automatiquement une fois rejeté (jusqu'à effacement du localStorage). */
+  repromptIntervalDays?: number;
+  onSubscribed?: (result: WebPushRegistrationResult) => void;
+  onError?: (err: Error) => void;
+  onDismiss?: () => void;
+}
+
+export interface PushPermissionPopupHandle {
+  /** Referme le popup (s'il est affiché) sans le compter comme un rejet —
+   * n'écrit rien dans localStorage, donc un prochain appel peut le
+   * réafficher immédiatement. */
+  close: () => void;
+}
+
+const DISMISSED_AT_KEY_PREFIX = "mio_push_popup_dismissed_at:";
+
+function dismissedAtKey(tenantId: string): string {
+  return `${DISMISSED_AT_KEY_PREFIX}${tenantId}`;
+}
+
+function readDismissedAt(tenantId: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(dismissedAtKey(tenantId));
+    return raw ? Number(raw) : null;
+  } catch {
+    // Stockage indisponible (navigation privée stricte, quota…) — se
+    // comporte comme "jamais rejeté" plutôt que de planter.
+    return null;
+  }
+}
+
+function writeDismissedAt(tenantId: string): void {
+  try {
+    window.localStorage.setItem(dismissedAtKey(tenantId), String(Date.now()));
+  } catch {
+    // Idem — un rejet non mémorisé reproposera simplement le popup plus
+    // tôt que prévu, jamais une erreur visible pour l'utilisateur.
+  }
+}
+
+const POPUP_STYLE_ELEMENT_ID = "mio-push-popup-styles";
+
+/** Injecte les `@keyframes`/styles `:hover` une seule fois (pas faisable
+ * en style inline) — no-op si déjà présent, y compris entre plusieurs
+ * popups affichés l'un après l'autre. */
+function ensurePopupStylesInjected(): void {
+  if (document.getElementById(POPUP_STYLE_ELEMENT_ID)) return;
+  const style = document.createElement("style");
+  style.id = POPUP_STYLE_ELEMENT_ID;
+  style.textContent = `
+@keyframes mio-push-popup-indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@keyframes mio-push-popup-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.mio-push-popup-confirm:hover:not(:disabled) { filter: brightness(0.92); }
+.mio-push-popup-dismiss:hover { opacity: 1 !important; }
+`;
+  document.head.appendChild(style);
+}
+
+/**
+ * Affiche une petite carte flottante — dans l'esprit du sélecteur de
+ * compte "Se connecter avec Google" (carte compacte, un geste, un état de
+ * chargement clair) — plutôt que le prompt brut du navigateur sans aucun
+ * contexte. Un seul clic sur "Activer" fait tout : demande la permission,
+ * enregistre le Service Worker, s'abonne, inscrit l'abonnement (voir
+ * `registerWebPushSubscription`, dont ce popup n'est qu'une présentation).
+ *
+ * N'affiche rien (retourne un handle inerte) si la permission est déjà
+ * `"granted"` (rien à demander) ou `"denied"` (le navigateur refusera de
+ * toute façon — redemander n'irrite que l'utilisateur), ou si le popup a
+ * déjà été rejeté il y a moins de `repromptIntervalDays` jours.
+ *
+ * Afficher CE popup tout seul, sans geste utilisateur, est sans risque —
+ * c'est uniquement l'appel à `Notification.requestPermission()` *à
+ * l'intérieur*, déclenché par le clic sur "Activer", qui a besoin d'un
+ * vrai geste.
+ */
+export function showPushPermissionPopup(options: PushPermissionPopupOptions): PushPermissionPopupHandle {
+  const noop: PushPermissionPopupHandle = { close: () => {} };
+  if (typeof document === "undefined" || !isNotificationSupported()) return noop;
+  if (Notification.permission !== "default") return noop;
+
+  const repromptDays = options.repromptIntervalDays ?? 0;
+  const dismissedAt = readDismissedAt(options.tenantId);
+  if (dismissedAt !== null) {
+    const intervalMs = repromptDays * 24 * 60 * 60 * 1000;
+    if (intervalMs <= 0 || Date.now() - dismissedAt < intervalMs) return noop;
+  }
+
+  ensurePopupStylesInjected();
+
+  const dark = options.theme === "dark";
+  const accent = options.accentColor ?? "#FF5E1A";
+  const bg = dark ? "#1e1f26" : "#ffffff";
+  const fg = dark ? "#f3f3f5" : "#1a1a1a";
+  const muted = dark ? "#a3a3ab" : "#5f6368";
+  const border = dark ? "#33343d" : "#e0e0e0";
+
+  const positionStyle: Record<string, string> = { position: "fixed", zIndex: "2147483000", margin: "16px" };
+  const [vSide, hSide] = (options.position ?? "bottom-right").split("-") as ["top" | "bottom", "left" | "right"];
+  positionStyle[vSide] = "0";
+  positionStyle[hSide] = "0";
+
+  const overlay = document.createElement("div");
+  Object.assign(overlay.style, positionStyle);
+
+  const card = document.createElement("div");
+  Object.assign(card.style, {
+    width: "320px",
+    maxWidth: "calc(100vw - 32px)",
+    background: bg,
+    color: fg,
+    border: `1px solid ${border}`,
+    borderRadius: "12px",
+    boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
+    padding: "16px",
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    animation: "mio-push-popup-in 0.2s ease-out",
+    position: "relative",
+    overflow: "hidden",
+    boxSizing: "border-box",
+  } satisfies Partial<CSSStyleDeclaration>);
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.type = "button";
+  dismissBtn.textContent = "×";
+  dismissBtn.setAttribute("aria-label", options.dismissAriaLabel ?? "Dismiss");
+  dismissBtn.className = "mio-push-popup-dismiss";
+  Object.assign(dismissBtn.style, {
+    position: "absolute",
+    top: "8px",
+    right: "8px",
+    width: "24px",
+    height: "24px",
+    lineHeight: "24px",
+    textAlign: "center",
+    border: "none",
+    background: "transparent",
+    color: muted,
+    fontSize: "18px",
+    cursor: "pointer",
+    opacity: "0.7",
+    padding: "0",
+  } satisfies Partial<CSSStyleDeclaration>);
+
+  const row = document.createElement("div");
+  Object.assign(row.style, { display: "flex", gap: "12px", alignItems: "flex-start", paddingRight: "20px" });
+
+  const icon = document.createElement("div");
+  icon.textContent = "🔔";
+  Object.assign(icon.style, { fontSize: "24px", lineHeight: "1", flexShrink: "0" });
+
+  const textCol = document.createElement("div");
+  Object.assign(textCol.style, { minWidth: "0" });
+
+  const titleEl = document.createElement("p");
+  titleEl.textContent = options.title ?? "Enable notifications?";
+  Object.assign(titleEl.style, { margin: "0 0 4px", fontSize: "14px", fontWeight: "600" });
+
+  const descEl = document.createElement("p");
+  descEl.textContent = options.description ?? "Get notified about new activity, even when this tab is closed.";
+  Object.assign(descEl.style, { margin: "0", fontSize: "13px", color: muted, lineHeight: "1.4" });
+
+  textCol.appendChild(titleEl);
+  textCol.appendChild(descEl);
+  row.appendChild(icon);
+  row.appendChild(textCol);
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "mio-push-popup-confirm";
+  confirmBtn.textContent = options.confirmLabel ?? "Enable";
+  Object.assign(confirmBtn.style, {
+    marginTop: "14px",
+    width: "100%",
+    border: "none",
+    borderRadius: "999px",
+    background: accent,
+    color: "#ffffff",
+    fontSize: "14px",
+    fontWeight: "600",
+    padding: "10px 16px",
+    cursor: "pointer",
+  } satisfies Partial<CSSStyleDeclaration>);
+
+  const progress = document.createElement("div");
+  Object.assign(progress.style, {
+    position: "absolute",
+    top: "0",
+    left: "0",
+    right: "0",
+    height: "3px",
+    overflow: "hidden",
+    background: "transparent",
+    display: "none",
+  } satisfies Partial<CSSStyleDeclaration>);
+  const progressBar = document.createElement("div");
+  Object.assign(progressBar.style, { width: "40%", height: "100%", background: accent, animation: "mio-push-popup-indeterminate 1s linear infinite" });
+  progress.appendChild(progressBar);
+
+  card.appendChild(progress);
+  card.appendChild(dismissBtn);
+  card.appendChild(row);
+  card.appendChild(confirmBtn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  confirmBtn.focus();
+
+  function remove(): void {
+    overlay.remove();
+    document.removeEventListener("keydown", onKeyDown);
+  }
+
+  function dismiss(): void {
+    writeDismissedAt(options.tenantId);
+    remove();
+    options.onDismiss?.();
+  }
+
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Escape") dismiss();
+  }
+  document.addEventListener("keydown", onKeyDown);
+  dismissBtn.addEventListener("click", dismiss);
+
+  confirmBtn.addEventListener("click", () => {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "…";
+    dismissBtn.style.display = "none";
+    progress.style.display = "block";
+
+    registerWebPushSubscription(options).then(
+      (result) => {
+        remove();
+        options.onSubscribed?.(result);
+      },
+      (err: unknown) => {
+        progress.style.display = "none";
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = options.confirmLabel ?? "Enable";
+        dismissBtn.style.display = "";
+        const asError = err instanceof Error ? err : new Error(String(err));
+        descEl.textContent = asError.message;
+        descEl.style.color = dark ? "#ff8a8a" : "#c5221f";
+        options.onError?.(asError);
+      },
+    );
+  });
+
+  return { close: remove };
+}
+
 function toSubscriptionInfo(subscription: PushSubscription): PushSubscriptionInfo {
   const p256dh = subscription.getKey("p256dh");
   const auth = subscription.getKey("auth");

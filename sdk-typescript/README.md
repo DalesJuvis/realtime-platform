@@ -258,6 +258,38 @@ sur trois briques exportées séparément — `registerPushServiceWorker()`,
 `subscribeToPush()`, `guessDeviceLabel()` — que vous pouvez assembler
 vous-même à la place.
 
+### Popup de permission — dans l'esprit "Se connecter avec Google"
+
+Plutôt qu'un bouton que le visiteur doit trouver et cliquer,
+`showPushPermissionPopup()` affiche une carte compacte flottante qui
+apparaît d'elle-même (titre, description, bouton d'accentuation, barre de
+progression pendant l'abonnement) — rien à construire, un seul appel :
+
+```ts
+import { showPushPermissionPopup } from "@mio/realtime-sdk";
+
+showPushPermissionPopup({
+  apiBaseUrl: "https://mio.example.com",
+  token: myClientToken,
+  tenantId: myTenantId,
+  vapidPublicKey: myVapidPublicKey,
+  channels: ["orders:*"],
+  title: "Activer les notifications ?",
+  description: "Soyez averti des nouvelles commandes.",
+  accentColor: "#FF5E1A",
+  theme: "light", // ou "dark"
+  position: "bottom-right", // "bottom-left" | "top-right" | "top-left"
+  repromptIntervalDays: 3, // 0/absent : ne se repropose jamais après un rejet
+});
+```
+
+Ne s'affiche jamais si la permission est déjà `"granted"`/`"denied"`, et
+si le visiteur ferme la carte (× ou Échap), l'horodatage est mémorisé
+dans `localStorage` (par tenant) — `repromptIntervalDays` contrôle
+uniquement quand elle peut réapparaître à une visite ultérieure, aucun
+réglage serveur nécessaire. `@mio/realtime-sdk-react` expose
+l'équivalent React, `<PushPermissionPopup>`.
+
 **Ce qu'aucune des deux ne garantit :** un navigateur réellement quitté
 (pas juste l'onglet fermé) ne reçoit rien tant que l'OS/le navigateur ne
 le réveille pas pour traiter le push — hors du contrôle de ce SDK et du
