@@ -30,7 +30,8 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 export interface ActivitySample {
   readonly label: string
   readonly sessions: number
-  readonly messages: number
+  readonly realtimeMessages: number
+  readonly pushMessages: number
   readonly rateLimited: number
 }
 
@@ -54,10 +55,20 @@ export function ActivityChart({ samples }: { samples: ActivitySample[] }) {
           borderWidth: 2,
         },
         {
-          label: t.overview.messagesProcessedLabel,
-          data: samples.map((s) => s.messages),
+          label: t.overview.realtimeMessagesLabel,
+          data: samples.map((s) => s.realtimeMessages),
           borderColor: '#38bdf8',
           backgroundColor: 'rgba(56, 189, 248, 0.08)',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: t.overview.pushMessagesLabel,
+          data: samples.map((s) => s.pushMessages),
+          borderColor: '#a855f7',
+          backgroundColor: 'rgba(168, 85, 247, 0.08)',
           tension: 0.35,
           fill: true,
           pointRadius: 0,

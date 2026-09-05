@@ -35,6 +35,7 @@ import { getVapidKeyAction } from '@actions/vapid/getVapidKey.action'
 import { getPushSubscriptionsAction } from '@actions/push/getPushSubscriptions.action'
 import { isCredentialsExpired } from '@lib/credentialsFile'
 import { workspaceNameFromEmail } from '@lib/utils'
+import { useIsDarkMode } from '@lib/useIsDarkMode'
 import { useTranslation } from '@lib/i18n'
 import { usePortalAuthStore } from '@store/portalAuth.store'
 import { useMintedTokenStore } from '@store/mintedToken.store'
@@ -181,6 +182,7 @@ export function AiAssistantBlob() {
   const credentials = useMintedTokenStore((s) => s.credentials)
   const position = useUiStore((s) => s.aiAssistantPosition)
   const focusMode = useUiStore((s) => s.focusMode)
+  const isDark = useIsDarkMode()
 
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null)
   const displayName = workspaceNameFromEmail(email)
@@ -225,6 +227,13 @@ export function AiAssistantBlob() {
       closeAriaLabel={t.assistant.close}
       keepAsideAriaLabel={t.assistant.keepAside}
       storageKey="mio-tenant-portal-assistant"
+      // This platform's own orangered brand accent (same #FF5E1A used by
+      // WorkspaceBanner/EmbedPage's default button color) — the SDK
+      // component itself stays neutral pink/purple by default so each
+      // platform embedding it can theme it to their own brand instead.
+      accentFrom="#FF5E1A"
+      accentTo="#C2410C"
+      theme={isDark ? 'dark' : 'light'}
     />
   )
 }

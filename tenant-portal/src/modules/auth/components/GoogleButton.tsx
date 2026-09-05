@@ -36,7 +36,7 @@ function GoogleIcon() {
 export function GoogleButton() {
   const { t } = useTranslation()
   return (
-    <Button type="button" variant="outline" className="w-full" disabled title={t.auth.comingSoon}>
+    <Button type="button" variant="outline" className="h-auto w-full py-3" disabled title={t.auth.comingSoon}>
       <GoogleIcon />
       {t.auth.continueWithGoogle}
       <span className="ml-auto text-xs text-muted-foreground">{t.auth.soon}</span>

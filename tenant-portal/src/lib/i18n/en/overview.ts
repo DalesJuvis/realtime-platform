@@ -11,11 +11,15 @@ export const overview = {
   // ActivityChart's dataset legend so the wording never drifts apart.
   activeSessionsLabel: 'Active sessions',
   messagesProcessedLabel: 'Messages processed',
+  realtimeMessagesLabel: 'Realtime messages',
+  realtimeMessagesHint: 'Delivered live over an open WebSocket connection.',
+  pushMessagesLabel: 'Push messages',
+  pushMessagesHint: 'Delivered via push fallback — no live connection to reach at publish time.',
   rateLimitedLabel: 'Rate limited',
 
   activityTitle: 'Activity',
   activityDescription: (sampleCount: number) =>
-    `Active sessions, messages processed, and rate-limited sends — live, last ${sampleCount} samples.`,
+    `Active sessions, realtime vs. push messages, and rate-limited sends — live, last ${sampleCount} samples.`,
   collectingSamples: 'Collecting live samples — the chart fills in as data comes in.',
 
   channelsLabel: 'Channels',

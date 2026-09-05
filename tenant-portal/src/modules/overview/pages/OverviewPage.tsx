@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, Hash, MessageSquare, ShieldAlert, FileText, KeyRound, TrendingUp, Maximize2, Minimize2 } from 'lucide-react'
+import { Activity, Hash, Radio, Send, ShieldAlert, FileText, KeyRound, TrendingUp, Maximize2, Minimize2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
 import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
@@ -58,7 +58,8 @@ function useActivityHistory(overview: Overview | null) {
         {
           label: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           sessions: overview.active_sessions,
-          messages: overview.messages_total,
+          realtimeMessages: overview.realtime_messages_total,
+          pushMessages: overview.push_messages_total,
           rateLimited: overview.rate_limited_total,
         },
       ].slice(-SAMPLE_HISTORY_SIZE),
@@ -118,22 +119,35 @@ function LinkTile({ label, value, to }: { label: string; value: number | null; t
 function MetricsGrid({
   overview,
   sessionsHistory,
-  messagesHistory,
+  realtimeMessagesHistory,
+  pushMessagesHistory,
   rateLimitedHistory,
   activityHistory,
 }: {
   overview: Overview | null
   sessionsHistory: number[]
-  messagesHistory: number[]
+  realtimeMessagesHistory: number[]
+  pushMessagesHistory: number[]
   rateLimitedHistory: number[]
   activityHistory: ActivitySample[]
 }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label={t.overview.activeSessionsLabel} value={overview?.active_sessions ?? null} icon={Activity} history={sessionsHistory} />
-        <StatTile label={t.overview.messagesProcessedLabel} value={overview?.messages_total ?? null} icon={MessageSquare} history={messagesHistory} />
+        <StatTile
+          label={t.overview.realtimeMessagesLabel}
+          value={overview?.realtime_messages_total ?? null}
+          icon={Radio}
+          history={realtimeMessagesHistory}
+        />
+        <StatTile
+          label={t.overview.pushMessagesLabel}
+          value={overview?.push_messages_total ?? null}
+          icon={Send}
+          history={pushMessagesHistory}
+        />
         <StatTile label={t.overview.rateLimitedLabel} value={overview?.rate_limited_total ?? null} icon={ShieldAlert} history={rateLimitedHistory} />
       </div>
 
@@ -200,7 +214,8 @@ export default function OverviewPage() {
 
   const activityHistory = useActivityHistory(overview)
   const sessionsHistory = activityHistory.map((s) => s.sessions)
-  const messagesHistory = activityHistory.map((s) => s.messages)
+  const realtimeMessagesHistory = activityHistory.map((s) => s.realtimeMessages)
+  const pushMessagesHistory = activityHistory.map((s) => s.pushMessages)
   const rateLimitedHistory = activityHistory.map((s) => s.rateLimited)
 
   useEffect(() => {
@@ -280,7 +295,8 @@ export default function OverviewPage() {
           <MetricsGrid
             overview={overview}
             sessionsHistory={sessionsHistory}
-            messagesHistory={messagesHistory}
+            realtimeMessagesHistory={realtimeMessagesHistory}
+            pushMessagesHistory={pushMessagesHistory}
             rateLimitedHistory={rateLimitedHistory}
             activityHistory={activityHistory}
           />
@@ -317,7 +333,8 @@ export default function OverviewPage() {
           <MetricsGrid
             overview={overview}
             sessionsHistory={sessionsHistory}
-            messagesHistory={messagesHistory}
+            realtimeMessagesHistory={realtimeMessagesHistory}
+            pushMessagesHistory={pushMessagesHistory}
             rateLimitedHistory={rateLimitedHistory}
             activityHistory={activityHistory}
           />

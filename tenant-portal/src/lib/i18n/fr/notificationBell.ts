@@ -10,4 +10,6 @@ export const notificationBell = {
   loadFailed: 'Échec du chargement des notifications.',
   markReadFailed: 'Échec du marquage de la notification comme lue.',
   markAllReadFailed: 'Échec du marquage de toutes les notifications comme lues.',
+  deliveryRealtime: 'Livré en direct via WebSocket',
+  deliveryPush: 'Livré via le repli push',
 } satisfies typeof en

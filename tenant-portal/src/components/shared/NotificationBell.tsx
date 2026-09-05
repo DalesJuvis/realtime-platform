@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, Radio, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   DropdownMenu,
@@ -197,6 +197,21 @@ export function NotificationBell({
                   <div className="flex w-full items-center gap-2">
                     {!n.read_at && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />}
                     <span className="truncate font-mono text-xs text-muted-foreground">{n.channel_id}</span>
+                    {n.delivery === 'push' ? (
+                      <Send
+                        className="h-3 w-3 shrink-0 text-muted-foreground"
+                        aria-label={t.notificationBell.deliveryPush}
+                      >
+                        <title>{t.notificationBell.deliveryPush}</title>
+                      </Send>
+                    ) : (
+                      <Radio
+                        className="h-3 w-3 shrink-0 text-muted-foreground"
+                        aria-label={t.notificationBell.deliveryRealtime}
+                      >
+                        <title>{t.notificationBell.deliveryRealtime}</title>
+                      </Radio>
+                    )}
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">{formatDateTime(n.created_at)}</span>
                   </div>
                   {parsed.title && (

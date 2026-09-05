@@ -10,11 +10,15 @@ export const overview = {
 
   activeSessionsLabel: 'Sessions actives',
   messagesProcessedLabel: 'Messages traités',
+  realtimeMessagesLabel: 'Messages temps réel',
+  realtimeMessagesHint: 'Livrés en direct via une connexion WebSocket ouverte.',
+  pushMessagesLabel: 'Messages push',
+  pushMessagesHint: 'Livrés via le repli push — aucune connexion en direct pour les atteindre à la publication.',
   rateLimitedLabel: 'Limités par débit',
 
   activityTitle: 'Activité',
   activityDescription: (sampleCount: number) =>
-    `Sessions actives, messages traités et envois limités par débit — en direct, ${sampleCount} derniers échantillons.`,
+    `Sessions actives, messages temps réel vs push, et envois limités par débit — en direct, ${sampleCount} derniers échantillons.`,
   collectingSamples: "Collecte des échantillons en direct — le graphique se remplit au fur et à mesure.",
 
   channelsLabel: 'Canaux',

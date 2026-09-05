@@ -13,4 +13,6 @@ export const notificationBell = {
   loadFailed: 'Failed to load notifications.',
   markReadFailed: 'Failed to mark notification read.',
   markAllReadFailed: 'Failed to mark all notifications read.',
+  deliveryRealtime: 'Delivered live over WebSocket',
+  deliveryPush: 'Delivered via push fallback',
 }
