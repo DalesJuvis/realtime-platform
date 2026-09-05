@@ -15,6 +15,8 @@ use crate::modules::portal::usecases::GetOverviewUseCase;
 use crate::modules::portal::PortalContext::PortalContext;
 
 pub async fn handle(State(ctx): State<PortalContext>, Extension(session): Extension<PortalSession>) -> impl IntoResponse {
-    let overview = GetOverviewUseCase::execute(&ctx, session.tenant_id);
-    ApiEnvelope::success_response(StatusCode::OK, overview)
+    match GetOverviewUseCase::execute(&ctx, session.tenant_id).await {
+        Ok(overview) => ApiEnvelope::success_response(StatusCode::OK, overview),
+        Err(err) => ApiEnvelope::error_response(err.status_code(), err.code(), &err.to_string()),
+    }
 }

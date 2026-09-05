@@ -1,17 +1,21 @@
 //! # GetOverviewUseCase
 //!
 //! **Action:** Tenant-scoped activity summary — active session count (real,
-//! from `PresenceService`) plus a sum of this tenant's labeled Prometheus
-//! series, parsed out of `MetricsService::render()`'s full text. Never
-//! returns that raw text to the caller (see `OverviewResponseDto`'s doc comment).
+//! from `PresenceService`), a sum of this tenant's labeled Prometheus
+//! series parsed out of `MetricsService::render()`'s full text, and a
+//! realtime/push split read from the `notifications` table (see
+//! `NotificationRepository::count_by_delivery`). Never returns the raw
+//! metrics text to the caller (see `OverviewResponseDto`'s doc comment).
 //! **Input:** `TenantId` (from the validated portal session).
 //! **Output:** `OverviewResponseDto`.
-//! **Side effects:** None.
-//! **Dependencies:** `services::PresenceService`, `services::MetricsService`.
+//! **Side effects:** None (reads only).
+//! **Dependencies:** `services::PresenceService`, `services::MetricsService`,
+//! `repositories::NotificationRepository`.
 
 use crate::entities::ChannelKey::TenantId;
 use crate::modules::portal::dto::OverviewResponseDto::OverviewResponseDto;
 use crate::modules::portal::PortalContext::PortalContext;
+use crate::modules::portal::PortalError::PortalError;
 
 /// Sums every sample of `metric_name` whose label set includes
 /// `tenant_id="<tenant_id>"` — a minimal Prometheus text scan, sufficient
@@ -29,15 +33,18 @@ fn sum_metric_for_tenant(raw: &str, metric_name: &str, tenant_id: TenantId) -> u
         .sum()
 }
 
-pub fn execute(ctx: &PortalContext, tenant_id: TenantId) -> OverviewResponseDto {
+pub async fn execute(ctx: &PortalContext, tenant_id: TenantId) -> Result<OverviewResponseDto, PortalError> {
     let raw = ctx.metrics.render();
+    let (realtime_messages_total, push_messages_total) = ctx.notifications.count_by_delivery(tenant_id).await?;
 
-    OverviewResponseDto {
+    Ok(OverviewResponseDto {
         tenant_id,
         active_sessions: ctx.presence.list_sessions(tenant_id).len(),
         messages_total: sum_metric_for_tenant(&raw, "realtime_engine_messages_total", tenant_id),
         rate_limited_total: sum_metric_for_tenant(&raw, "realtime_engine_rate_limited_total", tenant_id),
-    }
+        realtime_messages_total,
+        push_messages_total,
+    })
 }
 
 #[cfg(test)]

@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 use crate::entities::ChannelKey::{ChannelKey, SessionId, TenantId};
 use crate::entities::Frame::Frame;
+use crate::entities::Notification::NotificationDelivery;
 use crate::modules::cluster::ports::ClusterBroadcastPort::ClusterBroadcastPort;
 use crate::modules::metrics::services::MetricsService::MetricsService;
 use crate::modules::portal::repositories::NotificationRepository::NotificationRepository;
@@ -110,16 +111,23 @@ impl PushFallbackService {
                 // Recorded for every publish, not gated on
                 // `local_subscribers == 0` like the push fallback below —
                 // this is the notification bell's full received-message
-                // log, not just a "you were away" inbox. Spawned for the
-                // same non-blocking reason as the Web Push lookup below:
-                // `NotificationRepository` is async (sqlx), and this
-                // function must stay synchronous for the WS/TCP frame loop.
+                // log, not just a "you were away" inbox. `delivery`
+                // records which path *this* message actually took, so the
+                // Overview page's Realtime/Push tiles and the bell's own
+                // per-item badge both derive from the same source instead
+                // of two independently-tracked numbers that could drift.
+                // Spawned for the same non-blocking reason as the Web Push
+                // lookup below: `NotificationRepository` is async (sqlx),
+                // and this function must stay synchronous for the WS/TCP
+                // frame loop.
                 {
                     let notifications = self.notifications.clone();
                     let channel_id = key.channel_id.clone();
                     let payload = frame.payload().to_string();
+                    let delivery =
+                        if local_subscribers == 0 { NotificationDelivery::Push } else { NotificationDelivery::Realtime };
                     tokio::spawn(async move {
-                        if let Err(err) = notifications.insert(tenant_id, &channel_id, &payload).await {
+                        if let Err(err) = notifications.insert(tenant_id, &channel_id, &payload, delivery).await {
                             tracing::warn!(%tenant_id, %channel_id, error = %err, "failed to persist notification");
                         }
                     });
