@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { Mic, Send } from "lucide-react";
 
 export type AiAssistantPosition = "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
@@ -48,6 +49,13 @@ export interface AiAssistantBlobProps {
   keepAsideAriaLabel?: string;
   accentFrom?: string;
   accentTo?: string;
+  /** Theme of the panel that opens on click (the blob itself is
+   * accent-colored regardless — see `accentFrom`/`accentTo`). Explicit
+   * prop rather than auto-detected `prefers-color-scheme`, same
+   * convention as `PushPermissionPopup`'s `theme` — the host app decides
+   * when to flip it (its own theme toggle, `prefers-color-scheme`
+   * listener, whatever it already has). */
+  theme?: "light" | "dark";
   /** When set, the "keep aside" docked state persists across reloads in
    * `localStorage` under this key. Omit for in-memory-only (resets on
    * reload) — a perfectly fine default for a lightweight widget. */
@@ -57,6 +65,20 @@ export interface AiAssistantBlobProps {
 
 const EYE_ACTIVATION_RADIUS = 160;
 const MAX_EYE_OFFSET = 2.5;
+
+/** `#rrggbb` -> `"r, g, b"`, for building an `rgba(...)` shadow tinted to
+ * match whatever `accentTo` the host app passes in — falls back to a
+ * neutral gray for any other format (named colors, `rgb()`, `hsl()`)
+ * rather than a real CSS color parser this component doesn't need. */
+function hexToRgbTriplet(hex: string): string {
+  const match = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!match) return "17, 24, 39";
+  const value = match[1]!;
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+}
 
 function readDocked(storageKey: string | undefined): boolean {
   if (!storageKey || typeof window === "undefined") return false;
@@ -116,6 +138,7 @@ export function AiAssistantBlob({
   keepAsideAriaLabel = "Keep aside",
   accentFrom = "#ff2ea6",
   accentTo = "#7c3aed",
+  theme = "light",
   storageKey,
   className,
 }: AiAssistantBlobProps) {
@@ -203,6 +226,14 @@ export function AiAssistantBlob({
   }
 
   const gradient = `linear-gradient(135deg, ${accentFrom}, ${accentTo})`;
+  const dark = theme === "dark";
+  const panelBg = dark ? "#1e1f26" : "#ffffff";
+  const panelFg = dark ? "#f3f3f5" : "#1a1a1a";
+  const panelMuted = dark ? "#a3a3ab" : "#6b7280";
+  const panelBorder = dark ? "#33343d" : "#e5e5e5";
+  const panelDivider = dark ? "#2c2d34" : "#eeeeee";
+  const chipBg = dark ? "#2a2b33" : "#f3f4f6";
+  const inputClassName = dark ? "mio-ai-task-input-dark" : "mio-ai-task-input-light";
 
   return (
     <div className={className}>
@@ -210,6 +241,8 @@ export function AiAssistantBlob({
         @keyframes mio-ai-blob-float { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-6px) scale(1.03); } }
         @keyframes mio-ai-blob-blink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.15); } }
         @keyframes mio-ai-panel-pop { from { opacity: 0; transform: scale(0.92) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .mio-ai-task-input-light::placeholder { color: #9ca3af; }
+        .mio-ai-task-input-dark::placeholder { color: #6b7280; }
       `}</style>
 
       {open && !docked && (
@@ -222,9 +255,9 @@ export function AiAssistantBlob({
             zIndex: 2147483000,
             width: 352,
             maxWidth: "calc(100vw - 48px)",
-            background: "#ffffff",
-            color: "#1a1a1a",
-            border: "1px solid #e5e5e5",
+            background: panelBg,
+            color: panelFg,
+            border: `1px solid ${panelBorder}`,
             borderRadius: 16,
             boxShadow: "0 20px 48px rgba(0,0,0,0.2)",
             fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
@@ -236,7 +269,7 @@ export function AiAssistantBlob({
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, padding: "20px 20px 12px" }}>
             <div>
               <p style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{greeting(name)}</p>
-              <p style={{ margin: "2px 0 0", fontSize: 13, color: "#6b7280" }}>{subtitle}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: panelMuted }}>{subtitle}</p>
             </div>
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               <button
@@ -244,11 +277,17 @@ export function AiAssistantBlob({
                 onClick={handleKeepAside}
                 aria-label={keepAsideAriaLabel}
                 title={keepAsideAriaLabel}
-                style={iconButtonStyle}
+                style={{ ...iconButtonStyle, color: panelMuted }}
               >
                 <ChevronIcon position={position} />
               </button>
-              <button type="button" onClick={() => setOpen(false)} aria-label={closeAriaLabel} title={closeAriaLabel} style={iconButtonStyle}>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label={closeAriaLabel}
+                title={closeAriaLabel}
+                style={{ ...iconButtonStyle, color: panelMuted }}
+              >
                 ×
               </button>
             </div>
@@ -256,12 +295,12 @@ export function AiAssistantBlob({
 
           <div style={{ padding: "0 20px" }}>
             {!recommendation ? (
-              <p style={{ margin: "8px 0 24px", fontSize: 13, color: "#6b7280" }}>{loadingText}</p>
+              <p style={{ margin: "8px 0 24px", fontSize: 13, color: panelMuted }}>{loadingText}</p>
             ) : (
               <>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#6b7280" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: panelMuted }}>
                   {recommendation.icon && (
-                    <span style={{ display: "flex", height: 24, width: 24, alignItems: "center", justifyContent: "center", borderRadius: 6, background: "#f3f4f6" }}>
+                    <span style={{ display: "flex", height: 24, width: 24, alignItems: "center", justifyContent: "center", borderRadius: 6, background: chipBg }}>
                       {recommendation.icon}
                     </span>
                   )}
@@ -284,7 +323,7 @@ export function AiAssistantBlob({
                     >
                       {recommendation.stat.value}
                     </span>
-                    <span style={{ fontSize: 13, color: "#6b7280" }}>{recommendation.stat.unit}</span>
+                    <span style={{ fontSize: 13, color: panelMuted }}>{recommendation.stat.unit}</span>
                   </p>
                 )}
 
@@ -306,8 +345,8 @@ export function AiAssistantBlob({
                       marginBottom: 20,
                       padding: "8px 16px",
                       borderRadius: 999,
-                      background: "#f3f4f6",
-                      color: "#1a1a1a",
+                      background: chipBg,
+                      color: panelFg,
                       fontSize: 13,
                       fontWeight: 600,
                       textDecoration: "none",
@@ -321,20 +360,21 @@ export function AiAssistantBlob({
             )}
           </div>
 
-          <form onSubmit={handleTaskSubmit} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid #eee", padding: 12 }}>
-            <span style={{ color: "#9ca3af", fontSize: 16, flexShrink: 0 }}>+</span>
+          <form onSubmit={handleTaskSubmit} style={{ display: "flex", alignItems: "center", gap: 8, borderTop: `1px solid ${panelDivider}`, padding: 12 }}>
+            <span style={{ color: panelMuted, fontSize: 16, flexShrink: 0 }}>+</span>
             <input
               value={taskDraft}
               onChange={(e) => setTaskDraft(e.target.value)}
               placeholder={taskPlaceholder}
-              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 13, color: "#1a1a1a" }}
+              className={inputClassName}
+              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 13, color: panelFg }}
             />
             <button
               type="submit"
               aria-label="Send"
-              style={{ border: "none", background: "transparent", color: "#9ca3af", cursor: taskDraft.trim() ? "pointer" : "default", padding: 0 }}
+              style={{ border: "none", background: "transparent", color: panelMuted, cursor: taskDraft.trim() ? "pointer" : "default", padding: 0 }}
             >
-              <MicOrSendIcon active={taskDraft.trim().length > 0} />
+              {taskDraft.trim() ? <Send size={14} /> : <Mic size={14} />}
             </button>
           </form>
         </div>
@@ -367,8 +407,8 @@ export function AiAssistantBlob({
             height: "100%",
             width: "100%",
             borderRadius: "50%",
-            background: `radial-gradient(circle at 30% 28%, #ff9ecf 0%, ${accentFrom} 28%, ${accentTo} 100%)`,
-            boxShadow: "0 8px 24px -4px rgba(124, 58, 237, 0.5)",
+            background: `radial-gradient(circle at 30% 28%, ${accentFrom} 0%, ${accentTo} 100%)`,
+            boxShadow: `0 8px 24px -4px rgba(${hexToRgbTriplet(accentTo)}, 0.5)`,
           }}
         >
           <span
@@ -419,8 +459,4 @@ const iconButtonStyle: CSSProperties = {
 function ChevronIcon({ position }: { position: AiAssistantPosition }) {
   const onRight = position.endsWith("right");
   return <span style={{ fontSize: 13 }}>{onRight ? "›" : "‹"}</span>;
-}
-
-function MicOrSendIcon({ active }: { active: boolean }) {
-  return <span style={{ fontSize: 14 }}>{active ? "➤" : "\u{1F3A4}"}</span>;
 }

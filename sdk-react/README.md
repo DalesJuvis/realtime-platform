@@ -198,6 +198,9 @@ function Assistant() {
       position="bottom-right"
       onTaskSubmit={(task) => console.log('task:', task)}
       storageKey="my-app-assistant" // persiste l'état "mis de côté" en localStorage
+      accentFrom="#FF5E1A" // la bulle elle-même reste colorée à l'accent quel que soit le thème
+      accentTo="#C2410C"
+      theme="dark" // ou "light" (défaut) — n'affecte que le panneau, pas la bulle
     />
   )
 }

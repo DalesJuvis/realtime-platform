@@ -32,7 +32,8 @@
     "react": ">=18.0.0"
   },
   "dependencies": {
-    "@mio/realtime-sdk": "file:../sdk-typescript"
+    "@mio/realtime-sdk": "file:../sdk-typescript",
+    "lucide-react": "^1.33.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
